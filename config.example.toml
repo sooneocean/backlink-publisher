@@ -1,0 +1,30 @@
+# backlink-publisher configuration
+# Copy to: ~/.config/backlink-publisher/config.toml
+# Then fill in your values.
+
+# ────────────────────────────────────────────────────────────
+# Blogger: map each target main_domain to its Blogger blog_id
+# ────────────────────────────────────────────────────────────
+[blogger]
+"https://your-site.com"       = "1234567890123456789"
+"https://another-site.org"    = "9876543210987654321"
+
+# Blogger OAuth2 credentials (desktop/installed-app flow).
+# Create credentials at: console.cloud.google.com → APIs & Services → Credentials
+# Enable the "Blogger API v3" on the same project.
+[blogger.oauth]
+client_id     = "your-client-id.apps.googleusercontent.com"
+client_secret = "your-client-secret"
+
+# ────────────────────────────────────────────────────────────
+# Medium
+# ────────────────────────────────────────────────────────────
+[medium]
+# Integration Token — obtain at: medium.com/me/settings/security → Integration tokens
+# Optional: if missing, the browser fallback (Playwright) will be used instead.
+# integration_token = "your-medium-integration-token"
+
+[medium.browser]
+# Optional: path to the Chrome/Chromium user-data-dir containing your Medium login.
+# Defaults to: ~/.config/backlink-publisher/chrome-profile-default/
+# user_data_dir = "/path/to/your/chrome/profile"

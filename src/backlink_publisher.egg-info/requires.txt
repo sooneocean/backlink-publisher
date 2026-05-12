@@ -1,0 +1,15 @@
+markdown-it-py>=3.0
+google-api-python-client>=2.0
+google-auth-oauthlib>=1.0
+google-auth-httplib2>=0.2
+playwright>=1.40
+requests>=2.28
+
+[:python_version < "3.11"]
+tomli>=2.0
+
+[dev]
+pytest>=7
+pytest-mock
+requests
+pytest-asyncio>=0.23
