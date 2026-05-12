@@ -3,6 +3,7 @@ title: "feat: Adapter Retry with Exponential Backoff"
 type: feat
 status: completed
 date: 2026-05-12
+completed: 2026-05-12
 origin: docs/brainstorms/2026-05-12-adapter-retry-backoff-requirements.md
 ---
 
