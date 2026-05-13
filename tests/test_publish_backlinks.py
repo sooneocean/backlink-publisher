@@ -330,3 +330,161 @@ def test_publish_blogger_and_medium_rows(mock_pub, mock_verify):
     assert code == 0, f"Expected 0. stderr: {stderr}"
     lines = [l for l in stdout.strip().split("\n") if l]
     assert len(lines) == 2
+
+
+# ── Unit 2: checkpoint integration ────────────────────────────────────────────
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+@patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
+def test_checkpoint_created_on_success(mock_pub, mock_verify, mock_cache, tmp_path):
+    """2-row batch both succeed → checkpoint has both items done, run_id in stderr."""
+    mock_cache.return_value = tmp_path / "cache"
+    payloads = [_make_valid_payload(platform="blogger") for _ in range(2)]
+    for i, p in enumerate(payloads):
+        p["id"] = f"r{i}"
+    mock_pub.return_value = AdapterResult(
+        status="drafted", adapter="blogger-api", platform="blogger",
+        draft_url="https://blogger.example.com/p/1",
+    )
+
+    stdout, stderr, code = _run_publish(
+        "\n".join(json.dumps(p) for p in payloads), ["--mode", "draft"]
+    )
+
+    assert code == 0
+    assert "run_id=" in stderr
+
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    files = list(ckpt_dir.glob("*.json"))
+    assert len(files) == 1
+    import json as _json
+    data = _json.loads(files[0].read_text())
+    assert all(item["status"] == "done" for item in data["items"])
+    assert len(data["items"]) == 2
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+def test_checkpoint_not_created_on_preflight_failure(mock_verify, mock_cache, tmp_path):
+    """validate_publish_payload failure → no checkpoint created."""
+    mock_cache.return_value = tmp_path / "cache"
+    bad_row = {"id": "x", "platform": "blogger"}  # missing required fields
+
+    stdout, stderr, code = _run_publish(json.dumps(bad_row), ["--mode", "draft"])
+
+    assert code == 2
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    assert not ckpt_dir.exists() or not list(ckpt_dir.glob("*.json"))
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+@patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
+def test_checkpoint_first_fails_second_succeeds(mock_pub, mock_verify, mock_cache, tmp_path):
+    """First row ExternalServiceError → failed in checkpoint, second done."""
+    mock_cache.return_value = tmp_path / "cache"
+    payloads = [_make_valid_payload(platform="blogger") for _ in range(2)]
+    payloads[0]["id"] = "r0"
+    payloads[1]["id"] = "r1"
+    mock_pub.side_effect = [
+        ExternalServiceError("upstream down"),
+        AdapterResult(status="drafted", adapter="blogger-api", platform="blogger",
+                      draft_url="https://blogger.example.com/p/2"),
+    ]
+
+    stdout, stderr, code = _run_publish(
+        "\n".join(json.dumps(p) for p in payloads), ["--mode", "draft"]
+    )
+
+    assert code == 4
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    import json as _json
+    data = _json.loads(list(ckpt_dir.glob("*.json"))[0].read_text())
+    by_id = {item["id"]: item for item in data["items"]}
+    assert by_id["r0"]["status"] == "failed"
+    assert by_id["r0"]["error_class"] == "transient"
+    assert by_id["r1"]["status"] == "done"
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+def test_checkpoint_not_created_on_verify_failure(mock_verify, mock_cache, tmp_path):
+    """verify_adapter_setup failure → exit 3, no checkpoint created."""
+    mock_cache.return_value = tmp_path / "cache"
+    mock_verify.side_effect = DependencyError("oauth not configured")
+
+    payload = _make_valid_payload(platform="blogger")
+    stdout, stderr, code = _run_publish(json.dumps(payload), ["--mode", "draft"])
+
+    assert code == 3
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    assert not ckpt_dir.exists() or not list(ckpt_dir.glob("*.json"))
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+def test_checkpoint_not_created_on_dry_run(mock_cache, tmp_path):
+    """--dry-run → no checkpoint file created."""
+    mock_cache.return_value = tmp_path / "cache"
+    payload = _make_valid_payload(platform="medium")
+    with patch("backlink_publisher.cli.publish_backlinks.adapter_publish") as mock_pub:
+        mock_pub.return_value = AdapterResult(
+            status="draft", adapter="medium-api", platform="medium",
+            _dry_run=True, _command="dry-run plan",
+        )
+        stdout, stderr, code = _run_publish(json.dumps(payload), ["--dry-run"])
+
+    assert code == 0
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    assert not ckpt_dir.exists() or not list(ckpt_dir.glob("*.json"))
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+@patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
+def test_checkpoint_create_failure_degrades_gracefully(mock_pub, mock_verify, mock_cache, tmp_path):
+    """create_checkpoint raising OSError → publish run still completes, no crash."""
+    mock_cache.return_value = tmp_path / "cache"
+    mock_pub.return_value = AdapterResult(
+        status="drafted", adapter="blogger-api", platform="blogger",
+        draft_url="https://blogger.example.com/p/1",
+    )
+    with patch("backlink_publisher.cli.publish_backlinks.checkpoint.create_checkpoint",
+               side_effect=OSError("disk full")):
+        payload = _make_valid_payload(platform="blogger")
+        stdout, stderr, code = _run_publish(json.dumps(payload), ["--mode", "draft"])
+
+    assert code == 0
+    assert "checkpoint not created" in stderr
+    assert stdout.strip() != ""
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+@patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
+def test_checkpoint_3_rows_2_done_1_failed(mock_pub, mock_verify, mock_cache, tmp_path):
+    """3-row batch: first two succeed, third raises → checkpoint has 2 done, 1 failed."""
+    mock_cache.return_value = tmp_path / "cache"
+    payloads = [_make_valid_payload(platform="blogger") for _ in range(3)]
+    for i, p in enumerate(payloads):
+        p["id"] = f"r{i}"
+    mock_pub.side_effect = [
+        AdapterResult(status="drafted", adapter="blogger-api", platform="blogger",
+                      draft_url="https://blogger.example.com/p/1"),
+        AdapterResult(status="drafted", adapter="blogger-api", platform="blogger",
+                      draft_url="https://blogger.example.com/p/2"),
+        ExternalServiceError("timeout"),
+    ]
+
+    stdout, stderr, code = _run_publish(
+        "\n".join(json.dumps(p) for p in payloads), ["--mode", "draft"]
+    )
+
+    assert code == 4
+    import json as _json
+    ckpt_dir = tmp_path / "cache" / "checkpoints"
+    data = _json.loads(list(ckpt_dir.glob("*.json"))[0].read_text())
+    by_id = {item["id"]: item for item in data["items"]}
+    assert by_id["r0"]["status"] == "done"
+    assert by_id["r1"]["status"] == "done"
+    assert by_id["r2"]["status"] == "failed"

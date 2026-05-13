@@ -21,6 +21,7 @@ from apscheduler.executors.pool import ThreadPoolExecutor as APSThreadPoolExecut
 # Import config utilities
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from backlink_publisher.config import load_config, save_config, load_blogger_token
+from backlink_publisher import checkpoint as _checkpoint_mod
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'backlink-publisher-secret-' + str(uuid.uuid4()))
@@ -648,6 +649,28 @@ HTML = '''
     </nav>
     
     <div class="container-fluid" style="max-width: 1100px;">
+
+        {% if incomplete_run %}
+        <div class="alert alert-warning alert-dismissible d-flex align-items-center mb-3" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2 flex-shrink-0"></i>
+          <div class="flex-grow-1">
+            <strong>未完成的发布任务</strong>
+            — {{ incomplete_run.started_at[:19] if incomplete_run.started_at else '' }}，共 {{ incomplete_run.pending_count }} 篇待处理。
+            <form action="/checkpoint/resume" method="POST" class="d-inline ms-2">
+              <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
+              <button type="submit" class="btn btn-warning btn-sm">
+                <i class="bi bi-play-fill me-1"></i>恢复发布
+              </button>
+            </form>
+            <form action="/checkpoint/dismiss" method="POST" class="d-inline ms-1">
+              <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">忽略</button>
+            </form>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
         <!-- Tab Navigation -->
         <ul class="nav nav-tabs-custom" id="mainTabs" role="tablist">
             <li class="nav-item" role="presentation">
@@ -1502,12 +1525,13 @@ HTML = '''
     // ── Loading Overlay ──────────────────────────────────────────
     (function() {
         const MSGS = {
-            '/ce:plan':         { text: '分析网址中…',     sub: '正在抓取页面元数据' },
-            '/ce:generate':     { text: 'AI 生成文章中…', sub: '调用 AI 生成外链文章，约需 30–60 秒' },
-            '/ce:validate':     { text: '验证内容中…',     sub: '检查外链格式与内容合规性' },
-            '/ce:publish':      { text: '发布中…',         sub: '正在发布到目标平台，请勿关闭页面' },
-            '/ce:publish-real': { text: '正式发布中…',     sub: '正在写入平台，请勿关闭页面' },
-            '/ce:batch':        { text: '批量发布中…',     sub: '正在逐篇生成并发布，每篇约 30–60 秒，请勿关闭页面' },
+            '/ce:plan':              { text: '分析网址中…',     sub: '正在抓取页面元数据' },
+            '/ce:generate':          { text: 'AI 生成文章中…', sub: '调用 AI 生成外链文章，约需 30–60 秒' },
+            '/ce:validate':          { text: '验证内容中…',     sub: '检查外链格式与内容合规性' },
+            '/ce:publish':           { text: '发布中…',         sub: '正在发布到目标平台，请勿关闭页面' },
+            '/ce:publish-real':      { text: '正式发布中…',     sub: '正在写入平台，请勿关闭页面' },
+            '/ce:batch':             { text: '批量发布中…',     sub: '正在逐篇生成并发布，每篇约 30–60 秒，请勿关闭页面' },
+            '/checkpoint/resume':    { text: '恢复发布中…',     sub: '正在处理未完成的发布任务，可能需要数分钟，请勿关闭页面' },
         };
         document.addEventListener('submit', function(e) {
             const form = e.target;
@@ -2577,6 +2601,19 @@ def _calc_next_available(requested_dt: datetime) -> datetime:
     return max(requested_dt, earliest)
 
 
+def _load_incomplete_run():
+    """Return the most recent incomplete checkpoint run (with pending_count), or None."""
+    try:
+        runs = _checkpoint_mod.list_incomplete()
+    except Exception:
+        return None
+    if not runs:
+        return None
+    run = runs[0]
+    pending_count = sum(1 for i in run.get("items", []) if i.get("status") in ("pending", "failed"))
+    return {**run, "pending_count": pending_count}
+
+
 def _render(template, **kwargs):
     """Render a template, auto-injecting history and token status when not provided."""
     if 'history' not in kwargs:
@@ -2592,6 +2629,8 @@ def _render(template, **kwargs):
         kwargs['now_iso'] = now.strftime('%Y-%m-%dT%H:%M')
         kwargs.setdefault('suggested_next',
                           _calc_next_available(now + timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M'))
+    if 'incomplete_run' not in kwargs:
+        kwargs['incomplete_run'] = _load_incomplete_run()
     return render_template_string(template, **kwargs)
 
 
@@ -3363,6 +3402,99 @@ def run_pipe(cmd, stdin):
     if result.returncode != 0:
         raise Exception(result.stderr or f"Exit code: {result.returncode}")
     return {'stdout': result.stdout, 'stderr': result.stderr}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Checkpoint routes
+# ─────────────────────────────────────────────────────────────────────────────
+
+_RUN_ID_RE = re.compile(r"^\d{8}T\d{6}-[0-9a-f]{8}$")
+
+
+def _check_localhost():
+    if request.remote_addr not in ("127.0.0.1", "::1", "localhost"):
+        from flask import abort
+        abort(403)
+
+
+def _validate_webui_run_id(run_id):
+    if not run_id or not _RUN_ID_RE.match(run_id):
+        from flask import abort
+        abort(400)
+
+
+@app.route("/checkpoint/resume", methods=["POST"])
+def checkpoint_resume():
+    _check_localhost()
+    run_id = request.form.get("run_id", "")
+    _validate_webui_run_id(run_id)
+
+    cmd = ["publish-backlinks", "--resume", run_id]
+    result = subprocess.run(
+        cmd,
+        input="",
+        capture_output=True,
+        text=True,
+        cwd=os.path.dirname(os.path.abspath(__file__)) or os.getcwd(),
+    )
+
+    publish_results = _parse_publish_results(result.stdout)
+    config = session.get("config", {})
+    platform = publish_results[0].get("platform", "unknown") if publish_results else "unknown"
+
+    if result.returncode == 0:
+        history = _append_history({
+            "id": str(uuid.uuid4())[:8],
+            "target_url": config.get("target_url", "unknown"),
+            "platform": platform,
+            "language": config.get("target_language", "zh-CN"),
+            "status": "published",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "article_urls": [r.get("published_url") or r.get("draft_url", "") for r in publish_results if r],
+        })
+        return _render(HTML,
+            publish_results=publish_results,
+            config=config,
+            history=history,
+            history_active=True,
+            flash={"type": "success", "msg": f"恢复发布成功，共 {len(publish_results)} 篇"},
+        )
+    elif result.returncode == 4:
+        done = [r for r in publish_results if r.get("error") is None]
+        _append_history({
+            "id": str(uuid.uuid4())[:8],
+            "target_url": config.get("target_url", "unknown"),
+            "platform": platform,
+            "language": config.get("target_language", "zh-CN"),
+            "status": "failed_partial",
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "article_urls": [r.get("published_url") or r.get("draft_url", "") for r in done],
+            "stderr_summary": result.stderr[:500] if result.stderr else "",
+        })
+        return _render(HTML,
+            publish_results=publish_results,
+            config=config,
+            history_active=True,
+            error=f"部分发布失败。{result.stderr[:200] if result.stderr else ''}",
+        )
+    else:
+        return _render(HTML,
+            config=config,
+            error=f"恢复发布失败 (exit {result.returncode}): {result.stderr[:300] if result.stderr else ''}",
+        )
+
+
+@app.route("/checkpoint/dismiss", methods=["POST"])
+def checkpoint_dismiss():
+    _check_localhost()
+    run_id = request.form.get("run_id", "")
+    _validate_webui_run_id(run_id)
+    try:
+        _checkpoint_mod.delete(run_id)
+    except Exception:
+        pass
+    return redirect("/")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Settings routes
