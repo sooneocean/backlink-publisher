@@ -22,6 +22,7 @@ dev = ["pytest>=7", "pytest-mock", "pytest-timeout", "requests", "pytest-asyncio
 
 [project.scripts]
 plan-backlinks = "backlink_publisher.cli.plan_backlinks:main"
+footprint = "backlink_publisher.cli.footprint:main"
 validate-backlinks = "backlink_publisher.cli.validate_backlinks:main"
 publish-backlinks = "backlink_publisher.cli.publish_backlinks:main"
 report-anchors = "backlink_publisher.cli.report_anchors:main"
