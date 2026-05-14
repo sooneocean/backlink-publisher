@@ -768,3 +768,104 @@ class TestSSRFDefense:
         )
         # Base class returns a Request object on success.
         assert result is not None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Soft-404 title detection
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestSoftFourOhFour:
+    """Sites that serve HTTP 200 + a "Page Not Found"-style title pass the
+    plan-007 gate because the gate only checked HTTP status + non-empty
+    title. This class verifies the soft-404 title-pattern blocker catches
+    them without trashing legitimate titles that happen to contain a
+    blocked phrase mid-string."""
+
+    @pytest.mark.parametrize("bad_title", [
+        "404",
+        "404 Not Found",
+        "404 - Site Name",
+        "Page Not Found",
+        "Page Not Found | My Site",
+        "page not found - awesome site",
+        "Not Found",
+        "Page does not exist",
+        "Error 404",
+        "Error 404 — taiwanmanga",
+        "This page can't be found",
+        "This page cannot be found - Bingo",
+        "This page could not be found",
+        # Chinese
+        "页面不存在",
+        "页面不存在 - 51漫画",
+        "页面未找到",
+        "找不到页面",
+        "頁面不存在",
+        "頁面未找到",
+        "找不到頁面",
+        "404错误",
+        "404 错误",
+        # Japanese
+        "ページが見つかりません",
+        "お探しのページは見つかりません",
+        # Russian
+        "Страница не найдена",
+    ])
+    def test_soft_404_title_pattern_caught(self, bad_title):
+        from backlink_publisher.content_fetch import _is_soft_404_title
+        assert _is_soft_404_title(bad_title) is True, (
+            f"expected {bad_title!r} to trip the soft-404 guard"
+        )
+
+    @pytest.mark.parametrize("good_title", [
+        # Mid-string occurrence — must NOT match
+        "What's Not Found in the Manuscript",
+        "Apartment 404: A Survival Story",
+        "Lessons from page 404 of the codex",
+        "How to make your site's 404 page useful",
+        # Articles whose title mentions "404" but isn't itself a 404 page
+        "404 Apartments Review",
+        # Real titles
+        "Best Laptops 2026 — comprehensive buying guide",
+        "51漫画 - 成人ACG漫画 / 同人本免费在线阅读",
+        "ACG资源",
+        "OG Title Wins",
+    ])
+    def test_legitimate_title_passes(self, good_title):
+        from backlink_publisher.content_fetch import _is_soft_404_title
+        assert _is_soft_404_title(good_title) is False, (
+            f"false positive: {good_title!r} should NOT trip the guard"
+        )
+
+    def test_empty_title_returns_false(self):
+        from backlink_publisher.content_fetch import _is_soft_404_title
+        assert _is_soft_404_title("") is False
+        assert _is_soft_404_title("   ") is False
+
+    def test_verify_url_soft_404_returns_distinct_reason(self):
+        body = (
+            b"<html><head><title>Page Not Found - Example</title></head>"
+            b"<body>404 stub</body></html>"
+        )
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ):
+            ok, reason, title = verify_url_has_content("https://example.com/oops")
+        assert ok is False
+        assert reason == "soft_404_title", (
+            "expected soft_404_title reason, not http_200_no_title"
+        )
+        assert title is None
+
+    def test_stats_records_soft_404_reason(self):
+        reset_stats()
+        body = b"<html><head><title>404</title></head><body>nope</body></html>"
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ):
+            verify_url_has_content("https://example.com/missing")
+        snap = stats_snapshot()
+        assert snap["reason_counts"].get("soft_404_title") == 1

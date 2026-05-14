@@ -30,6 +30,7 @@ plan-backlinks invocation. Operators must either restart the process or call
 from __future__ import annotations
 
 import ipaddress
+import re
 import socket
 import ssl
 import time
@@ -301,6 +302,65 @@ def _is_transient(reason: str) -> bool:
     return reason in {"timeout", "network_error", "http_5xx"}
 
 
+#: Title patterns that signal a "soft 404" — HTTP 200 with a body whose
+#: title element advertises a "page not found" state. Each entry is matched
+#: against the casefolded title using ``re.match``; the regex is anchored at
+#: the start of the string and accepts an optional ``" - SiteName"`` /
+#: ``" | SiteName"`` / ``" — SiteName"`` suffix so titles like
+#: ``"Page Not Found - 51acgs"`` are caught while titles that merely
+#: CONTAIN the pattern mid-string (e.g., ``"What's Not Found in the
+#: Manuscript"``) are not.
+#:
+#: To extend: append the new phrase casefolded; verify against
+#: TestSoftFourOhFour false-positive cases.
+_SOFT_404_TITLE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(rf"^{phrase}(\s*[-|–—:|·]\s*.*)?$")
+    for phrase in (
+        # English
+        r"404",
+        r"404\s+not\s+found",
+        r"page\s+not\s+found",
+        r"not\s+found",
+        r"page\s+does\s+not\s+exist",
+        r"error\s+404",
+        r"this\s+page\s+(can'?t|cannot|could\s+not)\s+be\s+found",
+        # Chinese (simplified + traditional)
+        r"页面不存在",
+        r"页面未找到",
+        r"找不到页面",
+        r"頁面不存在",
+        r"頁面未找到",
+        r"找不到頁面",
+        r"404\s*错误",
+        r"404\s*錯誤",
+        # Japanese
+        r"ページが見つかりません",
+        r"お探しのページは見つかりません",
+        # Russian
+        r"страница\s+не\s+найдена",
+    )
+)
+
+
+def _is_soft_404_title(title: str) -> bool:
+    """Return True if ``title`` looks like a soft-404 placeholder.
+
+    The check is case-insensitive, anchored at the start, and tolerates the
+    common ``"<phrase> - <SiteName>"`` suffix pattern that sites attach.
+    Conservatively rejects titles that match; legitimate articles whose
+    titles happen to start with these phrases are extremely rare. If a real
+    site trips this guard, the operator can ``--no-fetch-verify`` (or fix
+    their title).
+    """
+    if not title:
+        return False
+    casefolded = title.casefold().strip()
+    for pat in _SOFT_404_TITLE_PATTERNS:
+        if pat.match(casefolded):
+            return True
+    return False
+
+
 def _extract_title(body: bytes) -> Optional[str]:
     """Parse ``body`` as HTML and return the first non-empty title element.
 
@@ -406,6 +466,11 @@ def _check_once(url: str) -> CheckResult:
     title = _extract_title(body)
     if not title:
         return False, "http_200_no_title", None
+    if _is_soft_404_title(title):
+        # Page returned HTTP 200 but its title advertises a 404 state.
+        # Distinct reason so operators can filter soft-404s separately
+        # from hard 404s / empty-title pages.
+        return False, "soft_404_title", None
     return True, None, title
 
 
