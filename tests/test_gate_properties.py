@@ -17,24 +17,32 @@ Gates currently under property-test coverage:
 - ``verify_publish._title_in_body`` — title substring presence
 - ``verify_publish._link_in_body`` — any-link substring presence
 - ``anchor_metrics.normalize`` — text normalization for distribution math
+- ``language_check.language_matches`` — language gate that returns False for
+  known mismatches. This is the gate whose absence of property coverage let
+  R1's always-True regression ship undetected through 999 example tests.
 
-Gates intentionally out of scope here (covered separately):
-- ``language_check.language_matches`` — currently tautological; fix in PR
-  #10 (feat/mandatory-linkcheck-lang-gate). Property tests for this gate
-  will be added once that fix lands so they have something to assert
-  against without xfail markers.
+Gates intentionally out of scope here:
 - ``linkcheck`` — HTTP-bound; the pure parts are too thin to property-test
   meaningfully without mocking the network.
 """
 
 from __future__ import annotations
 
+import random
 import string
 
 from hypothesis import assume, given
 from hypothesis import strategies as st
 
 from backlink_publisher.anchor_metrics import normalize
+from backlink_publisher.language_check import (
+    EN_HINTS,
+    RU_HINTS,
+    SUPPORTED_LANGUAGES,
+    ZH_HINTS,
+    detect_language,
+    language_matches,
+)
 from backlink_publisher.verify_publish import (
     _link_in_body,
     _title_in_body,
@@ -214,3 +222,154 @@ def test_normalize_empty_string_stays_empty():
     assert normalize("") == ""
     assert normalize("   ") == ""
     assert normalize("\t\n") == ""
+
+
+# ── language_check.language_matches ──────────────────────────────────────────
+#
+# Backfill for the always-True regression captured at
+# ``docs/solutions/logic-errors/language-matches-always-true-no-op-gate-2026-05-14.md``.
+# The gate's contract (per R1 in plan 2026-05-14-001):
+# - ``"unknown"`` or out-of-enum on either side → True (cannot disprove)
+# - Two known, equal supported langs → True
+# - Two known, different supported langs → False
+#
+# The structural-tautology guard at the end of this section is the property
+# whose absence is exactly what let the buggy `return True` ship through 999
+# example tests. If a future maintainer reintroduces a tautological branch,
+# the guard fails on the first sampled mismatch.
+
+
+@given(lang=st.sampled_from(sorted(SUPPORTED_LANGUAGES)))
+def test_language_matches_positive_when_langs_equal(lang):
+    """Property: equal supported langs always match."""
+    assert language_matches(lang, lang) is True
+
+
+@given(data=st.data())
+def test_language_matches_negative_when_known_mismatch(data):
+    """Property: any two distinct supported langs do NOT match.
+
+    This is the load-bearing negative-shape assertion. If `language_matches`
+    is rewritten to always return True (the historical regression), this
+    property fails on the first hypothesis-generated counterexample.
+    """
+    supported = sorted(SUPPORTED_LANGUAGES)
+    a = data.draw(st.sampled_from(supported))
+    b = data.draw(st.sampled_from(supported))
+    assume(a != b)
+    assert language_matches(a, b) is False, (
+        f"distinct supported langs {a!r} vs {b!r} unexpectedly matched"
+    )
+
+
+@given(known=st.sampled_from(sorted(SUPPORTED_LANGUAGES) + ["zh-Hant", "ja", "de", ""]))
+def test_language_matches_unknown_escape_valve(known):
+    """Property: ``"unknown"`` on either side returns True — the escape valve.
+
+    Documented R1 contract: when the gate cannot tell what one side is,
+    it can't disprove a mismatch, so it passes.
+    """
+    assert language_matches("unknown", known) is True
+    assert language_matches(known, "unknown") is True
+
+
+@given(
+    supported=st.sampled_from(sorted(SUPPORTED_LANGUAGES)),
+    out_of_enum=st.sampled_from(["zh-Hant", "ja", "de", "fr", "ko", "", "xx"]),
+)
+def test_language_matches_out_of_enum_treated_as_unknown(supported, out_of_enum):
+    """Property: out-of-enum lang values are coerced to ``"unknown"`` semantics.
+
+    Per R1 contract: if a side falls outside SUPPORTED_LANGUAGES, the gate
+    cannot speak for it, so it passes. This is intentional — the gate is
+    conservative for languages it has no hint set for.
+    """
+    assert language_matches(supported, out_of_enum) is True
+    assert language_matches(out_of_enum, supported) is True
+
+
+def test_language_matches_known_negative_fixture():
+    """Hard-coded negative: the exact pair from the bug capture document.
+
+    Pre-R1, ``language_matches("en", "zh-CN")`` returned True (every branch
+    fell through to ``return True``). The fix in commit ``f08423b`` makes
+    this return False. If this test ever passes True again, the structural
+    bug class from the bug capture has been re-introduced.
+    """
+    assert language_matches("en", "zh-CN") is False
+    assert language_matches("zh-CN", "en") is False
+    assert language_matches("ru", "en") is False
+    assert language_matches("en", "ru") is False
+
+
+def test_language_matches_not_tautological():
+    """Structural guard: over 10000 sampled inputs, both True and False fire.
+
+    This is the property whose absence let R1's always-True regression ship
+    through 999 example tests. A tautological gate ``return True`` violates
+    the False-rate floor; a vacuous ``return False`` violates the True-rate
+    floor. Either rewrites the function into structural nonsense and this
+    test fires.
+
+    Sampling space: supported langs + ``"unknown"`` + a synthetic out-of-enum
+    value (mimics how the gate is called in practice — detect_language()
+    can return either a supported lang or ``"unknown"``, and operator config
+    occasionally lists langs we don't have hint sets for).
+
+    Floor is 5% on each side; the true rates under the current contract are
+    roughly 53% True / 47% False given the sampling distribution, so a 5%
+    floor leaves wide margin for legitimate refactors while still catching
+    structural collapse to a single return value.
+    """
+    rng = random.Random(0xBADC0DE)  # deterministic seed for CI stability
+    sample_space = sorted(SUPPORTED_LANGUAGES) + ["unknown", "ja", ""]
+    n = 10_000
+    true_count = 0
+    false_count = 0
+    for _ in range(n):
+        detected = rng.choice(sample_space)
+        requested = rng.choice(sample_space)
+        if language_matches(detected, requested):
+            true_count += 1
+        else:
+            false_count += 1
+    true_rate = true_count / n
+    false_rate = false_count / n
+    assert false_rate >= 0.05, (
+        f"language_matches False-rate {false_rate:.3f} below floor 0.05 — "
+        f"the gate looks tautologically True (regression of R1's bug class). "
+        f"True={true_count}, False={false_count}"
+    )
+    assert true_rate >= 0.05, (
+        f"language_matches True-rate {true_rate:.3f} below floor 0.05 — "
+        f"the gate looks tautologically False (would break the unknown "
+        f"escape valve and reject all rows). "
+        f"True={true_count}, False={false_count}"
+    )
+
+
+def test_language_matches_via_detection_pipeline_negative():
+    """End-to-end: detect_language on EN body + target zh-CN ⇒ gate rejects.
+
+    Captures the operator-facing failure mode (an English article that
+    claims to be zh-CN was the original incident). If either
+    ``detect_language`` or ``language_matches`` regresses to a tautology,
+    this end-to-end test catches it without needing the structural guard.
+    """
+    en_body = " ".join(EN_HINTS * 3)  # dense English signal
+    detected = detect_language(en_body)
+    assert detected == "en", f"expected EN detection, got {detected!r}"
+    assert language_matches(detected, "zh-CN") is False
+
+
+def test_language_matches_via_detection_pipeline_positive():
+    """End-to-end happy path: detected lang matches requested lang."""
+    zh_body = " ".join(ZH_HINTS * 3)
+    detected = detect_language(zh_body)
+    assert detected == "zh-CN"
+    assert language_matches(detected, "zh-CN") is True
+
+    ru_body = " ".join(RU_HINTS * 3)
+    detected = detect_language(ru_body)
+    assert detected == "ru"
+    assert language_matches(detected, "ru") is True
