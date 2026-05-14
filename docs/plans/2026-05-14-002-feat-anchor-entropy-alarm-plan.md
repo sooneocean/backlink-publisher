@@ -1,7 +1,7 @@
 ---
 title: feat: Anchor distribution visibility (entropy + exact-ratio + top-3) on report-anchors
 type: feat
-status: active
+status: completed
 date: 2026-05-14
 origin: docs/brainstorms/2026-05-14-anchor-entropy-alarm-requirements.md
 ---
