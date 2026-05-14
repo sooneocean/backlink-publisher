@@ -44,9 +44,12 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from .anchor_profile import ProfileEntry, ProfileState
+
+if TYPE_CHECKING:
+    from .config import AnchorAlarmConfig
 
 # Default breach thresholds — operator-overridable via [anchor_alarm] in
 # config.toml. Same constant-then-overlay pattern as
@@ -228,6 +231,75 @@ def compute_window_metrics(entries: list[ProfileEntry]) -> WindowMetrics:
         exact_ratio=exact_match_ratio(entries),
         top_n_non_branded=top_n_concentration(entries),
         sample_size=len(entries),
+    )
+
+
+def resolve_thresholds(
+    alarm_cfg: "AnchorAlarmConfig",
+    target_url: str,
+    main_domain: str,
+) -> TargetThresholds:
+    """Apply per-URL > per-domain > global > hardcoded precedence.
+
+    Returns a fully-populated ``TargetThresholds`` instance. Each threshold
+    field is filled from the highest-precedence layer that specified a
+    non-None value; partial-field overrides fall through layer-by-layer.
+
+    Per-URL overrides match on ``target_url == override.match``; per-domain
+    overrides match on ``main_domain == override.match`` (after rstrip("/")).
+    The first matching override at each scope wins — operators ordering
+    multiple matching rows should put the more specific row first.
+    """
+    # Start with hardcoded defaults (module-level constants).
+    entropy_floor: float = _ENTROPY_FLOOR
+    exact_ratio_ceiling: float = _EXACT_RATIO_CEILING
+    top3_concentration_ceiling: float = _TOP3_CONCENTRATION_CEILING
+
+    # Layer 1: globals from [anchor_alarm].
+    if alarm_cfg.entropy_floor is not None:
+        entropy_floor = alarm_cfg.entropy_floor
+    if alarm_cfg.exact_ratio_ceiling is not None:
+        exact_ratio_ceiling = alarm_cfg.exact_ratio_ceiling
+    if alarm_cfg.top3_concentration_ceiling is not None:
+        top3_concentration_ceiling = alarm_cfg.top3_concentration_ceiling
+
+    # Layer 2: per-domain overrides (looser). Strip scheme + trailing slash
+    # so operators can write `match = "example.com"` regardless of whether the
+    # in-memory `main_domain` is bare ("example.com") or full ("https://example.com").
+    def _domain_key(s: str) -> str:
+        s = s.rstrip("/")
+        if s.startswith("https://"):
+            s = s[len("https://"):]
+        elif s.startswith("http://"):
+            s = s[len("http://"):]
+        return s
+
+    bare_domain = _domain_key(main_domain)
+    for override in alarm_cfg.overrides:
+        if override.scope == "domain" and _domain_key(override.match) == bare_domain:
+            if override.entropy_floor is not None:
+                entropy_floor = override.entropy_floor
+            if override.exact_ratio_ceiling is not None:
+                exact_ratio_ceiling = override.exact_ratio_ceiling
+            if override.top3_concentration_ceiling is not None:
+                top3_concentration_ceiling = override.top3_concentration_ceiling
+            break
+
+    # Layer 3: per-URL overrides (tightest — wins over domain).
+    for override in alarm_cfg.overrides:
+        if override.scope == "url" and override.match == target_url:
+            if override.entropy_floor is not None:
+                entropy_floor = override.entropy_floor
+            if override.exact_ratio_ceiling is not None:
+                exact_ratio_ceiling = override.exact_ratio_ceiling
+            if override.top3_concentration_ceiling is not None:
+                top3_concentration_ceiling = override.top3_concentration_ceiling
+            break
+
+    return TargetThresholds(
+        entropy_floor=entropy_floor,
+        exact_ratio_ceiling=exact_ratio_ceiling,
+        top3_concentration_ceiling=top3_concentration_ceiling,
     )
 
 

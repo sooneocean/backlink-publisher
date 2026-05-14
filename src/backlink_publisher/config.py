@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import stat
@@ -84,6 +85,46 @@ class LLMProviderConfig:
     timeout_s: float = 30.0
 
 
+@dataclass(frozen=True)
+class AnchorAlarmOverride:
+    """One override row in ``[[anchor_alarm.override]]``.
+
+    Matches a target by ``scope``: ``"url"`` matches the entry's full
+    ``target_url``; ``"domain"`` matches its ``main_domain``. ``match`` is the
+    exact string compared (no glob/regex — keep config behavior obvious).
+
+    Each threshold field is optional; ``None`` means "fall through to the next
+    precedence layer for this field". A row with all three fields ``None`` is
+    rejected as a config error (it would have no effect — almost certainly a
+    typo).
+    """
+
+    match: str
+    scope: str  # "url" | "domain"
+    entropy_floor: float | None = None
+    exact_ratio_ceiling: float | None = None
+    top3_concentration_ceiling: float | None = None
+
+
+@dataclass
+class AnchorAlarmConfig:
+    """Operator-tunable thresholds for the anchor distribution alarm.
+
+    Three global defaults plus an ordered list of overrides. Resolution
+    precedence per target (highest wins): per-target-URL > per-`main_domain` >
+    these globals > hardcoded constants in ``anchor_metrics``. Partial-field
+    overrides fall through layer-by-layer.
+
+    Defaults of ``None`` mean "use the hardcoded constants from
+    ``anchor_metrics``". Setting any value here overrides only that field.
+    """
+
+    entropy_floor: float | None = None
+    exact_ratio_ceiling: float | None = None
+    top3_concentration_ceiling: float | None = None
+    overrides: list[AnchorAlarmOverride] = field(default_factory=list)
+
+
 @dataclass
 class Config:
     blogger_blog_ids: dict[str, str] = field(default_factory=dict)
@@ -140,6 +181,13 @@ class Config:
     loaded with priority ``BACKLINK_LLM_API_KEY`` env var > toml value.
     ``base_url`` is required to use ``https://`` — ``http://`` raises
     ``InputValidationError`` at load time. Not round-tripped by ``save_config``."""
+
+    anchor_alarm: AnchorAlarmConfig = field(default_factory=AnchorAlarmConfig)
+    """Operator-tunable thresholds for ``report-anchors`` distribution alarm.
+
+    Populated from ``[anchor_alarm]`` in config.toml. Globals + per-target
+    overrides. Not round-tripped by ``save_config`` — manual edit only.
+    See ``anchor_metrics.resolve_thresholds`` for precedence rules."""
 
     @property
     def config_dir(self) -> Path:
@@ -214,6 +262,8 @@ def load_config(path: Path | None = None) -> Config:
         config_path=config_path,
     )
 
+    anchor_alarm = _parse_anchor_alarm(data.get("anchor_alarm"))
+
     return Config(
         blogger_blog_ids=blog_ids,
         blogger_oauth=blogger_oauth,
@@ -225,6 +275,7 @@ def load_config(path: Path | None = None) -> Config:
         target_anchor_pools_v2=target_anchor_pools_v2,
         anchor_proportions=anchor_proportions,
         llm_anchor_provider=llm_anchor_provider,
+        anchor_alarm=anchor_alarm,
     )
 
 
@@ -398,6 +449,124 @@ def _parse_anchor_proportions(anchor_section: Any) -> dict[str, float]:
             f"(got {total:.4f}). Values: {result!r}"
         )
     return result
+
+
+_ANCHOR_ALARM_THRESHOLD_FIELDS: tuple[str, ...] = (
+    "entropy_floor",
+    "exact_ratio_ceiling",
+    "top3_concentration_ceiling",
+)
+
+
+def _coerce_threshold(section_label: str, key: str, value: Any) -> float:
+    """Coerce a threshold scalar; raise ``InputValidationError`` on bad input.
+
+    Anchor-alarm thresholds are non-load-bearing for publish-flow correctness,
+    but silent fall-through still masks operator typos — we mirror
+    ``_parse_anchor_proportions``'s raise-loud posture. Better to surface a
+    config bug at load time than to ship with the operator's intent silently
+    ignored.
+    """
+    if isinstance(value, bool):
+        # bool is a subclass of int — reject explicitly to catch obvious typos.
+        raise InputValidationError(
+            f"[{section_label}].{key} must be a number, got bool ({value!r})"
+        )
+    if not isinstance(value, (int, float)):
+        raise InputValidationError(
+            f"[{section_label}].{key} must be a number, got {type(value).__name__}"
+        )
+    f = float(value)
+    if not math.isfinite(f):
+        raise InputValidationError(
+            f"[{section_label}].{key} must be finite, got {value!r}"
+        )
+    if key == "entropy_floor":
+        if f < 0:
+            raise InputValidationError(
+                f"[{section_label}].entropy_floor must be ≥ 0, got {f!r}"
+            )
+    else:
+        # Ratio / concentration fields are bounded to [0, 1].
+        if not (0.0 <= f <= 1.0):
+            raise InputValidationError(
+                f"[{section_label}].{key} must be in [0.0, 1.0], got {f!r}"
+            )
+    return f
+
+
+def _parse_anchor_alarm(section: Any) -> AnchorAlarmConfig:
+    """Parse ``[anchor_alarm]`` section. Missing → defaults (no overrides).
+
+    Raises ``InputValidationError`` on malformed input — typos in a threshold
+    key, non-numeric values, unknown scope, or an override row whose every
+    threshold field is absent (a row with no effect is almost certainly a
+    config mistake).
+    """
+    if section is None:
+        return AnchorAlarmConfig()
+    if not isinstance(section, dict):
+        raise InputValidationError(
+            f"[anchor_alarm] must be a table, got {type(section).__name__}"
+        )
+
+    cfg = AnchorAlarmConfig()
+    overrides_raw = section.get("override")
+
+    # Pull globals out of the section.
+    for key, value in section.items():
+        if key == "override":
+            continue
+        if key not in _ANCHOR_ALARM_THRESHOLD_FIELDS:
+            raise InputValidationError(
+                f"[anchor_alarm].{key} is not a known threshold "
+                f"(expected one of {_ANCHOR_ALARM_THRESHOLD_FIELDS} or 'override')"
+            )
+        coerced = _coerce_threshold("anchor_alarm", key, value)
+        setattr(cfg, key, coerced)
+
+    # Parse overrides. TOML maps [[anchor_alarm.override]] to a list of dicts.
+    if overrides_raw is not None:
+        if not isinstance(overrides_raw, list):
+            raise InputValidationError(
+                "[[anchor_alarm.override]] must be an array of tables"
+            )
+        parsed: list[AnchorAlarmOverride] = []
+        for i, row in enumerate(overrides_raw):
+            if not isinstance(row, dict):
+                raise InputValidationError(
+                    f"[[anchor_alarm.override]] row {i} must be a table"
+                )
+            match = row.get("match")
+            scope = row.get("scope")
+            if not isinstance(match, str) or not match:
+                raise InputValidationError(
+                    f"[[anchor_alarm.override]] row {i}: 'match' is required (non-empty string)"
+                )
+            if scope not in ("url", "domain"):
+                raise InputValidationError(
+                    f"[[anchor_alarm.override]] row {i}: 'scope' must be 'url' or 'domain', got {scope!r}"
+                )
+            kwargs: dict[str, float | None] = {}
+            for f_name in _ANCHOR_ALARM_THRESHOLD_FIELDS:
+                if f_name in row:
+                    kwargs[f_name] = _coerce_threshold(
+                        f"anchor_alarm.override[{i}]", f_name, row[f_name]
+                    )
+            if not kwargs:
+                raise InputValidationError(
+                    f"[[anchor_alarm.override]] row {i} sets no threshold fields — "
+                    f"row would have no effect. Add at least one of "
+                    f"{_ANCHOR_ALARM_THRESHOLD_FIELDS}, or delete the row."
+                )
+            for f_name in _ANCHOR_ALARM_THRESHOLD_FIELDS:
+                kwargs.setdefault(f_name, None)
+            parsed.append(
+                AnchorAlarmOverride(match=match, scope=scope, **kwargs)
+            )
+        cfg.overrides = parsed
+
+    return cfg
 
 
 def _parse_llm_anchor_provider(
