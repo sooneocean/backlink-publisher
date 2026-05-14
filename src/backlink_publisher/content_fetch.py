@@ -29,6 +29,7 @@ plan-backlinks invocation. Operators must either restart the process or call
 
 from __future__ import annotations
 
+import ipaddress
 import socket
 import ssl
 import time
@@ -36,7 +37,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.request import (
+    HTTPRedirectHandler,
+    Request,
+    build_opener,
+    urlopen,
+)
 
 from bs4 import BeautifulSoup
 
@@ -64,6 +70,143 @@ USER_AGENT: str = "backlink-publisher/0.1 content-fetch"
 _SSL_CTX: ssl.SSLContext = ssl.create_default_context()
 _SSL_CTX.check_hostname = False
 _SSL_CTX.verify_mode = ssl.CERT_NONE
+
+
+# ── SSRF defence ────────────────────────────────────────────────────────────
+
+#: IPs / IP networks that an outbound content fetch must never reach.
+#: Each entry is checked via ``ipaddress.ip_address(ip) in net`` for networks
+#: or equality for singleton IPs. Cloud-metadata IPs are listed explicitly so
+#: future maintainers see what's covered without re-reading the network masks.
+_BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
+    # RFC1918 private — every cloud / corp internal lives here
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    # Loopback
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    # Link-local (IPv4 + IPv6)
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("fe80::/10"),
+    # CGNAT — RFC6598, used by some carriers but also a corp-internal hideout
+    ipaddress.ip_network("100.64.0.0/10"),
+    # Multicast (no useful HTTP target)
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("ff00::/8"),
+    # Unspecified
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("::/128"),
+    # Documentation (TEST-NET) — shouldn't route but defenders block them
+    ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.51.100.0/24"),
+    ipaddress.ip_network("203.0.113.0/24"),
+    # Carrier-grade reserved / benchmarking
+    ipaddress.ip_network("198.18.0.0/15"),
+    # Teredo / 6to4 (IPv6 tunnel)
+    ipaddress.ip_network("2001::/32"),
+    ipaddress.ip_network("2002::/16"),
+)
+
+
+def _is_blocked_ip(ip_text: str) -> Optional[str]:
+    """Return a short ``reason`` string if ``ip_text`` falls in any blocked
+    network, else ``None``. Used by the SSRF defence to reject metadata /
+    internal targets before urlopen attempts a connection.
+    """
+    try:
+        ip = ipaddress.ip_address(ip_text)
+    except ValueError:
+        return "invalid_ip"
+    for net in _BLOCKED_NETWORKS:
+        # ipaddress compares mixed IPv4/IPv6 via .version mismatch raising.
+        if ip.version != net.version:
+            continue
+        if ip in net:
+            return f"blocked_ip:{net}"
+    return None
+
+
+def _resolve_host_ips(host: str) -> tuple[list[str], Optional[str]]:
+    """Return ``(ip_strs, error)``. On DNS failure ``ip_strs`` is empty and
+    ``error`` carries a stable reason ('dns_failure' / 'invalid_host').
+    """
+    if not host:
+        return [], "invalid_host"
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return [], "dns_failure"
+    except Exception:  # noqa: BLE001
+        return [], "dns_failure"
+    ips: list[str] = []
+    for fam, _typ, _proto, _canon, sockaddr in infos:
+        ip = sockaddr[0] if sockaddr else None
+        if ip and ip not in ips:
+            ips.append(ip)
+    if not ips:
+        return [], "dns_failure"
+    return ips, None
+
+
+def _check_url_for_ssrf(url: str) -> Optional[str]:
+    """Resolve ``url``'s host to IPs and return a block ``reason`` if any IP
+    in the set is in :data:`_BLOCKED_NETWORKS`, else ``None``.
+
+    Conservative: if **any** resolved IP is blocked, refuse the whole URL.
+    Operators occasionally serve real content on hostnames that also resolve
+    to a local IP (split-horizon DNS) — false positives are preferable to
+    SSRF false negatives.
+    """
+    parsed = urlparse(url)
+    host = parsed.hostname
+    if not host:
+        return "invalid_host"
+    # Hostname can be a literal IP (operator pastes http://10.0.0.5/) —
+    # skip DNS and just check it directly.
+    try:
+        ipaddress.ip_address(host)
+        return _is_blocked_ip(host)
+    except ValueError:
+        pass
+    ips, err = _resolve_host_ips(host)
+    if err:
+        return err
+    for ip in ips:
+        blocked = _is_blocked_ip(ip)
+        if blocked:
+            return blocked
+    return None
+
+
+class _SSRFSafeRedirectHandler(HTTPRedirectHandler):
+    """Re-validate every redirect target before allowing the follow.
+
+    urllib's default handler follows 301/302/303/307/308 transparently. An
+    attacker who controls a target URL could publish a 302 to
+    ``http://169.254.169.254/`` and bypass the initial SSRF check. This
+    subclass re-runs :func:`_check_url_for_ssrf` on each redirect target
+    and rejects with ``URLError`` (which the caller maps to
+    ``ssrf_redirect_blocked``). Also blocks HTTPS→HTTP downgrade redirects
+    (a classic credential / TLS-stripping vector).
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401, E501
+        # HTTPS→HTTP downgrade refused regardless of destination IP.
+        old_scheme = urlparse(req.full_url).scheme
+        new_scheme = urlparse(newurl).scheme
+        if old_scheme == "https" and new_scheme == "http":
+            raise URLError("ssrf_https_downgrade")
+        blocked = _check_url_for_ssrf(newurl)
+        if blocked:
+            raise URLError(f"ssrf_redirect:{blocked}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_SSRF_OPENER = build_opener(_SSRFSafeRedirectHandler())
+#: Module-level opener with the SSRF-safe redirect handler installed. We
+#: don't replace the global ``urllib.request.install_opener`` slot to avoid
+#: side-effects on other tooling that imports ``urllib.request`` directly.
 
 
 CheckResult = tuple[bool, Optional[str], Optional[str]]
@@ -187,11 +330,35 @@ def _extract_title(body: bytes) -> Optional[str]:
 
 
 def _check_once(url: str) -> CheckResult:
-    """Single GET attempt. Returns the canonical CheckResult; never raises."""
+    """Single GET attempt. Returns the canonical CheckResult; never raises.
+
+    SSRF defence (Plan 005 Unit 1, ported to live inside content_fetch
+    rather than the originally-planned standalone ``net_safety.py``):
+
+    1. The URL's hostname is resolved (or interpreted as a literal IP).
+       Any address in :data:`_BLOCKED_NETWORKS` aborts the fetch with a
+       ``ssrf_<reason>`` reason — RFC1918, loopback, link-local (incl.
+       169.254.169.254 cloud-metadata), CGNAT, multicast, IPv6 tunnel.
+    2. The request goes through :data:`_SSRF_OPENER` which installs a
+       custom redirect handler. Each 30x target is re-checked the same
+       way, and HTTPS→HTTP downgrade redirects are refused outright.
+    """
+    blocked = _check_url_for_ssrf(url)
+    if blocked is not None:
+        # Map the precise reason ladder to a stable taxonomy:
+        # - 'invalid_host' / 'invalid_ip' → invalid_url
+        # - 'dns_failure' → network_error (operator may be offline; retry)
+        # - 'blocked_ip:<net>' → ssrf_blocked (no retry; structural)
+        if blocked in {"invalid_host", "invalid_ip"}:
+            return False, "invalid_url", None
+        if blocked == "dns_failure":
+            return False, "network_error", None
+        return False, "ssrf_blocked", None
+
     req = Request(url, method="GET")
     req.add_header("User-Agent", USER_AGENT)
     try:
-        resp = urlopen(req, timeout=FETCH_TIMEOUT, context=_SSL_CTX)
+        resp = _SSRF_OPENER.open(req, timeout=FETCH_TIMEOUT)
     except HTTPError as exc:
         code = exc.code
         if 400 <= code < 500:
@@ -203,6 +370,12 @@ def _check_once(url: str) -> CheckResult:
         return False, "timeout", None
     except URLError as exc:
         reason_obj = getattr(exc, "reason", None)
+        # Our custom redirect handler raises URLError with reason strings
+        # like "ssrf_redirect:blocked_ip:10.0.0.0/8" or
+        # "ssrf_https_downgrade". Surface those as their own category so
+        # operators don't confuse them with network failures.
+        if isinstance(reason_obj, str) and reason_obj.startswith("ssrf_"):
+            return False, "ssrf_blocked", None
         if isinstance(reason_obj, socket.timeout):
             return False, "timeout", None
         return False, "network_error", None

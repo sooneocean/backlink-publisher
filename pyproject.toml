@@ -32,3 +32,8 @@ report-anchors = "backlink_publisher.cli.report_anchors:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = [
+    "real_ssrf_check: exercise the real _check_url_for_ssrf path instead of the default-bypass autouse fixture (tests/test_content_fetch.py)",
+]

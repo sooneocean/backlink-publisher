@@ -35,6 +35,25 @@ def _clear_cache():
     reset_cache()
 
 
+@pytest.fixture(autouse=True)
+def _bypass_ssrf_check(monkeypatch, request):
+    """Default-bypass the SSRF defence for every test that exercises the
+    real ``_check_once`` path. The pytest-socket autouse fixture in
+    ``tests/conftest.py`` blocks all sockets, so ``_check_url_for_ssrf``'s
+    real DNS resolution would surface as ``dns_failure`` and turn every
+    happy-path test into a network_error.
+
+    Tests in ``TestSSRFDefense`` opt out by setting a marker so they
+    exercise the real SSRF code path with mocked DNS instead.
+    """
+    if request.node.get_closest_marker("real_ssrf_check"):
+        return
+    monkeypatch.setattr(
+        "backlink_publisher.content_fetch._check_url_for_ssrf",
+        lambda _url: None,
+    )
+
+
 def _mock_response(status: int, body: bytes) -> MagicMock:
     """Build a urlopen() return value with .getcode() and .read()."""
     resp = MagicMock()
@@ -49,7 +68,7 @@ def _mock_response(status: int, body: bytes) -> MagicMock:
 
 def test_happy_path_title_tag_returns_extracted_title():
     body = b"<html><head><title>Real Page</title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, reason, title = verify_url_has_content("https://example.com/")
     assert ok is True
     assert reason is None
@@ -63,7 +82,7 @@ def test_happy_path_og_title_preferred_over_title_tag():
         b'<title>Bare Title Loses</title>'
         b"</head><body>x</body></html>"
     )
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, _, title = verify_url_has_content("https://example.com/")
     assert ok is True
     assert title == "OG Title Wins"
@@ -76,7 +95,7 @@ def test_happy_path_og_title_empty_falls_back_to_title_tag():
         b"<title>Fallback Title</title>"
         b"</head><body>x</body></html>"
     )
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, _, title = verify_url_has_content("https://example.com/")
     assert ok is True
     assert title == "Fallback Title"
@@ -87,7 +106,7 @@ def test_happy_path_og_title_empty_falls_back_to_title_tag():
 
 def test_200_with_empty_title_tag_fails_gate():
     body = b"<html><head><title></title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, reason, title = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "http_200_no_title"
@@ -96,7 +115,7 @@ def test_200_with_empty_title_tag_fails_gate():
 
 def test_200_with_whitespace_only_title_fails_gate():
     body = b"<html><head><title>   \n\t  </title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, reason, _ = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "http_200_no_title"
@@ -104,7 +123,7 @@ def test_200_with_whitespace_only_title_fails_gate():
 
 def test_200_with_no_title_element_at_all_fails_gate():
     body = b"<html><body>just body content, no head/title</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, reason, _ = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "http_200_no_title"
@@ -115,7 +134,7 @@ def test_200_with_no_title_element_at_all_fails_gate():
 
 def test_oversized_body_rejected():
     body = b"x" * (MAX_BODY_BYTES + 100)
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, reason, title = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "body_too_large"
@@ -134,7 +153,7 @@ def test_404_returned_as_http_404_no_retry():
         call_count["n"] += 1
         raise err
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_raise):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_raise):
         ok, reason, _ = verify_url_has_content("https://example.com/missing")
     assert ok is False
     assert reason == "http_404"
@@ -149,7 +168,7 @@ def test_500_retried_and_classified_as_http_5xx():
         call_count["n"] += 1
         raise err
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_raise):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_raise):
         ok, reason, _ = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "http_5xx"
@@ -163,7 +182,7 @@ def test_timeout_retried_and_classified():
         call_count["n"] += 1
         raise socket.timeout("timed out")
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_raise):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_raise):
         ok, reason, _ = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "timeout"
@@ -173,7 +192,7 @@ def test_timeout_retried_and_classified():
 def test_dns_failure_classified_as_network_error():
     err = URLError(socket.gaierror("Name or service not known"))
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=err):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=err):
         ok, reason, _ = verify_url_has_content("https://no-such-host.example/")
     assert ok is False
     assert reason == "network_error"
@@ -181,7 +200,7 @@ def test_dns_failure_classified_as_network_error():
 
 def test_url_error_with_timeout_reason_classified_as_timeout():
     err = URLError(socket.timeout("read timed out"))
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=err):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=err):
         ok, reason, _ = verify_url_has_content("https://example.com/")
     assert ok is False
     assert reason == "timeout"
@@ -208,7 +227,7 @@ def test_invalid_url_returns_invalid_url_without_network(bad_url):
         call_count["n"] += 1
         raise AssertionError("urlopen should not be called for invalid URLs")
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_track):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_track):
         ok, reason, _ = verify_url_has_content(bad_url)
     assert ok is False
     assert reason == "invalid_url"
@@ -232,7 +251,7 @@ def test_cache_hit_skips_second_fetch():
         call_count["n"] += 1
         return _mock_response(200, body)
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_once):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_once):
         ok1, _, t1 = verify_url_has_content("https://example.com/cached")
         ok2, _, t2 = verify_url_has_content("https://example.com/cached")
 
@@ -249,7 +268,7 @@ def test_cache_stores_failures_too():
         call_count["n"] += 1
         raise err
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_raise):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_raise):
         verify_url_has_content("https://example.com/missing")
         verify_url_has_content("https://example.com/missing")
     assert call_count["n"] == 1, "failed result must be cached, not re-fetched"
@@ -257,7 +276,7 @@ def test_cache_stores_failures_too():
 
 def test_reset_cache_clears_state():
     body = b"<html><head><title>X</title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)) as mock:
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)) as mock:
         verify_url_has_content("https://example.com/")
         reset_cache()
         verify_url_has_content("https://example.com/")
@@ -269,7 +288,7 @@ def test_reset_cache_clears_state():
 
 def test_batch_returns_per_url_results():
     body = b"<html><head><title>Title</title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         results = verify_urls_batch(
             ["https://a.example/", "https://b.example/", "https://c.example/"]
         )
@@ -285,7 +304,7 @@ def test_batch_deduplicates_input():
         call_count["n"] += 1
         return _mock_response(200, body)
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_once):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_once):
         results = verify_urls_batch(
             ["https://a.example/", "https://a.example/", "https://a.example/"]
         )
@@ -309,7 +328,7 @@ def test_batch_mixed_outcomes():
             return _mock_response(200, ok_body)
         raise err
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_route):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_route):
         results = verify_urls_batch(["https://ok.example/", "https://bad.example/"])
     assert results["https://ok.example/"][0] is True
     assert results["https://bad.example/"] == (False, "http_404", None)
@@ -323,7 +342,7 @@ def test_batch_hits_cache_on_repeat_call():
         call_count["n"] += 1
         return _mock_response(200, body)
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_once):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_once):
         verify_urls_batch(["https://a.example/", "https://b.example/"])
         verify_urls_batch(["https://a.example/", "https://b.example/"])
     assert call_count["n"] == 2, "second batch hits cache for both URLs"
@@ -336,7 +355,7 @@ def test_batch_worker_exception_records_failure_not_crash():
     def _explode(*args, **kwargs):
         raise RuntimeError("unexpected")
 
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=_explode):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_explode):
         results = verify_urls_batch(["https://a.example/"])
     assert "https://a.example/" in results
     ok, reason, _ = results["https://a.example/"]
@@ -350,7 +369,7 @@ def test_batch_worker_exception_records_failure_not_crash():
 def test_redirect_to_200_with_title_succeeds():
     """urlopen follows 301/302 by default; final response is what we check."""
     body = b"<html><head><title>Final Page</title></head><body>x</body></html>"
-    with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
         ok, _, title = verify_url_has_content("https://example.com/redirector")
     assert ok is True
     assert title == "Final Page"
@@ -358,7 +377,7 @@ def test_redirect_to_200_with_title_succeeds():
 
 def test_redirect_to_404_classified_as_404():
     err = HTTPError("https://example.com/final", 404, "Not Found", {}, BytesIO(b""))
-    with patch("backlink_publisher.content_fetch.urlopen", side_effect=err):
+    with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=err):
         ok, reason, _ = verify_url_has_content("https://example.com/redirect-to-404")
     assert ok is False
     assert reason == "http_404"
@@ -395,7 +414,7 @@ class TestCacheTTL:
             call_count["n"] += 1
             return _mock_response(200, body)
 
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_once):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_once):
             verify_url_has_content("https://example.com/")
             import time as _time
             _time.sleep(0.05)
@@ -411,7 +430,7 @@ class TestCacheTTL:
             call_count["n"] += 1
             return _mock_response(200, body)
 
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_each):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_each):
             verify_url_has_content("https://example.com/")
             verify_url_has_content("https://example.com/", max_age_seconds=0)
         assert call_count["n"] == 2, "max_age_seconds=0 must force a fresh fetch"
@@ -426,7 +445,7 @@ class TestCacheTTL:
             return _mock_response(200, body)
 
         set_default_max_age(0.05)  # 50 ms
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_each):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_each):
             verify_url_has_content("https://example.com/")
             import time as _time
             _time.sleep(0.1)  # past the 50 ms TTL
@@ -443,7 +462,7 @@ class TestCacheTTL:
             return _mock_response(200, body)
 
         set_default_max_age(0.01)
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_each):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_each):
             verify_url_has_content("https://example.com/")
             set_default_max_age(None)
             import time as _time
@@ -460,7 +479,7 @@ class TestCacheTTL:
             return _mock_response(200, body)
 
         set_default_max_age(60.0)  # generous module default
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_each):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_each):
             verify_url_has_content("https://example.com/")
             # Per-call override forces refetch despite the 60s module default.
             verify_url_has_content("https://example.com/", max_age_seconds=0)
@@ -477,7 +496,7 @@ class TestCacheTTL:
             return _mock_response(200, body)
 
         set_default_max_age(0.05)
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_each):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_each):
             verify_urls_batch(["https://a.example/"])
             import time as _time
             _time.sleep(0.1)
@@ -498,7 +517,7 @@ class TestStats:
 
     def test_stats_record_success_and_miss(self):
         body = b"<html><head><title>X</title></head><body>x</body></html>"
-        with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
             verify_url_has_content("https://example.com/")
         snap = stats_snapshot()
         assert snap["cache_hits"] == 0
@@ -508,7 +527,7 @@ class TestStats:
 
     def test_stats_record_cache_hit(self):
         body = b"<html><head><title>X</title></head><body>x</body></html>"
-        with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
             verify_url_has_content("https://example.com/")
             verify_url_has_content("https://example.com/")  # cache hit
         snap = stats_snapshot()
@@ -524,7 +543,7 @@ class TestStats:
         def _raise_404(*args, **kwargs):
             raise HTTPError("https://example.com/", 404, "NF", {}, BytesIO(b""))
 
-        with patch("backlink_publisher.content_fetch.urlopen", side_effect=_raise_404):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", side_effect=_raise_404):
             verify_url_has_content("https://example.com/missing")
         snap = stats_snapshot()
         assert snap["reason_counts"].get("http_404") == 1
@@ -532,7 +551,7 @@ class TestStats:
 
     def test_stats_records_latency_for_fetch_not_hit(self):
         body = b"<html><head><title>X</title></head><body>x</body></html>"
-        with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
             verify_url_has_content("https://example.com/")
             verify_url_has_content("https://example.com/")  # cache hit, no latency
         snap = stats_snapshot()
@@ -543,7 +562,7 @@ class TestStats:
 
     def test_stats_reset_clears_counters(self):
         body = b"<html><head><title>X</title></head><body>x</body></html>"
-        with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
             verify_url_has_content("https://example.com/")
         reset_stats()
         snap = stats_snapshot()
@@ -553,7 +572,7 @@ class TestStats:
 
     def test_stats_snapshot_is_independent_copy(self):
         body = b"<html><head><title>X</title></head><body>x</body></html>"
-        with patch("backlink_publisher.content_fetch.urlopen", return_value=_mock_response(200, body)):
+        with patch("backlink_publisher.content_fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
             verify_url_has_content("https://example.com/")
         snap1 = stats_snapshot()
         # Mutate snapshot — must not affect module state nor a second snap.
@@ -568,3 +587,184 @@ class TestStats:
         snap = stats_snapshot()
         assert snap["reason_counts"].get("invalid_url") == 1
         assert snap["fetches"] == 0  # invalid URLs short-circuit without HTTP
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# SSRF defence (port of plan 005 Unit 1 into content_fetch directly)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+from urllib.error import URLError as _URLError
+from urllib.request import Request
+
+
+@pytest.mark.real_ssrf_check
+class TestSSRFDefense:
+    """Verify _check_url_for_ssrf + _SSRFSafeRedirectHandler reject
+    requests targeting RFC1918 / loopback / link-local / cloud-metadata
+    /  CGNAT / IPv6-tunnel destinations, plus per-redirect-hop
+    re-checks and HTTPS→HTTP downgrade refusal."""
+
+    @pytest.mark.parametrize("blocked_ip", [
+        "127.0.0.1",
+        "127.0.0.53",
+        "10.0.0.5",
+        "10.255.255.1",
+        "172.16.5.10",
+        "172.31.0.1",
+        "192.168.1.1",
+        "169.254.169.254",  # cloud metadata
+        "100.64.1.2",       # CGNAT
+        "0.0.0.0",
+    ])
+    def test_literal_blocked_ip_in_url_rejected(self, blocked_ip):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+        reason = _check_url_for_ssrf(f"http://{blocked_ip}/")
+        assert reason is not None
+        assert reason.startswith("blocked_ip:"), reason
+
+    @pytest.mark.parametrize("safe_ip", [
+        "8.8.8.8",
+        "1.1.1.1",
+        "151.101.1.140",
+    ])
+    def test_literal_public_ip_passes(self, safe_ip):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+        assert _check_url_for_ssrf(f"http://{safe_ip}/") is None
+
+    @pytest.mark.parametrize("ipv6", [
+        "::1",
+        "fe80::1234",
+        "ff02::1",
+    ])
+    def test_ipv6_blocked_ranges_rejected(self, ipv6):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+        reason = _check_url_for_ssrf(f"http://[{ipv6}]/")
+        assert reason is not None
+        assert reason.startswith("blocked_ip:")
+
+    def test_hostname_resolving_to_blocked_ip_rejected(self, monkeypatch):
+        """An attacker who registers a domain that resolves to 169.254.169.254
+        (or whose CDN includes a stale 10.x record) must still be blocked.
+        """
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            return [(2, 1, 6, "", ("169.254.169.254", 0))]
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch.socket.getaddrinfo",
+            _fake_getaddrinfo,
+        )
+        reason = _check_url_for_ssrf("https://evil.example.com/")
+        assert reason is not None
+        assert reason.startswith("blocked_ip:")
+
+    def test_hostname_resolving_to_public_ip_passes(self, monkeypatch):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            return [(2, 1, 6, "", ("8.8.8.8", 0))]
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch.socket.getaddrinfo",
+            _fake_getaddrinfo,
+        )
+        assert _check_url_for_ssrf("https://good.example.com/") is None
+
+    def test_dns_failure_classified_as_network_error(self, monkeypatch):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            raise __import__("socket").gaierror("no such host")
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch.socket.getaddrinfo",
+            _fake_getaddrinfo,
+        )
+        assert _check_url_for_ssrf("https://nx.example/") == "dns_failure"
+
+    def test_verify_url_blocked_ssrf_returns_ssrf_blocked(self, monkeypatch):
+        """End-to-end via verify_url_has_content: a literal-IP URL whose IP
+        is in the block list short-circuits before any HTTP attempt and
+        surfaces reason=ssrf_blocked."""
+        # _SSRF_OPENER.open should NOT be invoked — block fires earlier.
+        call_count = {"n": 0}
+
+        def _track(*args, **kwargs):
+            call_count["n"] += 1
+            raise AssertionError("opener must not be reached")
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open", _track,
+        )
+        ok, reason, _ = verify_url_has_content("http://169.254.169.254/")
+        assert ok is False
+        assert reason == "ssrf_blocked"
+        assert call_count["n"] == 0
+
+    def test_verify_url_dns_failure_surfaces_network_error(self, monkeypatch):
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            raise __import__("socket").gaierror("nope")
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch.socket.getaddrinfo",
+            _fake_getaddrinfo,
+        )
+        ok, reason, _ = verify_url_has_content("https://nx.example/")
+        assert ok is False
+        assert reason == "network_error"
+
+    def test_invalid_host_classified_as_invalid_url(self, monkeypatch):
+        from backlink_publisher.content_fetch import _check_url_for_ssrf
+        # urlparse with empty netloc → invalid_host. (Note: schemes other
+        # than http/https are already rejected upstream as invalid_url, so
+        # this path is mostly defence-in-depth.)
+        assert _check_url_for_ssrf("http:///path") == "invalid_host"
+
+    def test_redirect_handler_blocks_redirect_to_metadata_ip(self):
+        """Construct the redirect handler directly and assert it raises
+        URLError on a 302 → metadata-IP redirect target. Uses https→https
+        so the downgrade check doesn't preempt the IP check."""
+        from backlink_publisher.content_fetch import _SSRFSafeRedirectHandler
+
+        handler = _SSRFSafeRedirectHandler()
+        req = Request("https://good.example.com/")
+        with pytest.raises(_URLError) as excinfo:
+            handler.redirect_request(
+                req, None, 302, "Found", {}, "https://169.254.169.254/",
+            )
+        assert "ssrf_redirect" in str(excinfo.value)
+
+    def test_redirect_handler_blocks_https_to_http_downgrade(self):
+        from backlink_publisher.content_fetch import _SSRFSafeRedirectHandler
+
+        handler = _SSRFSafeRedirectHandler()
+        req = Request("https://safe.example.com/")
+        with pytest.raises(_URLError) as excinfo:
+            handler.redirect_request(
+                req, None, 302, "Found", {}, "http://safe.example.com/",
+            )
+        assert "ssrf_https_downgrade" in str(excinfo.value)
+
+    def test_redirect_handler_allows_redirect_to_public_ip(self, monkeypatch):
+        from backlink_publisher.content_fetch import _SSRFSafeRedirectHandler
+
+        def _fake_getaddrinfo(host, *args, **kwargs):
+            return [(2, 1, 6, "", ("8.8.8.8", 0))]
+
+        monkeypatch.setattr(
+            "backlink_publisher.content_fetch.socket.getaddrinfo",
+            _fake_getaddrinfo,
+        )
+        handler = _SSRFSafeRedirectHandler()
+        req = Request("https://from.example/")
+        # Should not raise — falls through to base class. Base class would
+        # build a redirect Request; we only care that no SSRF exception
+        # was raised from our subclass.
+        result = handler.redirect_request(
+            req, None, 302, "Found", {"location": "https://to.example/"},
+            "https://to.example/",
+        )
+        # Base class returns a Request object on success.
+        assert result is not None
