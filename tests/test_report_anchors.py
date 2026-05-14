@@ -384,3 +384,188 @@ def test_cli_existing_jsonl_path_still_works():
     assert code == 0
     # The original markdown table header should be present
     assert "| target | articles" in stdout
+
+
+# ─── Anchor distribution alarm integration ──────────────────────────────────
+
+
+def _breach_profile_entries(target_url: str) -> list[ProfileEntry]:
+    """Synthesize a profile that breaches exact_ratio_ceiling.
+
+    25 entries to one target_url: 15 exact-match + 10 branded → 60% exact
+    ratio, well above the 10% default ceiling. Sample size ≥ 20 so the
+    alarm-floor gate does not suppress.
+    """
+    return [
+        ProfileEntry(
+            ts=now_iso(), link_role="main", url_category="home",
+            anchor_type="exact", anchor_text=f"exact_{i}", target_url=target_url,
+        )
+        for i in range(15)
+    ] + [
+        ProfileEntry(
+            ts=now_iso(), link_role="main", url_category="home",
+            anchor_type="branded", anchor_text=f"brand_{i}", target_url=target_url,
+        )
+        for i in range(10)
+    ]
+
+
+def test_cli_from_profile_clean_distribution_exits_zero(profile_cache):
+    """Empty profile → alarm.any_breach = False, exit 0."""
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", "https://clean.example", "--json"],
+    )
+    assert code == 0, f"stderr={stderr}"
+    data = json.loads(stdout)
+    assert "alarm" in data
+    assert data["alarm"]["any_breach"] is False
+    # Stderr should NOT contain any anchor_alarm WARN lines
+    assert "anchor_alarm" not in stderr
+
+
+def test_cli_from_profile_breach_exits_6(profile_cache):
+    """Synthetic exact-ratio breach → exit code 6 + stderr WARN + JSON breaches."""
+    target = "https://breach.example/money-page"
+    record_article("https://breach.example", _breach_profile_entries(target))
+
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", "https://breach.example", "--json"],
+    )
+    assert code == 6, f"expected exit 6 (alarm); got {code}; stderr={stderr}"
+    data = json.loads(stdout)
+    assert data["alarm"]["any_breach"] is True
+
+    target_entry = data["alarm"]["targets"][target]
+    assert target_entry["granularity"] == "url"
+    assert "exact_ratio_ceiling" in target_entry["breaches"]
+
+    # 90d window contains all 25 entries (synthesized at now_iso())
+    assert target_entry["metrics"]["90d"]["sample_size"] == 25
+
+    # Stderr has the human-readable WARN line
+    assert "WARN [anchor_alarm]" in stderr
+    assert target in stderr
+    assert "exact_ratio_ceiling" in stderr
+
+
+def test_cli_from_profile_breach_markdown_includes_alarm_section(profile_cache):
+    """Markdown output appends a Distribution Alarm subsection on breach."""
+    target = "https://md-breach.example/page"
+    record_article("https://md-breach.example", _breach_profile_entries(target))
+
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", "https://md-breach.example"],
+    )
+    assert code == 6
+    assert "## ⚠️ Anchor Distribution Alarm" in stdout
+    assert target in stdout
+    assert "exact_ratio_ceiling" in stdout
+
+
+def test_cli_from_profile_low_sample_suppresses_alarm(profile_cache):
+    """Sample < 20 → metrics computed, but no breach + exit 0."""
+    target = "https://low-n.example/page"
+    # Only 10 entries — below _ALARM_SAMPLE_MIN_PER_TARGET=20
+    record_article(
+        "https://low-n.example",
+        [
+            ProfileEntry(
+                ts=now_iso(), link_role="main", url_category="home",
+                anchor_type="exact", anchor_text=f"e{i}", target_url=target,
+            )
+            for i in range(10)
+        ],
+    )
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", "https://low-n.example", "--json"],
+    )
+    assert code == 0, f"low-sample should suppress; stderr={stderr}"
+    data = json.loads(stdout)
+    assert data["alarm"]["any_breach"] is False
+    target_entry = data["alarm"]["targets"][target]
+    assert target_entry["breaches"] == []
+    assert target_entry["metrics"]["90d"]["sample_size"] == 10
+    # Metric still computed (exact_ratio = 1.0)
+    assert target_entry["metrics"]["90d"]["exact_ratio"] == 1.0
+
+
+def test_cli_from_profile_per_domain_override_loosens_threshold(
+    profile_cache, tmp_path, monkeypatch,
+):
+    """A loose per-domain override on exact_ratio_ceiling suppresses what
+    would otherwise breach with default thresholds."""
+    target = "https://override.example/page"
+    record_article("https://override.example", _breach_profile_entries(target))
+
+    # Write a config.toml that loosens exact_ratio_ceiling for this domain.
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    config_path = config_dir / "config.toml"
+    config_path.write_text(
+        "[[anchor_alarm.override]]\n"
+        "match = 'override.example'\n"
+        "scope = 'domain'\n"
+        "exact_ratio_ceiling = 0.80\n",  # loose: 80% ceiling, fixture is 60%
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "backlink_publisher.config._config_dir",
+        lambda: config_dir,
+    )
+
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", "https://override.example", "--json"],
+    )
+    assert code == 0, f"override should suppress breach; stderr={stderr}"
+    data = json.loads(stdout)
+    target_entry = data["alarm"]["targets"][target]
+    # Resolved threshold reflects the override
+    assert target_entry["thresholds_applied"]["exact_ratio_ceiling"] == 0.80
+    assert target_entry["breaches"] == []
+
+
+def test_cli_stdin_path_emits_hint_about_from_profile():
+    """Operator running cat payloads.jsonl | report-anchors gets a stderr
+    hint that the distribution alarm requires --from-profile. Prevents the
+    false-safety failure mode flagged by document-review F6."""
+    row = json.dumps(_payload("https://hint.example"))
+    stdout, stderr, code = _run_main(row)
+    assert code == 0
+    assert "anchor distribution alarm requires --from-profile" in stderr
+
+
+def test_cli_pre_bump_rollup_target(profile_cache):
+    """Pre-bump entries (target_url='') surface as a 'domain-rollup' bucket."""
+    # Write entries via load_profile path: use raw JSON to skip the new
+    # write-time mechanism and simulate a profile written before target_url existed.
+    main_domain = "https://prebump.example"
+    fake_dir = profile_cache / "anchor-profile"
+    fake_dir.mkdir(parents=True, exist_ok=True)
+    legacy_payload = {
+        "version": 1,
+        "main_domain": main_domain,
+        "entries": [
+            {
+                "ts": now_iso(),
+                "link_role": "main",
+                "url_category": "home",
+                "anchor_type": "branded",
+                "anchor_text": f"old{i}",
+                "degraded": False,
+            }
+            for i in range(5)
+        ],
+    }
+    (fake_dir / "https___prebump.example.json").write_text(
+        json.dumps(legacy_payload), encoding="utf-8"
+    )
+
+    stdout, stderr, code = _run_main(
+        "", ["--from-profile", main_domain, "--json"],
+    )
+    assert code == 0
+    data = json.loads(stdout)
+    # Pre-bump bucket keyed by ""; granularity labeled "domain-rollup"
+    assert "" in data["alarm"]["targets"]
+    assert data["alarm"]["targets"][""]["granularity"] == "domain-rollup"

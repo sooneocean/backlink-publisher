@@ -7,14 +7,27 @@ import json
 import sys
 from typing import Any
 
+from ..anchor_metrics import (
+    _ALARM_SAMPLE_MIN_PER_TARGET,
+    compute_window_metrics,
+    detect_breaches,
+    filter_window,
+    group_by_target_url,
+    resolve_thresholds,
+)
 from ..anchor_profile import (
     ProfileState,
     load_profile,
     recent_degradation_rate,
     recent_type_counts,
-    recent_url_category_counts,
 )
-from ..config import ANCHOR_TYPES, load_config
+from ..config import ANCHOR_TYPES, AnchorAlarmConfig, load_config
+
+# Exit code namespace for sibling CLIs (see plan_backlinks.py, validate_backlinks.py,
+# publish_backlinks.py): 1 = error path; 2 = sibling-CLI generic error; 3 =
+# DependencyError; 4 = OAuth missing; 5 = no payloads published; 6 is the
+# lowest free integer and is reserved here for "anchor distribution alarm".
+_EXIT_CODE_ALARM: int = 6
 
 # Brainstorm-defined alarm threshold for systemic LLM rejection or pool
 # exhaustion. Anything above this in the rolling 100 indicates the
@@ -164,6 +177,119 @@ def _build_profile_report(
     }
 
 
+def _compute_alarm(
+    profile: ProfileState,
+    alarm_cfg: AnchorAlarmConfig,
+    main_domain: str,
+) -> tuple[dict[str, Any], list[str]]:
+    """Compute the per-target alarm block + stderr breach lines.
+
+    Returns ``(alarm_dict, stderr_lines)``:
+
+    - ``alarm_dict`` is the JSON-serializable structure embedded under the
+      report's ``alarm`` key. Each entry maps a target_url (or the empty
+      string for the pre-bump domain-rollup bucket) to its 30d/90d metrics,
+      breach list, and applied thresholds.
+    - ``stderr_lines`` is one human-readable line per breaching target;
+      caller prints these to stderr.
+
+    Breach detection runs only against the 90d window; 30d metrics are
+    surfaced for visibility but never trigger a breach entry or exit code.
+    """
+    groups = group_by_target_url(profile)
+    targets: dict[str, dict[str, Any]] = {}
+    breach_lines: list[str] = []
+    any_breach = False
+
+    for target_url, entries in sorted(groups.items()):
+        w30 = filter_window(entries, days=30)
+        w90 = filter_window(entries, days=90)
+        m30 = compute_window_metrics(w30)
+        m90 = compute_window_metrics(w90)
+
+        thresholds = resolve_thresholds(alarm_cfg, target_url, main_domain)
+        breaches = detect_breaches(
+            m90, thresholds, sample_floor=_ALARM_SAMPLE_MIN_PER_TARGET,
+        )
+
+        granularity = "domain-rollup" if target_url == "" else "url"
+        target_label = target_url or "(pre-bump rollup)"
+
+        targets[target_url] = {
+            "target_url": target_url,
+            "granularity": granularity,
+            "metrics": {
+                "30d": {
+                    "entropy": m30.entropy,
+                    "exact_ratio": m30.exact_ratio,
+                    "top3_concentration_non_branded": m30.top_n_non_branded,
+                    "sample_size": m30.sample_size,
+                },
+                "90d": {
+                    "entropy": m90.entropy,
+                    "exact_ratio": m90.exact_ratio,
+                    "top3_concentration_non_branded": m90.top_n_non_branded,
+                    "sample_size": m90.sample_size,
+                },
+            },
+            "breaches": breaches,
+            "thresholds_applied": {
+                "entropy_floor": thresholds.entropy_floor,
+                "exact_ratio_ceiling": thresholds.exact_ratio_ceiling,
+                "top3_concentration_ceiling": thresholds.top3_concentration_ceiling,
+            },
+            "sample_floor_per_target": _ALARM_SAMPLE_MIN_PER_TARGET,
+        }
+
+        if breaches:
+            any_breach = True
+            top3_repr = (
+                f"{m90.top_n_non_branded:.3f}"
+                if m90.top_n_non_branded is not None
+                else "n/a"
+            )
+            breach_lines.append(
+                f"WARN [anchor_alarm] {target_label}: breached {','.join(breaches)} "
+                f"in 90d (entropy={m90.entropy:.3f}, exact_ratio={m90.exact_ratio:.3f}, "
+                f"top3_non_branded={top3_repr}; sample={m90.sample_size})"
+            )
+
+    return (
+        {"targets": targets, "any_breach": any_breach},
+        breach_lines,
+    )
+
+
+def _format_alarm_markdown(alarm_block: dict[str, Any]) -> str:
+    """Render the alarm section appended to markdown output when breaches exist."""
+    out: list[str] = []
+    out.append("")
+    out.append("## ⚠️ Anchor Distribution Alarm")
+    out.append("")
+    out.append(
+        "These targets exceed the configured distribution thresholds in their "
+        "90d window. Review the anchor strategy for each before publishing more "
+        "to that destination — anchor over-optimization is the classic "
+        "Penguin-era manual-action trigger."
+    )
+    out.append("")
+    out.append("| Target | Breaches | Entropy (90d) | Exact ratio (90d) | Top-3 (90d) | Sample |")
+    out.append("|---|---|---|---|---|---|")
+    for target_url, target_data in alarm_block["targets"].items():
+        if not target_data["breaches"]:
+            continue
+        label = target_url or "(pre-bump rollup)"
+        m90 = target_data["metrics"]["90d"]
+        top3 = m90["top3_concentration_non_branded"]
+        top3_repr = f"{top3:.3f}" if top3 is not None else "n/a"
+        out.append(
+            f"| {label} | {', '.join(target_data['breaches'])} | "
+            f"{m90['entropy']:.3f} | {m90['exact_ratio']:.3f} | "
+            f"{top3_repr} | {m90['sample_size']} |"
+        )
+    return "\n".join(out)
+
+
 def _format_profile_report_markdown(report: dict[str, Any]) -> str:
     """Render the profile report as a Markdown document."""
     out: list[str] = []
@@ -271,9 +397,12 @@ def main(argv: list[str] | None = None) -> None:
         help=(
             "Read from the anchor profile JSON for the given site instead of "
             "JSONL payloads. Reports type distribution vs. target, URL "
-            "category × type cross-tab, degradation rate, and top repeated "
-            "anchor texts. Only meaningful for sites using the zh-CN "
-            "short-form scheduler."
+            "category × type cross-tab, degradation rate, top repeated "
+            "anchor texts, and the per-target distribution alarm "
+            "(Shannon entropy + exact-ratio + top-3 concentration over "
+            "30d/90d windows). Exits with code 6 when any target's 90d "
+            "window breaches the configured thresholds. Only meaningful "
+            "for sites using the zh-CN short-form scheduler."
         ),
     )
     parser.add_argument(
@@ -298,11 +427,40 @@ def main(argv: list[str] | None = None) -> None:
         cfg = load_config()
         profile = load_profile(args.from_profile)
         report = _build_profile_report(profile, cfg.anchor_proportions)
+
+        # Layer the anchor distribution alarm on top of the existing report.
+        # Computes per-target metrics over 30d / 90d windows, emits a structured
+        # alarm block in the JSON output, prints one stderr WARN per breaching
+        # target, and exits with code 6 if any target's 90d window breaches.
+        alarm_block, breach_lines = _compute_alarm(
+            profile, cfg.anchor_alarm, args.from_profile,
+        )
+        report["alarm"] = alarm_block
+
         if args.json:
             print(_format_profile_report_json(report))
         else:
             print(_format_profile_report_markdown(report))
+            if alarm_block.get("any_breach"):
+                print(_format_alarm_markdown(alarm_block))
+
+        for line in breach_lines:
+            print(line, file=sys.stderr)
+        if alarm_block.get("any_breach"):
+            raise SystemExit(_EXIT_CODE_ALARM)
         return
+
+    # ── JSONL-stdin aggregate path ─────────────────────────────────────────
+    # Document-review F6: an operator running `cat payloads.jsonl |
+    # report-anchors` could see exit 0 and falsely conclude "no anchor
+    # breaches". This path is structurally incapable of computing the alarm
+    # because the JSONL `links[]` array lacks anchor_type. Emit a one-line
+    # hint so the false-safety failure mode does not occur silently.
+    print(
+        "NOTE: anchor distribution alarm requires --from-profile <main_domain>; "
+        "this stdin-aggregate path does not compute distributional metrics.",
+        file=sys.stderr,
+    )
 
     fh = args.input or sys.stdin
     rows: list[dict[str, Any]] = []

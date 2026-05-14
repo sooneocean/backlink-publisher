@@ -302,8 +302,48 @@ The report shows the rolling type distribution vs. target, a
 with ⚠️ when above 10%. JSON output is available via `--json` for
 scripting.
 
-`save_config` does not round-trip `[sites.*]`, `[anchor.proportions]`, or
-`[llm.anchor_provider]` — edit `config.toml` by hand.
+`save_config` does not round-trip `[sites.*]`, `[anchor.proportions]`,
+`[anchor_alarm]`, or `[llm.anchor_provider]` — edit `config.toml` by hand.
+
+### Anchor Distribution Visibility
+
+`report-anchors --from-profile` also surfaces three per-target-URL
+distribution metrics over rolling 30d and 90d windows:
+
+- **Shannon entropy** of normalized anchor-text distribution
+- **Exact-match ratio** — fraction with `anchor_type == "exact"`
+- **Top-3 concentration** over non-branded anchors only
+
+When the 90d window for any target crosses a configured threshold,
+`report-anchors` emits a structured `alarm` block in JSON output, a
+`WARN [anchor_alarm]` line per breaching target on stderr, and exits
+with code **6** so cron wrappers can alert without ambiguity.
+
+```bash
+report-anchors --from-profile https://example.com
+# Exit 0  → no breach
+# Exit 6  → at least one target breached in the 90d window
+```
+
+This is **detection, not prevention**. The publish path does not consult
+the alarm — the operator is the deciding agent. When a target breaches:
+pause publishing to that URL, rotate its anchor strategy, and re-run
+after another batch of articles. The thresholds are a conservative
+lower-bound approximation of Google's SpamBrain signal — false-positives
+trigger a 5-minute review; false-negatives risk a Penguin penalty, so
+defaults favor an earlier warning (sample-size floor 20 per target vs.
+the 50-entry floor used for domain-level metrics).
+
+Override thresholds via `[anchor_alarm]` in `config.toml`. See
+`config.example.toml` for the full schema including per-domain and
+per-URL overrides.
+
+Note: the operator-facing aliases `report-anchors` (without
+`--from-profile`) and `cat payloads.jsonl | report-anchors` continue to
+report type distribution from the JSONL stream but **do not** compute
+the distribution alarm — that path lacks the `anchor_type` field needed
+for exact-ratio. A stderr hint surfaces this on every invocation so the
+zero exit code is not mistaken for "no breach detected".
 
 ## Publisher Adapters
 
@@ -364,6 +404,7 @@ The pipeline automatically uses the browser if no token is configured.
 | `3` | Dependency error (missing config, OAuth not set up, Playwright not installed) |
 | `4` | External service error (API error, login expired, CAPTCHA) |
 | `5` | Unexpected internal error |
+| `6` | Anchor distribution alarm — `report-anchors --from-profile` detected at least one target's 90d window exceeds the configured threshold. Output is otherwise valid; treat as a warning that requires operator action. |
 
 ## Output Contract
 

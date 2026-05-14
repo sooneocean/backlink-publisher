@@ -162,6 +162,53 @@ client_secret = "your-client-secret"
 # # lsi = 0.10
 
 # ────────────────────────────────────────────────────────────
+# Anchor distribution alarm — operator-tunable thresholds
+# ────────────────────────────────────────────────────────────
+# Consumed by `report-anchors --from-profile <main_domain>`. Surfaces three
+# rolling-window metrics per target_url (30d + 90d) and emits a breach when
+# the 90d window exceeds thresholds known to correlate with Penguin-era
+# anchor over-optimization. Breach actions: JSON `alarm` block + per-target
+# stderr WARN line + process exit code 6.
+#
+# Hardcoded defaults if section absent:
+#   entropy_floor                = 1.5    (Shannon entropy, base 2)
+#   exact_ratio_ceiling          = 0.10   (fraction of anchor_type='exact')
+#   top3_concentration_ceiling   = 0.25   (sum of top-3 non-branded anchor texts)
+#
+# All three are operator-tunable. Set globals here and/or add per-target
+# overrides. Precedence (highest wins): per-URL > per-domain > globals
+# > hardcoded defaults. Partial overrides fall through layer-by-layer.
+#
+# Sample-size floor: an alarm only fires once a target has ≥ 20 entries in
+# the 90d window. Low-N targets show metrics but never breach.
+#
+# [anchor_alarm]
+# entropy_floor = 1.5
+# exact_ratio_ceiling = 0.10
+# top3_concentration_ceiling = 0.25
+#
+# # Per-domain override — applies to every target URL on this domain unless
+# # a per-URL override is more specific.
+# [[anchor_alarm.override]]
+# match = "51acgs.com"
+# scope = "domain"
+# entropy_floor = 1.8                    # stricter floor for this domain
+#
+# # Per-URL override — only applies to this exact target_url.
+# [[anchor_alarm.override]]
+# match = "https://51acgs.com/hot"
+# scope = "url"
+# exact_ratio_ceiling = 0.05             # one specific target gets tighter ceiling
+#
+# Acting on a breach: `report-anchors` is a diagnostic. The operator is the
+# deciding agent. When a target breaches, pause publishing to it, review and
+# rotate the anchor strategy, then re-run. The alarm is a conservative
+# lower-bound approximation of Google's actual signal — false-positive cost
+# is a 5-min anchor review; false-negative cost is a potential Penguin
+# penalty, so defaults favor a permissive floor (sample-size 20 vs the
+# domain-level 50 used elsewhere in this tool).
+
+# ────────────────────────────────────────────────────────────
 # LLM anchor provider (OPTIONAL — default mode is LLM-free)
 # ────────────────────────────────────────────────────────────
 # The 51acgs.com block above is sized so the scheduler operates entirely off
