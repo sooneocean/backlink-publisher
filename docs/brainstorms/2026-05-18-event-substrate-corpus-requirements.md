@@ -199,16 +199,16 @@ projector 的转换规则约定（实现细节进 plan）：
 
 ### Resolve Before Planning
 
-下列三条由 document-review 升级——属于产品塑形决定，不解决会让 plan 阶段重新打开根基：
+**全部 8 条已在 brainstorm 阶段闭合（2026-05-18）：**
 
-- **RBP-1** [Affects R3, R6][User decision] `article_id` 主键策略：自增 INTEGER vs ULID/UUID？ULID 优势是跨设备同步友好；INTEGER 优势是与 SQLite ROWID 完全对齐、空间小。"未来跨设备同步"是否在 6–12 个月内有实质需求，决定这条。
-- **RBP-2** [Affects R5, S3, R21][User decision] FTS5 是否仍然默认启用？六个 reviewer 中 4 个标记它为"speculative 默认 on"——无当前 consumer 需求、写放大未实测、多语种分词器需选型。可选：(a) 默认关，预留 schema；(b) 默认开但承认 R21 perf 是 best-effort 非合同；(c) 完全推迟到 P2。
-- **RBP-3** [Affects R3, R16, S2][User decision] 历史投影的 articles 行允许 NULL body/anchors 吗？checkpoints 一般可推出 body+anchors；publish-history.json 只有 100 条上限且字段不全。决定 (a) 严格：缺则丢，articles 必须完整；(b) 宽松：允许 body=NULL，下游 dup-detect 跳过；(c) 妥协：从 markdown 反推 anchors，body 缺则用 `live_url` HEAD 抓回。
-- **RBP-4** [Affects R11, S1, S5][User decision] Projector 承载方式：(a) webui 进程内 thread——CLI 用户不开 webui 时 events.db 永远滞后；(b) 独立 launchd/systemd daemon——增加运维但跨进程一致；(c) **CLI 结束时 inline `projector.flush()`**——把"独立进程"退化为函数调用，删掉文件 watch 整层，代价是写路径多一行 import + 函数调用。三者深刻影响 S1 SLO、S5 perf 数字、anti-drift doctor 必要性。
-- **RBP-5** [Affects R15][User decision] `bp events` 是否仅保留 `rebuild`？只有 `rebuild` 是 D5/S6 硬要求；`tail` / `query` / `stats` 无 v1 consumer。可选 (a) 仅 `rebuild`，其他靠 `sqlite3` shell；(b) 全四个；(c) 暂不引入 `bp` umbrella，发布为 `bp-events-rebuild` 单独 entry。
-- **RBP-6** [Affects R21, S5][User decision] R21 / S5 performance 与 RBP-2 联动——若 FTS5 默认关，S5 改为"建 100K benchmark + 记录 baseline；regression > 2x baseline fail CI"；若 FTS5 默认开，S5 hard-code 数字需 plan 阶段先实测。
-- **RBP-7** [Affects R16][User decision] R16 全量回填事务粒度：(a) 单事务（OOM 风险，100K 规模 WAL 膨胀）；(b) **按 run_id 分批，每批一事务**（推荐，quarantine 跨批）；(c) 全文件流式，无事务（最快但失败半成品）。
-- **RBP-8** [Affects R8/R9, T8][User decision] GDPR/takedown 完整删除是否进 v1？v1 默认（已选）= 元数据残留在 events 表，DELETE 仅清 articles + FTS。若进 v1 需引入 tombstone 操作打破 R2 append-only，建议保持 v1 不实现并明确记录限制。
+- **RBP-1 (closed)** `article_id` = **自增 INTEGER**——与 SQLite ROWID 对齐；Scope Boundaries 已明确不做 remote sync，跨设备同步不在 6–12 个月范围。R3 / R6 / R17 中"`article_id`"实现按 INTEGER 处理。
+- **RBP-2 (closed)** FTS5 **默认关、划 schema slot**——v1 不创建 `articles_fts` 表，`articles.body` 保留为 TEXT；future dup-detect / 重用历史 consumer 出现时再 ALTER 加 FTS5 + trigger。R5 改为"FTS5 schema slot 预留但 v1 不启用"。T6 删除级联约束保留为"FTS5 启用后的约束"。
+- **RBP-3 (closed)** 历史 articles **妥协策略**：anchors 从 `payload.anchors` 优先读 → 退化到 markdown 反推 → 再退化到 `anchors_json=[]`；`body` 缺则 `NULL`；下游 dup-detect 与文本查询带 `WHERE body IS NOT NULL` filter。
+- **RBP-4 (closed)** Projector 承载 = **inline `projector.flush(source_path)`**——CLI 结束时调用，webui `_save_*` 后同步调用。**取消 R11 的独立进程 / 文件 watch / cursor 表方案**——退化为不必要：写路径每个 save point 多一行 `projector.flush_for(path)` 函数调用。R11 / D6 / Scope Boundaries "5 个 CLI 与 WebUI 不变动" 微调为 "仅 save point 多一行 import + flush 调用"。S1 SLO 改为"调用完成时已投影"（同步），不再 5s。R23 / S7 anti-drift doctor 保留但运行频率从"持续监控"降到"按需 + CI"。
+- **RBP-5 (closed)** 仅保留 **`bp-events-rebuild` + `bp-events-doctor` 两个独立 entry point**——不引入 `bp` umbrella CLI；其他查询走 `sqlite3 events.db` shell 或 `report-anchors --from-events`。R15 改写为"仅 rebuild + doctor 两个独立 console script"。
+- **RBP-6 (closed)** S5 reword 为：**"100K 合成负载 benchmark 在 CI 中记录 p99 baseline；regression > 2x baseline fail CI"**——不 hard-code 50ms。R21 数字改为"实测后填入 baseline，初版不约定具体值"。
+- **RBP-7 (closed)** R16 全量回填：**按 run_id 分批、每批一事务、quarantine 跨批累加**——失败仅回滚当前 run_id 批次，其他已完成批次保留。S2 验收对应调整。
+- **RBP-8 (closed)** GDPR / takedown 不进 v1。T8 已记录为已知限制；R2 append-only 保持纯净；DELETE 仅清 `articles`（FTS5 关时无 `articles_fts` 需级联）。未来若法务要求，单独立项引入 tombstone。
 
 ### Deferred to Planning
 
