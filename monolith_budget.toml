@@ -30,3 +30,7 @@ rationale = "Largest piece of the post-PR48 config-subpackage split (SLOC 310 at
 [files."src/backlink_publisher/_util/markdown.py"]
 ceiling = 320
 rationale = "Markdown rendering helpers (SLOC 282 at seed): _safe_anchor, <a> template, link-density paragraph builder. Stable shape; no extraction planned. Ceiling held against accumulated render-time helper accretion."
+
+[files."src/backlink_publisher/events/projector.py"]
+ceiling = 580
+rationale = "U4 read-side projector (SLOC 548 at seed): flush_for dispatch + 3 reducers (_project_checkpoint / _project_history / _project_drafts) + shared helpers (cursor I/O, dt normalisation, anchor filter, JSON read retry). Reducers share enough plumbing that splitting into a subpackage would re-import most of that surface; keep the unit whole until U5 inline-flush seam reveals a real boundary. Re-evaluate when U7 bp-events-rebuild bootstrap reuses the reducer entry points."
