@@ -1,7 +1,7 @@
 ---
 title: "CI test isolation failures: missing pytest-timeout, unmocked MediumBraveAdapter, and unmocked time.sleep"
 date: 2026-05-13
-category: test-failures
+category: docs/solutions/test-failures
 module: backlink-publisher
 problem_type: test_failure
 component: testing_framework
