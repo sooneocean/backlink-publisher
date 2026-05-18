@@ -409,7 +409,60 @@
         .history-item.failed {
             border-left-color: var(--danger);
         }
-        
+
+        .filter-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .filter-bar .filter-bar-label {
+            color: var(--secondary);
+            margin-right: 4px;
+            font-weight: 500;
+        }
+        .filter-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid #d1d5db;
+            background: white;
+            color: var(--secondary);
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .filter-chip:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+        .filter-chip.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+        .filter-chip .chip-count {
+            background: rgba(0,0,0,0.08);
+            border-radius: 999px;
+            padding: 0 6px;
+            font-size: 11px;
+            min-width: 18px;
+            text-align: center;
+        }
+        .filter-chip.active .chip-count {
+            background: rgba(255,255,255,0.25);
+            color: white;
+        }
+        #historyEmptyFiltered {
+            text-align: center;
+            padding: 40px;
+            color: var(--secondary);
+        }
+
         .editor-container {
             background: white;
             border-radius: 12px;
@@ -1178,11 +1231,28 @@
                     <div class="card-header">
                         <i class="bi bi-clock-history me-2"></i>发布历史
                     </div>
-                    <div class="card-body">
+                    <div class="card-body" id="historyCardBody">
                         {% if history %}
+                        <div class="filter-bar" data-filter-group-row="status">
+                            <span class="filter-bar-label">状态</span>
+                            <button type="button" class="filter-chip active" data-filter-group="status" data-filter-value="all">全部 <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="status" data-filter-value="drafted">草稿 <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="status" data-filter-value="published">已发布 <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="status" data-filter-value="failed">失败 <span class="chip-count">0</span></button>
+                        </div>
+                        <div class="filter-bar" data-filter-group-row="platform" style="margin-bottom:14px;">
+                            <span class="filter-bar-label">平台</span>
+                            <button type="button" class="filter-chip active" data-filter-group="platform" data-filter-value="all">全部 <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="platform" data-filter-value="blogger">Blogger <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="platform" data-filter-value="medium">Medium <span class="chip-count">0</span></button>
+                            <button type="button" class="filter-chip" data-filter-group="platform" data-filter-value="other">其他 <span class="chip-count">0</span></button>
+                        </div>
                         {% for item in history %}
                         {% set s = item.status %}
-                        <div class="history-item {% if s in ('success','published') %}success{% elif s == 'failed' %}failed{% else %}pending{% endif %}">
+                        {% set norm_status = 'published' if s in ('success', 'published') else (s if s in ('drafted', 'failed') else 'other') %}
+                        {% set norm_platform = item.platform if item.platform in ('blogger', 'medium') else 'other' %}
+                        <div class="history-item {% if s in ('success','published') %}success{% elif s == 'failed' %}failed{% else %}pending{% endif %}"
+                             data-status="{{ norm_status }}" data-platform="{{ norm_platform }}">
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                                 <div style="flex:1;min-width:0;">
                                     <strong style="word-break:break-all;font-size:14px;">{{ item.target_url }}</strong>
@@ -1237,6 +1307,10 @@
                             </div>
                         </div>
                         {% endfor %}
+                        <div id="historyEmptyFiltered" style="display:none;">
+                            <i class="bi bi-funnel" style="font-size:48px;"></i>
+                            <p style="margin-top:10px;">当前筛选无匹配记录</p>
+                        </div>
                         {% else %}
                         <div style="text-align:center;padding:40px;color:var(--secondary);">
                             <i class="bi bi-inbox" style="font-size:48px;"></i>
@@ -1246,7 +1320,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Batch Panel -->
             <div class="tab-pane fade {% if batch_tab %}show active{% endif %}" id="batchPanel" role="tabpanel">
                 <div class="card">
@@ -1535,6 +1609,75 @@
             document.getElementById('_loadingOverlay').style.display = 'flex';
             form.querySelectorAll('[type="submit"]').forEach(function(btn) { btn.disabled = true; });
         });
+    })();
+
+    // ── 发布历史筛选器（状态 × 平台，前端 AND，刷新即重置） ──
+    (function initHistoryFilter() {
+        var cardBody = document.getElementById('historyCardBody');
+        if (!cardBody) return;
+        var items = cardBody.querySelectorAll('.history-item[data-status]');
+        if (!items.length) return;
+
+        var chips = cardBody.querySelectorAll('.filter-chip');
+        var emptyFiltered = document.getElementById('historyEmptyFiltered');
+        var currentStatus = 'all';
+        var currentPlatform = 'all';
+
+        function applyFilter() {
+            var visible = 0;
+            items.forEach(function(item) {
+                var matchStatus = (currentStatus === 'all') || (item.dataset.status === currentStatus);
+                var matchPlatform = (currentPlatform === 'all') || (item.dataset.platform === currentPlatform);
+                if (matchStatus && matchPlatform) {
+                    item.style.display = '';
+                    visible++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+            if (emptyFiltered) {
+                emptyFiltered.style.display = visible === 0 ? '' : 'none';
+            }
+        }
+
+        function initCounts() {
+            // tally counts per (group, value); 'all' = total
+            var counts = { status: { all: 0, drafted: 0, published: 0, failed: 0, other: 0 },
+                           platform: { all: 0, blogger: 0, medium: 0, other: 0 } };
+            items.forEach(function(item) {
+                counts.status.all++;
+                counts.platform.all++;
+                var st = item.dataset.status;
+                var pf = item.dataset.platform;
+                if (counts.status[st] !== undefined) counts.status[st]++;
+                if (counts.platform[pf] !== undefined) counts.platform[pf]++;
+            });
+            chips.forEach(function(chip) {
+                var group = chip.dataset.filterGroup;
+                var value = chip.dataset.filterValue;
+                var span = chip.querySelector('.chip-count');
+                if (span && counts[group] && counts[group][value] !== undefined) {
+                    span.textContent = counts[group][value];
+                }
+            });
+        }
+
+        chips.forEach(function(chip) {
+            chip.addEventListener('click', function() {
+                var group = chip.dataset.filterGroup;
+                var value = chip.dataset.filterValue;
+                if (group === 'status') currentStatus = value;
+                else if (group === 'platform') currentPlatform = value;
+                cardBody.querySelectorAll('.filter-chip[data-filter-group="' + group + '"]').forEach(function(sibling) {
+                    sibling.classList.remove('active');
+                });
+                chip.classList.add('active');
+                applyFilter();
+            });
+        });
+
+        initCounts();
+        applyFilter();
     })();
     </script>
 
