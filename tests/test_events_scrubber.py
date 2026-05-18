@@ -8,9 +8,18 @@ test names the expected pattern hit count rather than checking only
 
 from __future__ import annotations
 
-import secrets
-
 from backlink_publisher.events.scrubber import scrub_text
+
+#: Deterministic 64-char base64url token covering every symbol exactly once.
+#: Shannon entropy = log2(64) = 6.0 (max), well above the 4.5 threshold —
+#: replaces ``secrets.token_urlsafe(32)`` which produced ~43-char random
+#: tokens that occasionally fell below threshold and flaked CI (#49 retry
+#: 2026-05-18 hit this on both Python 3.11 and 3.12).
+_HIGH_ENTROPY_64 = (
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789-_"
+)
 
 
 def test_oauth_bearer_redacted_and_counted():
@@ -111,20 +120,17 @@ def test_repeating_low_entropy_pattern_not_high_entropy():
 
 
 def test_random_token_triggers_high_entropy():
-    # secrets.token_urlsafe(32) → ~43 chars uniform-random base64url →
-    # entropy well above 4.5.
-    random_token = secrets.token_urlsafe(32)
-    text = f"opaque blob: {random_token} trailing"
+    text = f"opaque blob: {_HIGH_ENTROPY_64} trailing"
     cleaned, hits = scrub_text(text)
-    assert random_token not in cleaned
+    assert _HIGH_ENTROPY_64 not in cleaned
     assert hits.get("high_entropy") == 1
 
 
 def test_named_pattern_runs_before_high_entropy():
-    # A JWT-shaped token is also high-entropy. The named pattern should
-    # claim it first (more useful routing signal); ``high_entropy`` should
-    # not double-count.
-    jwt = "eyJ" + secrets.token_urlsafe(40)
+    # JWT-shaped token: ``eyJ`` prefix + deterministic high-entropy body.
+    # The named JWT regex should claim it first (more useful routing
+    # signal); ``high_entropy`` must not double-count.
+    jwt = "eyJ" + _HIGH_ENTROPY_64
     text = f"auth: {jwt} done"
     cleaned, hits = scrub_text(text)
     assert jwt not in cleaned
