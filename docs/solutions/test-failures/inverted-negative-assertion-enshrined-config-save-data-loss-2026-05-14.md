@@ -1,7 +1,7 @@
 ---
 title: Inverted negative-shape assertion enshrined the save_config data-loss bug
 date: 2026-05-14
-category: docs/solutions/test-failures
+category: test-failures
 module: config_persistence
 problem_type: test_failure
 component: testing_framework

@@ -1,7 +1,7 @@
 ---
 title: WebUI Blocking Subprocess Calls and Missing Progress Feedback
 date: 2026-05-12
-category: docs/solutions/ui-bugs
+category: ui-bugs
 module: webui
 problem_type: ui_bug
 component: tooling
