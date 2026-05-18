@@ -192,7 +192,7 @@ flowchart TB
 
 ---
 
-- [~] **Unit 3: Unit 2/4/5/6 本地预演（worktree 隔离）** _(2026-05-18: 4 个 worktree 骨架已创建 ../bp-local-unit{2,4,5,6} on `local/telegraph-unit*-staged` based on `feat/telegraph-adapter-unit3`@49030ec;pre-push hook 已部署拦 local/* push;Unit 2/4/5/6 完整代码预演 pending —— 待 PR #37 merge 后 rebase 到 main HEAD 再实施)_
+- [x] **Unit 3: Unit 2/4/5/6 本地预演（worktree 隔离）** _(done 2026-05-18: 4 worktree 完整代码预演完成, 全部 §194 合规 (pre-push hook RC=1 验证)。各 HEAD: Unit 2 `557ea5c` (+912 行, 36 tests), Unit 4 `7154748` (+858 行, 30 tests, rebased on Unit 2), Unit 5 `f9eb17b` (+429 行, 23 tests, rebased on Unit 4), Unit 6 `f8d65c7` (+221 行, rebased on Unit 5)。累计 118 telegraph tests + 1542 full pytest passed (1 pre-existing failure unrelated)。6/01 G1 Pass 后 push runbook 见本 plan Unit 4 D+0/D+1/D+7 时序)_
 
 **Goal:** 在 §194 "本地探索不限" 豁免下，把 Unit 2/4/5/6 的完整 dev + 测试在隔离 worktree 中预演到 ready-to-push 状态，6/01 Pass 当日即可批量 push。
 
