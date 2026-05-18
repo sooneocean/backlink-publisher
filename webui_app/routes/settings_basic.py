@@ -87,9 +87,9 @@ def settings_save_blog_ids():
         cfg = load_config()
         cfg.blogger_blog_ids = mapping
         save_config(cfg, extra_blogger_ids={}, target_three_url=None)
-        return redirect('/settings?flash_type=success&flash_msg=Blog ID 映射已保存')
+        return redirect('/settings?flash_type=success&flash_msg=Blog ID 映射已保存#channel-blogger')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}#channel-blogger')
 
 
 @bp.route('/settings/save-medium-token', methods=['POST'])
@@ -98,18 +98,18 @@ def settings_save_medium_token():
     try:
         save_config(load_config(), medium_token=token, target_three_url=None)
         msg = 'Medium Token 已保存' if token else 'Medium Token 已清除'
-        return redirect(f'/settings?flash_type=success&flash_msg={msg}')
+        return redirect(f'/settings?flash_type=success&flash_msg={msg}#channel-medium')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}#channel-medium')
 
 
 @bp.route('/settings/clear-medium-token', methods=['POST'])
 def settings_clear_medium_token():
     try:
         save_config(load_config(), medium_token="", target_three_url=None)
-        return redirect('/settings?flash_type=success&flash_msg=Medium Token 已清除')
+        return redirect('/settings?flash_type=success&flash_msg=Medium Token 已清除#channel-medium')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=清除失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=清除失败: {e}#channel-medium')
 
 
 @bp.route('/settings/revoke-blogger', methods=['POST'])
@@ -117,6 +117,6 @@ def settings_revoke_blogger():
     cfg = load_config()
     try:
         cfg.blogger_token_path.unlink(missing_ok=True)
-        return redirect('/settings?flash_type=success&flash_msg=Blogger 授权已撤销')
+        return redirect('/settings?flash_type=success&flash_msg=Blogger 授权已撤销#channel-blogger')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=撤销失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=撤销失败: {e}#channel-blogger')

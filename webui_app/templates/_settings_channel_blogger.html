@@ -1,0 +1,188 @@
+                <!-- 连接状态 -->
+                <div class="mb-3 d-flex align-items-center gap-3">
+                    <span class="fw-semibold" style="font-size:14px;">当前状态：</span>
+                    {% if blogger_token %}
+                    <span class="badge-status ok"><i class="bi bi-check-circle-fill"></i>已授权</span>
+                    <small class="text-muted">Token 文件已存在</small>
+                    {% else %}
+                    <span class="badge-status err"><i class="bi bi-x-circle-fill"></i>未授权</span>
+                    {% endif %}
+                </div>
+
+                <!-- 步骤 1：Google Cloud Console OAuth 配置 -->
+                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+                    <p style="font-size:13px;font-weight:600;margin-bottom:10px;color:#92400e;">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        Step 1 — 在 Google Cloud Console 注册回调网址
+                    </p>
+                    <p style="font-size:12px;color:#78350f;margin-bottom:10px;">
+                        前往 <a href="https://console.cloud.google.com/apis/credentials" target="_blank">API &amp; Services → 凭据</a>，
+                        打开你的 OAuth 2.0 客户端 ID，根据你的 <strong>客户端类型</strong> 选择对应操作：
+                    </p>
+
+                    <!-- 桌面应用（推荐） -->
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+                        <p style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px;">
+                            ✓ 推荐：桌面应用 (Desktop application)
+                        </p>
+                        <p style="font-size:12px;color:#15803d;margin-bottom:8px;">
+                            在「已获授权的重定向 URI」中只需添加：
+                        </p>
+                        <div style="display:flex;align-items:center;gap:8px;max-width:320px;">
+                            <input type="text" class="form-control form-control-sm" value="http://localhost" readonly
+                                   style="font-family:monospace;font-size:12px;background:#fff;flex:1;">
+                            <button class="btn btn-success btn-sm" type="button"
+                                    onclick="navigator.clipboard.writeText('http://localhost').then(()=>{this.textContent='✓';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard\'></i>'},1500)})">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                        <p style="font-size:11px;color:#166534;margin-top:6px;margin-bottom:0;">
+                            桌面应用只需注册 <code>http://localhost</code>，Google 自动允许任意端口，无需注册完整路径。
+                        </p>
+                    </div>
+
+                    <!-- Web 应用 -->
+                    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 14px;">
+                        <p style="font-size:12px;font-weight:700;color:#9a3412;margin-bottom:6px;">
+                            Web 应用 (Web application) — 需注册完整回调网址：
+                        </p>
+                        <div class="input-group" style="max-width:520px;">
+                            <input type="text" class="form-control form-control-sm"
+                                   id="callbackUriDisplay"
+                                   value="{{ callback_uri }}" readonly
+                                   style="font-family:monospace;font-size:12px;background:#fff;">
+                            <button class="btn btn-warning btn-sm" type="button"
+                                    onclick="copyUri()" id="copyBtn">
+                                <i class="bi bi-clipboard me-1"></i>复制
+                            </button>
+                        </div>
+                        <p style="font-size:11px;color:#9a3412;margin-top:6px;margin-bottom:0;">
+                            网址必须与上方完全一致（含端口号），否则会出现 redirect_uri_mismatch。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 步骤 2：填写凭据 -->
+                <form method="POST" action="/settings/blogger/oauth-start"
+                      id="oauthCredForm">
+                    <p style="font-size:13px;font-weight:600;margin-bottom:10px;color:#374151;">
+                        Step 2 — 填入 OAuth 凭据
+                    </p>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:13px;">Client ID</label>
+                            <input type="text" class="form-control" name="client_id"
+                                   placeholder="xxxx.apps.googleusercontent.com"
+                                   value="{{ blogger_client_id }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" style="font-size:13px;">Client Secret</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="client_secret"
+                                       id="clientSecretInput"
+                                       placeholder="GOCSPX-..."
+                                       value="{{ blogger_client_secret }}">
+                                <button type="button" class="btn btn-outline-secondary"
+                                        onclick="toggleSecret()">
+                                    <i class="bi bi-eye" id="secretEye"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 已綁定狀態顯示 -->
+                    {% if blogger_client_id %}
+                    <div class="mb-3 p-2" style="background:#f0fdf4;border:1px solid #bbf7d0;
+                         border-radius:6px;font-size:12px;color:#166534;display:flex;
+                         align-items:center;gap:8px;">
+                        <i class="bi bi-check-circle-fill"></i>
+                        凭据已绑定：<code style="font-size:11px;">{{ blogger_client_id[:24] }}…</code>
+                    </div>
+                    {% endif %}
+
+                    <!-- 按鈕列 -->
+                    <div class="d-flex align-items-center gap-3 flex-wrap mt-3">
+
+                        <!-- 確認綁定（只儲存，不發 OAuth） -->
+                        <button type="submit"
+                                formaction="/settings/save-blogger-oauth"
+                                class="btn btn-primary">
+                            <i class="bi bi-check2-circle me-1"></i>确认绑定
+                        </button>
+
+                        <!-- Google 登入（儲存 + 發 OAuth） -->
+                        <button type="submit"
+                                formaction="/settings/blogger/oauth-start"
+                                class="btn-google">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
+                                 style="width:18px;height:18px;flex-shrink:0;">
+                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                            </svg>
+                            使用 Google 帐号登入
+                        </button>
+
+                        {% if blogger_token %}
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                onclick="document.getElementById('revokeForm').submit()">
+                            <i class="bi bi-trash me-1"></i>撤销现有授权
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    <p class="text-muted mt-2 mb-0" style="font-size:11px;">
+                        「确认绑定」只保存凭据；「使用 Google 帐号登入」保存后立即开始授权。
+                    </p>
+                </form>
+
+                <form id="revokeForm" method="POST" action="/settings/revoke-blogger" style="display:none;"></form>
+
+                <hr style="margin:20px 0;">
+
+                <!-- Blog ID 映射子区块 -->
+                <div id="blogger-blog-ids">
+                    <p class="fw-semibold mb-2" style="font-size:14px;">
+                        <i class="bi bi-diagram-3 me-2" style="color:#4f46e5;"></i>Blogger Blog ID 映射
+                    </p>
+                    <p class="text-muted" style="font-size:13px;">
+                        将每个目标主域名映射到对应的 Blogger Blog ID。<br>
+                        Blog ID 可在 Blogger 控制台 URL 中找到：<code>blogger.com/blog/posts/<strong>1234567890</strong></code>
+                    </p>
+
+                    <form method="POST" action="/settings/save-blog-ids" id="blogIdForm">
+                        <div id="blogIdRows">
+                            {% for domain, blog_id in blog_ids.items() %}
+                            <div class="blog-id-row">
+                                <input type="text" class="form-control form-control-sm" name="domain[]"
+                                       value="{{ domain }}" placeholder="https://your-site.com">
+                                <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
+                                       value="{{ blog_id }}" placeholder="1234567890123456789">
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            {% endfor %}
+                            {% if not blog_ids %}
+                            <div class="blog-id-row">
+                                <input type="text" class="form-control form-control-sm" name="domain[]"
+                                       placeholder="https://your-site.com">
+                                <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
+                                       placeholder="1234567890123456789">
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex gap-2 mt-3">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addRow()">
+                                <i class="bi bi-plus me-1"></i>新增一行
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="bi bi-floppy me-1"></i>保存映射
+                            </button>
+                        </div>
+                    </form>
+                </div>

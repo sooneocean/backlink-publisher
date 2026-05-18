@@ -248,11 +248,6 @@ class TestGetRoutes:
                 f"missing JS handler call: {handler!r}"
             )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="Plan 2026-05-18-011 Unit 2 introduces #channel-blogger "
-               "collapse panel; structural assertion flips to green then.",
-    )
     def test_blogger_forms_scoped_to_channel_panel(self, client):
         """Plan 2026-05-18-011 Unit 1 — structural regression net for the
         Blogger channel partial.
@@ -288,11 +283,6 @@ class TestGetRoutes:
                     f"{url} is not inside #channel-blogger panel"
                 )
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="Plan 2026-05-18-011 Unit 3 introduces #channel-medium "
-               "collapse panel; structural assertion flips to green then.",
-    )
     def test_medium_forms_scoped_to_channel_panel(self, client):
         """Plan 2026-05-18-011 Unit 1 — structural regression net for the
         Medium channel partial. See ``test_blogger_forms_scoped_to_channel_panel``

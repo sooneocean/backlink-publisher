@@ -1,0 +1,55 @@
+        <!-- SEO 锚文本关键词池 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-tag me-2"></i>SEO 锚文本配置
+                <span class="text-muted" style="font-size:12px;font-weight:400;margin-left:8px;">
+                    — 每个 target 站的关键词池（一行一个关键词）
+                </span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="font-size:13px;">
+                    生成的外链文章会从这里选取关键词作为锚文本，替代裸域名（如 <code>example.com</code>）。
+                    空白则回退到裸域名 + WARN 日志。建议每个 target 填写 5–10 个关键词，
+                    混合品牌词、行业词和长尾词。
+                </p>
+                {% if not all_targets %}
+                <p class="text-muted" style="font-size:13px;">
+                    <i class="bi bi-info-circle me-1"></i>
+                    暂无已知 target 站。请先在「Blogger Blog ID」部分添加 target 站的映射，或直接手动编辑
+                    <code>{{ config_path }}</code>。
+                </p>
+                {% else %}
+                <form method="POST" action="/settings/save-target-keywords">
+                    {% for domain in all_targets %}
+                    {% set kws = target_anchor_keywords.get(domain, []) %}
+                    <details style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                        <summary style="padding:10px 14px;cursor:pointer;background:#f8fafc;font-size:13px;user-select:none;">
+                            <strong>{{ domain }}</strong>
+                            <span class="badge {% if kws %}bg-success{% else %}bg-warning text-dark{% endif %} ms-2" style="font-size:11px;">
+                                {% if kws %}{{ kws | length }} 个关键词{% else %}未配置{% endif %}
+                            </span>
+                        </summary>
+                        <div style="padding:12px 14px;">
+                            <label class="form-label" style="font-size:12px;color:#64748b;">
+                                关键词（每行一个）：
+                            </label>
+                            <textarea
+                                class="form-control"
+                                name="keywords_{{ loop.index }}"
+                                rows="4"
+                                style="font-size:13px;font-family:monospace;"
+                                placeholder="品牌词&#10;行业关键词&#10;长尾短语..."
+                            >{{ kws | join('\n') }}</textarea>
+                            <input type="hidden" name="domain_{{ loop.index }}" value="{{ domain }}">
+                            <div class="form-text">每行一个关键词，去除前后空白，字符长度 ≤ 60。重复项将自动去重。</div>
+                        </div>
+                    </details>
+                    {% endfor %}
+                    <input type="hidden" name="domain_count" value="{{ all_targets | length }}">
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-save me-1"></i>保存所有关键词池
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>

@@ -1,0 +1,32 @@
+        <!-- 排程发布设定 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-alarm me-2"></i>排程发布设定
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="font-size:13px;">
+                    控制草稿队列的发布节奏，避免短时间内大量上稿被平台识别。
+                </p>
+                <form method="POST" action="/settings/schedule">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">最小发布间隔（小时）</label>
+                            <input type="number" class="form-control" name="min_interval_hours"
+                                   value="{{ schedule_settings.min_interval_hours }}"
+                                   min="0.5" max="168" step="0.5">
+                            <div class="form-text">两篇文章发布之间最少间隔小时数（建议 4–24h）</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">随机抖动（±分钟）</label>
+                            <input type="number" class="form-control" name="jitter_minutes"
+                                   value="{{ schedule_settings.jitter_minutes }}"
+                                   min="0" max="120" step="5">
+                            <div class="form-text">在间隔基础上随机增减的分钟数，模拟自然节奏</div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm mt-3">
+                        <i class="bi bi-floppy me-1"></i>保存设定
+                    </button>
+                </form>
+            </div>
+        </div>

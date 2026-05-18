@@ -36,6 +36,22 @@
         .btn-google:hover { box-shadow:0 1px 3px rgba(0,0,0,.2); background:#f8f9fa; }
         .btn-google:disabled { opacity:.5; cursor:not-allowed; }
         .btn-google svg { width:18px; height:18px; flex-shrink:0; }
+        .channel-toggle {
+            background:none; border:none; width:100%;
+            display:flex; align-items:center; gap:0.5rem;
+            padding:14px 20px; text-align:left; font-weight:600;
+            color:inherit;
+        }
+        .channel-toggle:hover { background:rgba(0,0,0,.03); }
+        .channel-toggle .badges { margin-left:auto; display:flex; gap:0.25rem; align-items:center; }
+        .chevron { transition:transform 180ms ease-out; font-style:normal; }
+        .channel-toggle[aria-expanded="true"] .chevron { transform:rotate(90deg); }
+        @media (prefers-reduced-motion:reduce) { .chevron { transition:none; } }
+        .section-heading {
+            font-size:0.95rem; font-weight:700; color:#374151;
+            margin:28px 0 12px; padding-left:8px;
+            border-left:3px solid var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -55,303 +71,70 @@
         </div>
         {% endif %}
 
-        <!-- ① Blogger OAuth 设置 -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-google me-2" style="color:#ea4335;"></i>Blogger API — OAuth 授权
-            </div>
-            <div class="card-body">
+        <h2 class="section-heading">发布渠道</h2>
 
-                <!-- 连接状态 -->
-                <div class="mb-3 d-flex align-items-center gap-3">
-                    <span class="fw-semibold" style="font-size:14px;">当前状态：</span>
-                    {% if blogger_token %}
-                    <span class="badge-status ok"><i class="bi bi-check-circle-fill"></i>已授权</span>
-                    <small class="text-muted">Token 文件已存在</small>
-                    {% else %}
-                    <span class="badge-status err"><i class="bi bi-x-circle-fill"></i>未授权</span>
-                    {% endif %}
-                </div>
-
-                <!-- 步骤 1：Google Cloud Console OAuth 配置 -->
-                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;margin-bottom:20px;">
-                    <p style="font-size:13px;font-weight:600;margin-bottom:10px;color:#92400e;">
-                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                        Step 1 — 在 Google Cloud Console 注册回调网址
-                    </p>
-                    <p style="font-size:12px;color:#78350f;margin-bottom:10px;">
-                        前往 <a href="https://console.cloud.google.com/apis/credentials" target="_blank">API &amp; Services → 凭据</a>，
-                        打开你的 OAuth 2.0 客户端 ID，根据你的 <strong>客户端类型</strong> 选择对应操作：
-                    </p>
-
-                    <!-- 桌面应用（推荐） -->
-                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
-                        <p style="font-size:12px;font-weight:700;color:#166534;margin-bottom:6px;">
-                            ✓ 推荐：桌面应用 (Desktop application)
-                        </p>
-                        <p style="font-size:12px;color:#15803d;margin-bottom:8px;">
-                            在「已获授权的重定向 URI」中只需添加：
-                        </p>
-                        <div style="display:flex;align-items:center;gap:8px;max-width:320px;">
-                            <input type="text" class="form-control form-control-sm" value="http://localhost" readonly
-                                   style="font-family:monospace;font-size:12px;background:#fff;flex:1;">
-                            <button class="btn btn-success btn-sm" type="button"
-                                    onclick="navigator.clipboard.writeText('http://localhost').then(()=>{this.textContent='✓';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard\'></i>'},1500)})">
-                                <i class="bi bi-clipboard"></i>
-                            </button>
-                        </div>
-                        <p style="font-size:11px;color:#166534;margin-top:6px;margin-bottom:0;">
-                            桌面应用只需注册 <code>http://localhost</code>，Google 自动允许任意端口，无需注册完整路径。
-                        </p>
-                    </div>
-
-                    <!-- Web 应用 -->
-                    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:10px 14px;">
-                        <p style="font-size:12px;font-weight:700;color:#9a3412;margin-bottom:6px;">
-                            Web 应用 (Web application) — 需注册完整回调网址：
-                        </p>
-                        <div class="input-group" style="max-width:520px;">
-                            <input type="text" class="form-control form-control-sm"
-                                   id="callbackUriDisplay"
-                                   value="{{ callback_uri }}" readonly
-                                   style="font-family:monospace;font-size:12px;background:#fff;">
-                            <button class="btn btn-warning btn-sm" type="button"
-                                    onclick="copyUri()" id="copyBtn">
-                                <i class="bi bi-clipboard me-1"></i>复制
-                            </button>
-                        </div>
-                        <p style="font-size:11px;color:#9a3412;margin-top:6px;margin-bottom:0;">
-                            网址必须与上方完全一致（含端口号），否则会出现 redirect_uri_mismatch。
-                        </p>
-                    </div>
-                </div>
-
-                <!-- 步骤 2：填写凭据 -->
-                <form method="POST" action="/settings/blogger/oauth-start"
-                      id="oauthCredForm">
-                    <p style="font-size:13px;font-weight:600;margin-bottom:10px;color:#374151;">
-                        Step 2 — 填入 OAuth 凭据
-                    </p>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold" style="font-size:13px;">Client ID</label>
-                            <input type="text" class="form-control" name="client_id"
-                                   placeholder="xxxx.apps.googleusercontent.com"
-                                   value="{{ blogger_client_id }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold" style="font-size:13px;">Client Secret</label>
-                            <div class="input-group">
-                                <input type="password" class="form-control" name="client_secret"
-                                       id="clientSecretInput"
-                                       placeholder="GOCSPX-..."
-                                       value="{{ blogger_client_secret }}">
-                                <button type="button" class="btn btn-outline-secondary"
-                                        onclick="toggleSecret()">
-                                    <i class="bi bi-eye" id="secretEye"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 已綁定狀態顯示 -->
-                    {% if blogger_client_id %}
-                    <div class="mb-3 p-2" style="background:#f0fdf4;border:1px solid #bbf7d0;
-                         border-radius:6px;font-size:12px;color:#166534;display:flex;
-                         align-items:center;gap:8px;">
-                        <i class="bi bi-check-circle-fill"></i>
-                        凭据已绑定：<code style="font-size:11px;">{{ blogger_client_id[:24] }}…</code>
-                    </div>
-                    {% endif %}
-
-                    <!-- 按鈕列 -->
-                    <div class="d-flex align-items-center gap-3 flex-wrap mt-3">
-
-                        <!-- 確認綁定（只儲存，不發 OAuth） -->
-                        <button type="submit"
-                                formaction="/settings/save-blogger-oauth"
-                                class="btn btn-primary">
-                            <i class="bi bi-check2-circle me-1"></i>确认绑定
-                        </button>
-
-                        <!-- Google 登入（儲存 + 發 OAuth） -->
-                        <button type="submit"
-                                formaction="/settings/blogger/oauth-start"
-                                class="btn-google">
-                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"
-                                 style="width:18px;height:18px;flex-shrink:0;">
-                                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                            </svg>
-                            使用 Google 帐号登入
-                        </button>
-
+        <!-- Blogger 渠道折叠卡 -->
+        <div class="card channel-card">
+            <div class="card-header p-0">
+                <button type="button" class="channel-toggle"
+                        data-bs-toggle="collapse" data-bs-target="#channel-blogger"
+                        aria-expanded="false" aria-controls="channel-blogger">
+                    <i class="bi bi-google" style="color:#ea4335;" aria-hidden="true"></i>
+                    <span>Blogger</span>
+                    <span class="badges">
                         {% if blogger_token %}
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('revokeForm').submit()">
-                            <i class="bi bi-trash me-1"></i>撤销现有授权
-                        </button>
+                        <span class="badge-status ok">已授权 ✓</span>
+                        {% else %}
+                        <span class="badge-status err">未授权 ✗</span>
                         {% endif %}
-                    </div>
-
-                    <p class="text-muted mt-2 mb-0" style="font-size:11px;">
-                        「确认绑定」只保存凭据；「使用 Google 帐号登入」保存后立即开始授权。
-                    </p>
-                </form>
-
-                {% if blogger_token %}
-                <form id="revokeForm" method="POST" action="/settings/revoke-blogger" style="display:none;"></form>
-                {% endif %}
-
+                    </span>
+                    <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div id="channel-blogger" class="collapse">
+                <div class="card-body">
+                    {% include '_settings_channel_blogger.html' %}
+                </div>
             </div>
         </div>
 
-        <!-- ② Blog ID 映射 -->
-        <div class="card" id="blogger-blog-ids">
-            <div class="card-header">
-                <i class="bi bi-diagram-3 me-2" style="color:#4f46e5;"></i>Blogger Blog ID 映射
-            </div>
-            <div class="card-body">
-                <p class="text-muted" style="font-size:13px;">
-                    将每个目标主域名映射到对应的 Blogger Blog ID。<br>
-                    Blog ID 可在 Blogger 控制台 URL 中找到：<code>blogger.com/blog/posts/<strong>1234567890</strong></code>
-                </p>
-
-                <form method="POST" action="/settings/save-blog-ids" id="blogIdForm">
-                    <div id="blogIdRows">
-                        {% for domain, blog_id in blog_ids.items() %}
-                        <div class="blog-id-row">
-                            <input type="text" class="form-control form-control-sm" name="domain[]"
-                                   value="{{ domain }}" placeholder="https://your-site.com">
-                            <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
-                                   value="{{ blog_id }}" placeholder="1234567890123456789">
-                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
-                        {% endfor %}
-                        <!-- Empty row if no entries -->
-                        {% if not blog_ids %}
-                        <div class="blog-id-row">
-                            <input type="text" class="form-control form-control-sm" name="domain[]"
-                                   placeholder="https://your-site.com">
-                            <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
-                                   placeholder="1234567890123456789">
-                            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </div>
+        <!-- Medium 渠道折叠卡 -->
+        <div class="card channel-card">
+            <div class="card-header p-0">
+                <button type="button" class="channel-toggle"
+                        data-bs-toggle="collapse" data-bs-target="#channel-medium"
+                        aria-expanded="false" aria-controls="channel-medium">
+                    <i class="bi bi-medium" aria-hidden="true"></i>
+                    <span>Medium</span>
+                    <span class="badges">
+                        {% if medium_oauth_configured %}
+                        <span class="badge-status ok">OAuth ✓</span>
+                        {% else %}
+                        <span class="badge-status err">OAuth ✗</span>
                         {% endif %}
-                    </div>
-                    <div class="d-flex gap-2 mt-3">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addRow()">
-                            <i class="bi bi-plus me-1"></i>新增一行
-                        </button>
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-floppy me-1"></i>保存映射
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- ③ Medium OAuth 授权 & Integration Token -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-medium me-2"></i>Medium 授权
-            </div>
-            <div class="card-body">
-                <p class="text-muted" style="font-size:13px;">
-                    推荐使用 <strong>OAuth 授权</strong>（需要申请 Medium 应用）或使用 <strong>Integration Token</strong>（已停用但仍可用）。
-                </p>
-                
-                <!-- OAuth 授权部分 -->
-                {% if not medium_oauth_configured %}
-                <div class="alert alert-info" style="margin-bottom:20px;">
-                    <strong>🔐 推荐：使用 OAuth 授权</strong><br/>
-                    需要先在 <a href="https://medium.com/me/apps" target="_blank">https://medium.com/me/apps</a> 创建应用获得 Client ID 和 Client Secret。
-                </div>
-                <form method="POST" action="/settings/medium/oauth-start" style="margin-bottom:20px;">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <label class="form-label">Client ID</label>
-                            <input type="text" class="form-control" name="client_id" placeholder="你的 Medium Client ID" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Client Secret</label>
-                            <input type="password" class="form-control" name="client_secret" placeholder="你的 Medium Client Secret" required>
-                        </div>
-                    </div>
-                    <div class="mt-3">
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-box-arrow-up-right me-1"></i>通过 Medium 授权
-                        </button>
-                    </div>
-                </form>
-                {% else %}
-                <div class="alert alert-success" style="margin-bottom:20px;">
-                    <i class="bi bi-check-circle-fill me-2"></i><strong>OAuth 已授权</strong>
-                </div>
-                <div class="d-flex gap-2" style="margin-bottom:20px;">
-                    <form method="POST" action="/settings/clear-medium-oauth" style="margin:0;">
-                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                            <i class="bi bi-trash me-1"></i>清除 OAuth 授权
-                        </button>
-                    </form>
-                </div>
-                {% endif %}
-                
-                <hr style="margin:20px 0;">
-                
-                <!-- Integration Token 备选方案 -->
-                <p class="text-muted" style="font-size:13px;">
-                    <strong>备选：Integration Token</strong>（已停用但仍可用）<br/>
-                    如果无法使用 OAuth，可前往 <a href="https://medium.com/me/settings/security" target="_blank">medium.com → 设置 → 安全 → Integration tokens</a> 生成 Token。
-                </p>
-                <form method="POST" action="/settings/save-medium-token">
-                    <div class="mb-3">
-                        <label class="form-label">Integration Token</label>
-                        <div class="input-group">
-                            <input type="password" class="form-control token-box" name="medium_token"
-                                   id="mediumTokenInput"
-                                   placeholder="请输入 Medium Integration Token"
-                                   value="{{ medium_token_masked }}">
-                            <button class="btn btn-outline-secondary" type="button"
-                                    onclick="toggleToken()">
-                                <i class="bi bi-eye" id="eyeIcon"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary btn-sm">
-                            <i class="bi bi-floppy me-1"></i>保存 Token
-                        </button>
                         {% if medium_token_set %}
-                        <form method="POST" action="/settings/clear-medium-token" style="margin:0;">
-                            <button type="submit" class="btn btn-outline-danger btn-sm">
-                                <i class="bi bi-trash me-1"></i>清除 Token
-                            </button>
-                        </form>
+                        <span class="badge-status ok">Token ✓</span>
+                        {% else %}
+                        <span class="badge-status err">Token ✗</span>
                         {% endif %}
-                    </div>
-                </form>
-                {% if medium_token_set %}
-                <div class="mt-3">
-                    <span class="badge-status ok"><i class="bi bi-check-circle-fill"></i>Token 已配置</span>
-                    <small class="text-muted ms-2">发布时优先使用 API</small>
+                    </span>
+                    <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div id="channel-medium" class="collapse">
+                <div class="card-body">
+                    {% include '_settings_channel_medium.html' %}
                 </div>
-                {% else %}
-                <div class="mt-3">
-                    <span class="badge-status warn"><i class="bi bi-exclamation-triangle-fill"></i>Token 未设置</span>
-                    <small class="text-muted ms-2">将使用 Playwright 浏览器 fallback</small>
-                </div>
-                {% endif %}
             </div>
         </div>
 
-        <!-- ④ 配置文件位置 -->
+        <h2 class="section-heading">全局设置</h2>
+
+        {% include '_settings_global_keywords.html' %}
+
+        {% include '_settings_global_schedule.html' %}
+
+        <!-- 配置文件位置 -->
         <div class="card">
             <div class="card-header">
                 <i class="bi bi-file-earmark-text me-2"></i>配置文件
@@ -362,95 +145,6 @@
                 <p class="text-muted mt-2 mb-0" style="font-size:12px;">
                     OAuth Token：<code>{{ token_path }}</code>
                 </p>
-            </div>
-        </div>
-
-        <!-- ④b SEO 锚文本关键词池 -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-tag me-2"></i>SEO 锚文本配置
-                <span class="text-muted" style="font-size:12px;font-weight:400;margin-left:8px;">
-                    — 每个 target 站的关键词池（一行一个关键词）
-                </span>
-            </div>
-            <div class="card-body">
-                <p class="text-muted" style="font-size:13px;">
-                    生成的外链文章会从这里选取关键词作为锚文本，替代裸域名（如 <code>example.com</code>）。
-                    空白则回退到裸域名 + WARN 日志。建议每个 target 填写 5–10 个关键词，
-                    混合品牌词、行业词和长尾词。
-                </p>
-                {% if not all_targets %}
-                <p class="text-muted" style="font-size:13px;">
-                    <i class="bi bi-info-circle me-1"></i>
-                    暂无已知 target 站。请先在「Blogger Blog ID」部分添加 target 站的映射，或直接手动编辑
-                    <code>{{ config_path }}</code>。
-                </p>
-                {% else %}
-                <form method="POST" action="/settings/save-target-keywords">
-                    {% for domain in all_targets %}
-                    {% set kws = target_anchor_keywords.get(domain, []) %}
-                    <details style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-                        <summary style="padding:10px 14px;cursor:pointer;background:#f8fafc;font-size:13px;user-select:none;">
-                            <strong>{{ domain }}</strong>
-                            <span class="badge {% if kws %}bg-success{% else %}bg-warning text-dark{% endif %} ms-2" style="font-size:11px;">
-                                {% if kws %}{{ kws | length }} 个关键词{% else %}未配置{% endif %}
-                            </span>
-                        </summary>
-                        <div style="padding:12px 14px;">
-                            <label class="form-label" style="font-size:12px;color:#64748b;">
-                                关键词（每行一个）：
-                            </label>
-                            <textarea
-                                class="form-control"
-                                name="keywords_{{ loop.index }}"
-                                rows="4"
-                                style="font-size:13px;font-family:monospace;"
-                                placeholder="品牌词&#10;行业关键词&#10;长尾短语..."
-                            >{{ kws | join('\n') }}</textarea>
-                            <input type="hidden" name="domain_{{ loop.index }}" value="{{ domain }}">
-                            <div class="form-text">每行一个关键词，去除前后空白，字符长度 ≤ 60。重复项将自动去重。</div>
-                        </div>
-                    </details>
-                    {% endfor %}
-                    <input type="hidden" name="domain_count" value="{{ all_targets | length }}">
-                    <button type="submit" class="btn btn-primary btn-sm">
-                        <i class="bi bi-save me-1"></i>保存所有关键词池
-                    </button>
-                </form>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- ⑤ 排程发布设定 -->
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-alarm me-2"></i>排程发布设定
-            </div>
-            <div class="card-body">
-                <p class="text-muted" style="font-size:13px;">
-                    控制草稿队列的发布节奏，避免短时间内大量上稿被平台识别。
-                </p>
-                <form method="POST" action="/settings/schedule">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label">最小发布间隔（小时）</label>
-                            <input type="number" class="form-control" name="min_interval_hours"
-                                   value="{{ schedule_settings.min_interval_hours }}"
-                                   min="0.5" max="168" step="0.5">
-                            <div class="form-text">两篇文章发布之间最少间隔小时数（建议 4–24h）</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">随机抖动（±分钟）</label>
-                            <input type="number" class="form-control" name="jitter_minutes"
-                                   value="{{ schedule_settings.jitter_minutes }}"
-                                   min="0" max="120" step="5">
-                            <div class="form-text">在间隔基础上随机增减的分钟数，模拟自然节奏</div>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm mt-3">
-                        <i class="bi bi-floppy me-1"></i>保存设定
-                    </button>
-                </form>
             </div>
         </div>
 
@@ -518,7 +212,6 @@
     }
 
     // ── Inline Article Editor ────────────────────────────────────
-    // _plansData holds a mutable copy of plans_list; kept in sync across edits.
     {% if plans_list %}
     let _plansData = {{ plans_list | tojson }};
     {% else %}
@@ -560,7 +253,6 @@
         }
         const status = document.getElementById('editStatus-' + idx);
         if (status) { status.textContent = '✓ 已保存'; status.style.color = 'var(--success)'; }
-        // Update preview
         const preview = document.getElementById('preview-' + idx);
         if (preview) preview.innerHTML = '<em style="color:#6b7280;font-size:12px;">内容已修改，请展开预览查看</em>';
     }
@@ -631,6 +323,22 @@
                 else alert('保存失败：' + (d.error || '未知错误'));
             });
     }
+
+    // ── deep-link → 自动展开所在折叠面板 ───────────────────────
+    function _openCollapseForHash() {
+        const id = window.location.hash.slice(1);
+        if (!id) return;
+        const target = document.getElementById(id);
+        if (!target) return;
+        const panel = target.closest('.collapse');
+        if (panel && !panel.classList.contains('show')) {
+            bootstrap.Collapse.getOrCreateInstance(panel).show();
+            panel.addEventListener('shown.bs.collapse',
+                () => target.scrollIntoView({block: 'start'}), {once: true});
+        }
+    }
+    document.addEventListener('DOMContentLoaded', _openCollapseForHash);
+    window.addEventListener('hashchange', _openCollapseForHash);
 
     // ── Loading Overlay ──────────────────────────────────────────
     (function() {

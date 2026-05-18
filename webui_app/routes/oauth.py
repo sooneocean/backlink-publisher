@@ -27,7 +27,7 @@ def settings_medium_oauth_start():
 
     if not client_id or not client_secret:
         return redirect('/settings?flash_type=warning&flash_msg='
-                        + '请填写 Client ID 和 Client Secret')
+                        + '请填写 Client ID 和 Client Secret#channel-medium')
 
     try:
         from backlink_publisher.config import MediumOAuthConfig
@@ -38,7 +38,7 @@ def settings_medium_oauth_start():
         session['medium_client_id'] = client_id
         session['medium_client_secret'] = client_secret
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=凭据保存失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=凭据保存失败: {e}#channel-medium')
 
     state = secrets.token_urlsafe(32)
     session['medium_oauth_state'] = state
@@ -72,7 +72,7 @@ def settings_medium_oauth_callback():
             'temporarily_unavailable': 'Medium 服务暂时不可用，请稍后重试',
         }
         error_msg = SAFE_ERROR_MESSAGES.get(err, '授权失败，请重试')
-        return redirect(f'/settings?flash_type=danger&flash_msg={error_msg}')
+        return redirect(f'/settings?flash_type=danger&flash_msg={error_msg}#channel-medium')
 
     state = session.get('medium_oauth_state')
     code = request.args.get('code')
@@ -81,11 +81,11 @@ def settings_medium_oauth_callback():
 
     if not state or not code or not client_id or not client_secret:
         return redirect('/settings?flash_type=warning&flash_msg='
-                        + '授权会话已过期，请重新点击授权按钮')
+                        + '授权会话已过期，请重新点击授权按钮#channel-medium')
 
     if request.args.get('state') != state:
         return redirect('/settings?flash_type=danger&flash_msg='
-                        + 'OAuth state 不匹配（可能是 CSRF 攻击）')
+                        + 'OAuth state 不匹配（可能是 CSRF 攻击）#channel-medium')
 
     redirect_uri = _oauth_callback_uri().replace(
         '/blogger/oauth-callback', '/medium/oauth-callback'
@@ -129,10 +129,10 @@ def settings_medium_oauth_callback():
         session.pop('medium_client_id', None)
         session.pop('medium_client_secret', None)
 
-        return redirect('/settings?flash_type=success&flash_msg=Medium OAuth 授权成功！')
+        return redirect('/settings?flash_type=success&flash_msg=Medium OAuth 授权成功！#channel-medium')
 
     except Exception:
-        return redirect('/settings?flash_type=danger&flash_msg=获取 Token 失败，请检查凭证并重试')
+        return redirect('/settings?flash_type=danger&flash_msg=获取 Token 失败，请检查凭证并重试#channel-medium')
 
 
 @bp.route('/settings/clear-medium-oauth', methods=['POST'])
@@ -143,9 +143,9 @@ def settings_clear_medium_oauth():
         token_file = _config_dir() / "medium-token.json"
         if token_file.exists():
             os.remove(token_file)
-        return redirect('/settings?flash_type=success&flash_msg=Medium OAuth 授权已清除')
+        return redirect('/settings?flash_type=success&flash_msg=Medium OAuth 授权已清除#channel-medium')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=清除失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=清除失败: {e}#channel-medium')
 
 
 # ── Blogger OAuth ───────────────────────────────────────────────────────────
@@ -157,15 +157,15 @@ def settings_save_blogger_oauth():
     client_id = request.form.get('client_id', '').strip()
     client_secret = request.form.get('client_secret', '').strip()
     if not client_id or not client_secret:
-        return redirect('/settings?flash_type=warning&flash_msg=请填写 Client ID 和 Client Secret')
+        return redirect('/settings?flash_type=warning&flash_msg=请填写 Client ID 和 Client Secret#channel-blogger')
     try:
         save_config(load_config(),
                     blogger_client_id=client_id,
                     blogger_client_secret=client_secret,
                     target_three_url=None)
-        return redirect('/settings?flash_type=success&flash_msg=凭据已确认绑定，可随时点击「使用 Google 帐号登入」完成授权')
+        return redirect('/settings?flash_type=success&flash_msg=凭据已确认绑定，可随时点击「使用 Google 帐号登入」完成授权#channel-blogger')
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=保存失败: {e}#channel-blogger')
 
 
 @bp.route('/settings/blogger/oauth-start', methods=['POST'])
@@ -178,7 +178,7 @@ def settings_blogger_oauth_start():
 
     if not client_id or not client_secret:
         return redirect('/settings?flash_type=warning&flash_msg='
-                        + '请填写 Client ID 和 Client Secret 后再登入')
+                        + '请填写 Client ID 和 Client Secret 后再登入#channel-blogger')
 
     try:
         save_config(load_config(),
@@ -186,7 +186,7 @@ def settings_blogger_oauth_start():
                     blogger_client_secret=client_secret,
                     target_three_url=None)
     except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=凭据保存失败: {e}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=凭据保存失败: {e}#channel-blogger')
 
     from google_auth_oauthlib.flow import Flow
     from backlink_publisher.adapters.blogger_api import _SCOPES
@@ -218,13 +218,13 @@ def settings_blogger_oauth_callback():
 
     err = request.args.get('error')
     if err:
-        return redirect(f'/settings?flash_type=danger&flash_msg=Google 拒绝授权: {err}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=Google 拒绝授权: {err}#channel-blogger')
 
     state = session.get('oauth_state')
     client_config = session.get('oauth_client_config')
     if not state or not client_config:
         return redirect('/settings?flash_type=warning&flash_msg='
-                        + '授权会话已过期，请重新点击登入按钮')
+                        + '授权会话已过期，请重新点击登入按钮#channel-blogger')
 
     from google_auth_oauthlib.flow import Flow
     from backlink_publisher.adapters.blogger_api import _SCOPES, json_from_creds
@@ -247,6 +247,6 @@ def settings_blogger_oauth_callback():
         session.pop('oauth_state', None)
         session.pop('oauth_client_config', None)
         return redirect('/settings?flash_type=success&flash_msg='
-                        + 'Google 帐号授权成功！Token 已保存。')
+                        + 'Google 帐号授权成功！Token 已保存。#channel-blogger')
     except Exception as exc:
-        return redirect(f'/settings?flash_type=danger&flash_msg=授权处理失败: {exc}')
+        return redirect(f'/settings?flash_type=danger&flash_msg=授权处理失败: {exc}#channel-blogger')
