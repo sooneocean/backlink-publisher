@@ -76,7 +76,7 @@ def test_load_incomplete_run_returns_none_on_exception():
 # ── banner rendering ───────────────────────────────────────────────────────────
 
 def test_banner_shown_when_incomplete_run(client):
-    with patch.object(_webui, "_load_incomplete_run", return_value=_incomplete_run_fixture()):
+    with patch("webui_app.helpers._load_incomplete_run", return_value=_incomplete_run_fixture()):
         resp = client.get("/")
         assert resp.status_code == 200
         body = resp.data.decode()
@@ -86,7 +86,7 @@ def test_banner_shown_when_incomplete_run(client):
 
 
 def test_banner_absent_when_no_incomplete_run(client):
-    with patch.object(_webui, "_load_incomplete_run", return_value=None):
+    with patch("webui_app.helpers._load_incomplete_run", return_value=None):
         resp = client.get("/")
         assert resp.status_code == 200
         body = resp.data.decode()
@@ -108,12 +108,17 @@ def test_resume_route_exit0_appends_history(client, tmp_path):
     mock_result.stderr = ""
 
     with patch("subprocess.run", return_value=mock_result):
-        with patch.object(_webui, "_append_history", return_value=[]) as mock_hist:
+        with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
             mock_hist.assert_called_once()
-            call_arg = mock_hist.call_args[0][0]
-            assert call_arg["status"] == "published"
+            # After Plan Unit 3, the route calls history_store.update(lambda hist: [...]).
+            # Patching JsonStore.update replaces the descriptor — the instance no
+            # longer binds, so call_args[0][0] is the updater lambda directly.
+            # Apply it to recover the dict that would have been prepended.
+            updater = mock_hist.call_args[0][0]
+            result = updater([])
+            assert result[0]["status"] == "published"
 
 
 def test_resume_route_exit4_shows_partial(client, tmp_path):
@@ -128,7 +133,7 @@ def test_resume_route_exit4_shows_partial(client, tmp_path):
     mock_result.stderr = "item r1 still failed"
 
     with patch("subprocess.run", return_value=mock_result):
-        with patch.object(_webui, "_append_history", return_value=[]):
+        with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]):
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
             body = resp.data.decode()
@@ -142,7 +147,7 @@ def test_resume_route_exit2_no_history(client, tmp_path):
     mock_result.stderr = "checkpoint not found"
 
     with patch("subprocess.run", return_value=mock_result):
-        with patch.object(_webui, "_append_history", return_value=[]) as mock_hist:
+        with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
             mock_hist.assert_not_called()
@@ -170,7 +175,7 @@ def test_resume_route_uses_subprocess_not_run_pipe(client):
     mock_result.stderr = ""
 
     with patch("subprocess.run", return_value=mock_result) as mock_sub:
-        with patch.object(_webui, "run_pipe") as mock_run_pipe:
+        with patch("webui_app.helpers.run_pipe") as mock_run_pipe:
             client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             mock_run_pipe.assert_not_called()
             mock_sub.assert_called_once()

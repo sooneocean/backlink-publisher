@@ -269,7 +269,7 @@ class TestScrapePreview:
     def test_returns_json_metadata(self, client):
         from backlink_publisher.work_scraper import WorkMetadata
         with patch(
-            "webui.fetch_work_metadata",
+            "webui_app.routes.sites.fetch_work_metadata",
             return_value=WorkMetadata(
                 title="预览标题", description="预览描述", h1="预览标题",
             ),
@@ -284,7 +284,7 @@ class TestScrapePreview:
         assert data["h1"] == "预览标题"
 
     def test_returns_status_error_when_scraper_returns_none(self, client):
-        with patch("webui.fetch_work_metadata", return_value=None):
+        with patch("webui_app.routes.sites.fetch_work_metadata", return_value=None):
             resp = client.get("/sites/scrape-preview?url=https://x.com/work/1")
         assert resp.status_code == 200
         data = resp.get_json()
@@ -326,7 +326,7 @@ class TestSitesRun:
     def test_run_invokes_run_pipe_and_redirects_to_result(self, client):
         token = self._save_basic(client)
         with patch(
-            "webui.run_pipe",
+            "webui_app.routes.sites.run_pipe",
             return_value={"stdout": '{"id":"abc"}\n', "stderr": ""},
         ) as mock_pipe:
             resp = client.post(
@@ -653,7 +653,7 @@ class TestHomepageThreeTier:
         is called + save_config writes the ThreeUrlConfig block."""
         # Patch fetch_url_metadata so the preview path doesn't try real HTTP.
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "x", "description": "", "status": "success"},
         )
         resp = client.post(
@@ -715,7 +715,7 @@ class TestHomepageThreeTier:
     def test_post_legacy_target_url_fallback(self, client, monkeypatch):
         """Backward compat: old target_url name still works as main_url."""
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "x", "description": "", "status": "success"},
         )
         resp = client.post(
@@ -741,7 +741,7 @@ class TestHomepageThreeTier:
         )
 
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "x", "description": "", "status": "success"},
         )
         resp = client.post(
@@ -936,7 +936,7 @@ class TestSitesMinimalInput:
         """The plan's R1 scenario: paste main_url, leave everything else
         empty, submit → 302 redirect, all derived fields persisted."""
         monkeypatch.setattr(
-            "webui.fetch_full_tdk",
+            "webui_app.routes.sites.fetch_full_tdk",
             lambda url: {
                 "title": "Test Site",
                 "description": "免费内容。海量资源；专业社区",
@@ -989,7 +989,7 @@ class TestSitesMinimalInput:
         def _raise_tdk(url):
             raise RuntimeError("simulated tdk fetch failure")
 
-        monkeypatch.setattr("webui.fetch_full_tdk", _raise_tdk)
+        monkeypatch.setattr("webui_app.routes.sites.fetch_full_tdk", _raise_tdk)
         # work_scraper also fails — empty work_urls is allowed.
         def _raise_scraper(*a, **k):
             raise RuntimeError("simulated scrape failure")
@@ -1025,7 +1025,7 @@ class TestSitesMinimalInput:
         """Operator supplies branded_pool but leaves partial/exact empty.
         Server derives only the empty fields; supplied values pass through."""
         monkeypatch.setattr(
-            "webui.fetch_full_tdk",
+            "webui_app.routes.sites.fetch_full_tdk",
             lambda url: {"title": "Some Title", "description": "Some desc"},
         )
         monkeypatch.setattr(
@@ -1079,7 +1079,7 @@ class TestSitesMinimalInput:
         URL has saved=... but NOT autofilled=..."""
         # Mocks shouldn't be reached but set them defensively.
         monkeypatch.setattr(
-            "webui.fetch_full_tdk", lambda url: {"title": "x", "description": ""},
+            "webui_app.routes.sites.fetch_full_tdk", lambda url: {"title": "x", "description": ""},
         )
         token = _fetch_csrf(client)
         resp = client.post(
@@ -1126,7 +1126,7 @@ class TestHomepageWritesUrlCategories:
         self, client, monkeypatch, _isolated_config_dir,
     ):
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "T", "description": "", "status": "success"},
         )
         resp = client.post(
@@ -1154,7 +1154,7 @@ class TestHomepageWritesUrlCategories:
         Note: a POST with no category and no work hits the no-persist
         early-return so url_categories isn't touched — that's expected."""
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "T", "description": "", "status": "success"},
         )
         resp = client.post(
@@ -1198,7 +1198,7 @@ class TestHomepageWritesUrlCategories:
         )
 
         monkeypatch.setattr(
-            "webui.fetch_url_metadata",
+            "webui_app.routes.pipeline.fetch_url_metadata",
             lambda url: {"url": url, "title": "T", "description": "", "status": "success"},
         )
         resp = client.post(

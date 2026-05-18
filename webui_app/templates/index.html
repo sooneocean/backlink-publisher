@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Backlink Publisher</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --secondary: #6b7280;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --light: #f9fafb;
+            --dark: #1f2937;
+            --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        body { 
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif; 
+            background: linear-gradient(180deg, #f3f4f6 0%, #e5e7eb 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .navbar {
+            background: var(--gradient);
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+        }
+        
+        .navbar h1 {
+            color: white;
+            margin: 0;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .card {
+            background: white;
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            padding: 16px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        .card-body {
+            padding: 24px;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            color: var(--dark);
+            margin-bottom: 8px;
+        }
+        
+        .form-control, .form-select {
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        
+        .btn {
+            border-radius: 10px;
+            padding: 12px 24px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: var(--gradient);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border: none;
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+        }
+        
+        .url-input-group {
+            background: #fdf6e3;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 2px dashed #f59e0b33;
+        }
+        
+        .url-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .url-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .url-badge.main {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            color: white;
+        }
+
+        .url-badge.cat {
+            background: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
+            color: white;
+        }
+
+        .url-badge.work {
+            background: linear-gradient(135deg, #f59e0b 0%, #ef4444 100%);
+            color: white;
+        }
+
+        .url-badge.extra {
+            background: #e5e7eb;
+            color: var(--secondary);
+        }
+
+        .url-field-help {
+            font-size: 11px;
+            color: #6b7280;
+            margin-top: 4px;
+            margin-left: 56px;
+        }
+        
+        .config-section {
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            border: 1px solid #e5e7eb;
+        }
+        
+        .config-section h5 {
+            color: var(--dark);
+            margin-bottom: 16px;
+            font-weight: 600;
+        }
+        
+        .info-box {
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 16px 0;
+            border-left: 4px solid var(--info);
+        }
+        
+        .info-box h6 {
+            color: var(--info);
+            margin-bottom: 8px;
+        }
+        
+        .result-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+            border-left: 4px solid var(--success);
+        }
+        
+        .result-card h5 {
+            color: var(--dark);
+            margin-bottom: 12px;
+        }
+        
+        .link-count-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .link-count-badge.valid {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+        }
+        
+        .link-count-badge.invalid {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+        }
+        
+        .link-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            margin-top: 16px;
+            font-size: 13px;
+        }
+        
+        .link-table th {
+            background: #f9fafb;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--dark);
+            border-bottom: 2px solid #e5e7eb;
+        }
+        
+        .link-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        .link-table tr:hover {
+            background: #f9fafb;
+        }
+        
+        .type-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        
+        .type-badge.required {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .type-badge.optional {
+            background: #f3f4f6;
+            color: var(--secondary);
+        }
+        
+        .content-preview {
+            background: #1e1e1e;
+            color: #e5e7eb;
+            padding: 20px;
+            border-radius: 12px;
+            font-family: 'Consolas', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .content-preview a {
+            color: #60a5fa;
+            text-decoration: underline;
+        }
+        
+        .content-preview h1, .content-preview h2, .content-preview h3 {
+            color: #fbbf24;
+            margin: 16px 0 8px;
+        }
+        
+        .content-preview hr {
+            border-color: #4b5563;
+            margin: 16px 0;
+        }
+        
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 12px 0;
+        }
+        
+        .tag-item {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            color: #4338ca;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .error-box {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-radius: 12px;
+            padding: 16px;
+            border-left: 4px solid var(--danger);
+            color: #991b1b;
+        }
+        
+        .success-box {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border-radius: 12px;
+            padding: 16px;
+            border-left: 4px solid var(--success);
+            color: #065f46;
+        }
+        
+        .meta-info {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: var(--secondary);
+        }
+        
+        .meta-info span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        details > summary {
+            cursor: pointer;
+            padding: 12px 16px;
+            background: #f9fafb;
+            border-radius: 8px;
+            font-weight: 500;
+            color: var(--primary);
+            transition: all 0.2s;
+        }
+        
+        details > summary:hover {
+            background: #f3f4f6;
+        }
+        
+        details[open] > summary {
+            margin-bottom: 16px;
+        }
+        
+        .btn-group-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .nav-tabs-custom {
+            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 20px;
+        }
+        
+        .nav-tabs-custom .nav-link {
+            border: none;
+            color: var(--secondary);
+            padding: 12px 20px;
+            font-weight: 500;
+        }
+        
+        .nav-tabs-custom .nav-link.active {
+            color: var(--primary);
+            border-bottom: 3px solid var(--primary);
+            background: transparent;
+        }
+        
+        .nav-tabs-custom .nav-link:hover {
+            color: var(--primary);
+        }
+        
+        .history-item {
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+            border-left: 4px solid var(--primary);
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .history-item:hover {
+            transform: translateX(4px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .history-item.success {
+            border-left-color: var(--success);
+        }
+        
+        .history-item.failed {
+            border-left-color: var(--danger);
+        }
+        
+        .editor-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 16px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        
+        .editor-toolbar {
+            display: flex;
+            gap: 8px;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+        
+        .editor-btn {
+            padding: 6px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .editor-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .rich-editor {
+            min-height: 300px;
+            padding: 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            line-height: 1.8;
+        }
+        
+        .rich-editor:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        .publish-status {
+            padding: 16px;
+            border-radius: 12px;
+            margin: 12px 0;
+        }
+        
+        .publish-status.success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border-left: 4px solid var(--success);
+        }
+        
+        .publish-status.error {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border-left: 4px solid var(--danger);
+        }
+        
+        .publish-status.pending {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-left: 4px solid var(--warning);
+        }
+        
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-badge.success {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        
+        .status-badge.error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        
+        .status-badge.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .card-body { padding: 16px; }
+            .btn-group-actions { flex-direction: column; }
+            .btn-group-actions .btn { width: 100%; }
+        }
+
+        /* ── Step Progress Bar ─────────────────────────────────────── */
+        .step-bar {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 16px 24px;
+            background: white;
+            border-radius: 14px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            overflow-x: auto;
+        }
+
+        .step-item {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .step-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .step-circle.done {
+            background: var(--success);
+            color: white;
+        }
+
+        .step-circle.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(79,70,229,0.2);
+        }
+
+        .step-circle.pending {
+            background: #e5e7eb;
+            color: #9ca3af;
+        }
+
+        .step-label {
+            margin-left: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .step-label.done   { color: var(--success); }
+        .step-label.active { color: var(--primary); }
+        .step-label.pending { color: #9ca3af; }
+
+        .step-connector {
+            flex: 1;
+            height: 2px;
+            margin: 0 12px;
+            min-width: 24px;
+            border-radius: 2px;
+        }
+
+        .step-connector.done   { background: var(--success); }
+        .step-connector.active { background: linear-gradient(90deg, var(--success) 0%, #e5e7eb 100%); }
+        .step-connector.pending { background: #e5e7eb; }
+    </style>
+</head>
+<body>
+    <nav class="navbar" style="display:flex;justify-content:space-between;align-items:center;">
+        <h1><i class="bi bi-link-45deg me-2"></i>Backlink Publisher</h1>
+        <div style="display:flex;gap:8px;align-items:center;">
+            {% if blogger_token_status %}
+            {% set ts = blogger_token_status %}
+            {% if ts.state == 'ok' %}
+            <span title="{{ ts.label }}" style="display:flex;align-items:center;gap:5px;
+                background:rgba(16,185,129,0.2);border:1px solid rgba(16,185,129,0.5);
+                color:white;padding:4px 10px;border-radius:20px;font-size:12px;">
+                <i class="bi bi-shield-check"></i> Blogger 已连接
+            </span>
+            {% elif ts.state == 'expiring' %}
+            <a href="/settings" title="{{ ts.label }}" style="display:flex;align-items:center;gap:5px;
+                background:rgba(245,158,11,0.25);border:1px solid rgba(245,158,11,0.6);
+                color:white;padding:4px 10px;border-radius:20px;font-size:12px;text-decoration:none;">
+                <i class="bi bi-exclamation-triangle"></i> {{ ts.label }}
+            </a>
+            {% elif ts.state == 'expired' %}
+            <a href="/settings/blogger/oauth-start" method="post" title="{{ ts.label }}" style="display:flex;align-items:center;gap:5px;
+                background:rgba(239,68,68,0.25);border:1px solid rgba(239,68,68,0.6);
+                color:white;padding:4px 10px;border-radius:20px;font-size:12px;text-decoration:none;">
+                <i class="bi bi-exclamation-circle"></i> Token 过期 · 点击重新授权
+            </a>
+            {% else %}
+            <a href="/settings" title="{{ ts.label }}" style="display:flex;align-items:center;gap:5px;
+                background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.5);
+                color:white;padding:4px 10px;border-radius:20px;font-size:12px;text-decoration:none;">
+                <i class="bi bi-shield-x"></i> Blogger 未授权
+            </a>
+            {% endif %}
+            {% endif %}
+            <a href="/settings" class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.5);">
+                <i class="bi bi-gear me-1"></i>设置
+            </a>
+            {% if config %}
+            <form method="POST" action="/ce:clear" style="margin:0;">
+                <button type="submit" class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.5);">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>重置
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </nav>
+    
+    <div class="container-fluid" style="max-width: 1100px;">
+
+        {% if incomplete_run %}
+        <div class="alert alert-warning alert-dismissible d-flex align-items-center mb-3" role="alert">
+          <i class="bi bi-exclamation-triangle-fill me-2 flex-shrink-0"></i>
+          <div class="flex-grow-1">
+            <strong>未完成的发布任务</strong>
+            — {{ incomplete_run.started_at[:19] if incomplete_run.started_at else '' }}，共 {{ incomplete_run.pending_count }} 篇待处理。
+            <form action="/checkpoint/resume" method="POST" class="d-inline ms-2">
+              <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
+              <button type="submit" class="btn btn-warning btn-sm">
+                <i class="bi bi-play-fill me-1"></i>恢复发布
+              </button>
+            </form>
+            <form action="/checkpoint/dismiss" method="POST" class="d-inline ms-1">
+              <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">忽略</button>
+            </form>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
+        <!-- Tab Navigation -->
+        <ul class="nav nav-tabs-custom" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if not history_active %}active{% endif %}" id="new-tab" data-bs-toggle="tab" data-bs-target="#newPanel" type="button">
+                    <i class="bi bi-plus-circle me-2"></i>新建任务
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if history_active %}active{% endif %}" id="history-tab" data-bs-toggle="tab" data-bs-target="#historyPanel" type="button">
+                    <i class="bi bi-calendar-check me-2"></i>草稿 &amp; 历史
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link {% if batch_tab %}active{% endif %}" id="batch-tab" data-bs-toggle="tab" data-bs-target="#batchPanel" type="button">
+                    <i class="bi bi-stack me-2"></i>批量发布
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="publish-tab" data-bs-toggle="tab" data-bs-target="#publishPanel" type="button">
+                    <i class="bi bi-broadcast me-2"></i>发布中心
+                </button>
+            </li>
+        </ul>
+        
+        <div class="tab-content" id="mainTabsContent">
+            <div class="tab-pane fade {% if not history_active %}show active{% endif %}" id="newPanel" role="tabpanel">
+
+        {# Determine current step based on pipeline state #}
+        {% if published %}
+          {% set cur_step = 4 %}
+        {% elif validated %}
+          {% set cur_step = 4 %}
+        {% elif plans %}
+          {% set cur_step = 3 %}
+        {% elif config and config.target_url %}
+          {% set cur_step = 2 %}
+        {% else %}
+          {% set cur_step = 1 %}
+        {% endif %}
+
+        <div class="step-bar">
+            {% for step_num, step_name in [(1,'输入网址'),(2,'生成文章'),(3,'验证内容'),(4,'发布')] %}
+              {% if step_num < cur_step %}
+                {% set cls = 'done' %}
+              {% elif step_num == cur_step %}
+                {% set cls = 'active' %}
+              {% else %}
+                {% set cls = 'pending' %}
+              {% endif %}
+              <div class="step-item">
+                  <div class="step-circle {{ cls }}">
+                      {% if cls == 'done' %}<i class="bi bi-check-lg"></i>{% else %}{{ step_num }}{% endif %}
+                  </div>
+                  <span class="step-label {{ cls }}">{{ step_name }}</span>
+              </div>
+              {% if not loop.last %}
+                {% if step_num < cur_step %}
+                  <div class="step-connector done"></div>
+                {% elif step_num == cur_step %}
+                  <div class="step-connector active"></div>
+                {% else %}
+                  <div class="step-connector pending"></div>
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-globe2 me-2"></i>输入目标网站连结
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/ce:plan">
+                    <div class="url-input-group">
+                        <div class="url-item">
+                            <span class="url-badge main">主</span>
+                            <input type="url" class="form-control" name="main_url" placeholder="https://example.com/" value="{{ target_url }}" required>
+                        </div>
+                        <div class="url-field-help">主网域 — 要做反向链接的根目标 (必填)</div>
+
+                        <div class="url-item">
+                            <span class="url-badge cat">类</span>
+                            <input type="url" class="form-control" name="category_url" placeholder="https://example.com/category" value="{{ category_url|default('') }}">
+                        </div>
+                        <div class="url-field-help">分类页 — 站内分类/列表页 (可选；填了会自动写入 config)</div>
+
+                        <div class="url-item">
+                            <span class="url-badge work">漫</span>
+                            <input type="url" class="form-control" name="work_url" placeholder="https://example.com/article/1" value="{{ work_url|default('') }}">
+                        </div>
+                        <div class="url-field-help">漫画页 — 站内具体作品/内容页 (可选；填了会触发自动升级到 ThreeUrlConfig)</div>
+
+                        {% for extra_url in extra_urls %}
+                        <div class="url-item">
+                            <span class="url-badge extra">附</span>
+                            <input type="url" class="form-control" name="url_{{ loop.index }}" placeholder="附加连结 (分页/分类/相关文章)" value="{{ extra_url }}">
+                        </div>
+                        {% endfor %}
+                        <div class="url-item">
+                            <span class="url-badge extra">+</span>
+                            <input type="url" class="form-control" name="url_new" placeholder="+ 添加更多附加连结..." style="border: 2px dashed #ccc;">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search me-2"></i>分析连结
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        {% if config %}
+        <div class="card">
+            <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span><i class="bi bi-gear me-2"></i>配置参数</span>
+                {% if profiles %}
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <select id="profilePicker" class="form-select form-select-sm" style="width:180px;"
+                            onchange="loadProfile(this.value)">
+                        <option value="">— 载入配置 —</option>
+                        {% for p in profiles %}
+                        <option value="{{ loop.index0 }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/ce:generate" id="configForm">
+                    <input type="hidden" name="urls_json" value="{{ urls_json }}">
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">目标平台</label>
+                            <select class="form-select" name="platform">
+                                <option value="medium" {% if config.platform == 'medium' %}selected{% endif %}>Medium</option>
+                                <option value="blogger" {% if config.platform == 'blogger' %}selected{% endif %}>Blogger</option>
+                                <option value="wordpress" {% if config.platform == 'wordpress' %}selected{% endif %}>WordPress</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">连结模式</label>
+                            <select class="form-select" name="url_mode">
+                                <option value="A" {% if config.url_mode == 'A' %}selected{% endif %}>A - 纯文字</option>
+                                <option value="B" {% if config.url_mode == 'B' %}selected{% endif %}>B - 锚文本</option>
+                                <option value="C" {% if config.url_mode == 'C' %}selected{% endif %}>C - 品牌+关键词</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">发布语言</label>
+                            <select class="form-select" name="target_language">
+                                <option value="zh-CN" {% if config.target_language == 'zh-CN' %}selected{% endif %}>简体中文</option>
+                                <option value="en" {% if config.target_language == 'en' %}selected{% endif %}>English</option>
+                                <option value="ru" {% if config.target_language == 'ru' %}selected{% endif %}>Русский (俄文)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">发布模式</label>
+                            <select class="form-select" name="publish_mode">
+                                <option value="draft" {% if config.publish_mode == 'draft' %}selected{% endif %}>草稿 (Draft)</option>
+                                <option value="publish" {% if config.publish_mode == 'publish' %}selected{% endif %}>直接发布 (Publish)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">文章标题 (留空自动生成)</label>
+                            <input type="text" class="form-control" name="custom_title" value="{{ config.custom_title }}" placeholder="自定义标题">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">自定义标签 (逗号分隔)</label>
+                            <input type="text" class="form-control" name="custom_tags" value="{{ config.custom_tags }}" placeholder="tech,news,guide">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label"><i class="bi bi-download me-1"></i>抓取 TDK</label>
+                        <select class="form-select" name="fetch_tdk" style="max-width: 300px;">
+                            <option value="no" {% if config.fetch_tdk == 'no' %}selected{% endif %}>不抓取</option>
+                            <option value="yes" {% if config.fetch_tdk != 'no' %}selected{% endif %}>抓取目标站 TDK (是)</option>
+                        </select>
+                        <small class="text-muted">自动抓取目标网站的 Title/Description/Keywords 作为文章参考</small>
+                    </div>
+                    
+                    {% if meta_info %}
+                    <div class="info-box">
+                        <h6><i class="bi bi-info-circle me-1"></i>抓取的页面信息</h6>
+                        {% for m in meta_info %}
+                        <div style="background: white;padding: 12px;margin: 8px 0;border-radius: 8px;">
+                            <strong style="color: var(--primary);">{{ m.url|truncate(60) }}</strong><br>
+                            <small style="color: var(--secondary);">{{ m.title[:80] }}</small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    
+                    <div class="mt-3 d-flex gap-2 align-items-center flex-wrap">
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-rocket me-2"></i>生成发布计划
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                onclick="saveProfilePrompt()" title="将当前设置保存为命名配置">
+                            <i class="bi bi-bookmark-plus me-1"></i>保存为配置
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if plans %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-check-circle me-2"></i>生成完成 - 预览
+            </div>
+            <div class="card-body">
+                {% for plan in plans_list %}
+                <div class="result-card">
+                    <h5><i class="bi bi-file-text me-2"></i>{{ plan.title }}</h5>
+                    
+                    <div class="meta-info">
+                        <span><i class="bi bi-translate me-1"></i>{{ plan.language }}</span>
+                        <span><i class="bi bi-globe me-1"></i>{{ plan.platform }}</span>
+                        <span><i class="bi bi-text-center me-1"></i>{{ plan.content_markdown|length }} 字</span>
+                        <span class="link-count-badge {% if plan.links|length >= 6 and plan.links|length <= 8 %}valid{% else %}invalid{% endif %}">
+                            <i class="bi bi-link-45deg"></i> {{ plan.links|length }} 个外链
+                            {% if plan.links|length < 6 or plan.links|length > 8 %}
+                            <span style="font-size:11px;">⚠️ 需 6-8</span>
+                            {% endif %}
+                        </span>
+                    </div>
+                    
+                    <div class="tag-list">
+                        {% for tag in plan.tags %}<span class="tag-item">{{ tag }}</span>{% endfor %}
+                    </div>
+                    
+                    <details>
+                        <summary><i class="bi bi-eye me-1"></i>HTML 内容预览</summary>
+                        <div class="content-preview mt-3" id="preview-{{ loop.index0 }}">
+{% set content = plan.content_markdown %}
+{% set content = content.replace('## References', '<hr><h3>References</h3>') %}
+{% set content = content.replace('## Additional Resources', '<hr><h3>Additional Resources</h3>') %}
+{% for link in plan.links %}
+{% set content = content.replace('[' ~ link.anchor ~ '](' ~ link.url ~ ')', '<a href="' ~ link.url ~ '" target="_blank">' ~ link.anchor ~ '</a>') %}
+{% endfor %}
+{{ content|safe }}
+                        </div>
+                    </details>
+
+                    <!-- Inline Editor -->
+                    <div style="margin-top:10px;">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                onclick="toggleEditor({{ loop.index0 }})"
+                                id="editBtn-{{ loop.index0 }}">
+                            <i class="bi bi-pencil me-1"></i>编辑内容
+                        </button>
+                        <div id="editor-{{ loop.index0 }}" style="display:none;margin-top:10px;">
+                            <textarea id="editorArea-{{ loop.index0 }}"
+                                      rows="12" class="form-control"
+                                      style="font-family:monospace;font-size:12px;line-height:1.6;"
+                                      onkeyup="markDirty({{ loop.index0 }})">{{ plan.content_markdown }}</textarea>
+                            <div style="margin-top:8px;display:flex;gap:8px;">
+                                <button type="button" class="btn btn-sm btn-primary"
+                                        onclick="saveEdit({{ loop.index0 }})">
+                                    <i class="bi bi-check2 me-1"></i>确认修改
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        onclick="cancelEdit({{ loop.index0 }}, {{ plan.content_markdown | tojson }})">
+                                    <i class="bi bi-x me-1"></i>取消
+                                </button>
+                                <small id="editStatus-{{ loop.index0 }}" class="text-muted" style="line-height:30px;"></small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <details>
+                        <summary><i class="bi bi-link-45deg me-1"></i>外链列表 ({{ plan.links|length }} 个)</summary>
+                        <table class="link-table">
+                            <thead>
+                                <tr>
+                                    <th>类型</th>
+                                    <th>锚文本</th>
+                                    <th>网址</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for link in plan.links %}
+                                <tr>
+                                    <td><span class="type-badge {% if link.required %}required{% else %}optional{% endif %}">{% if link.required %}必要{% else %}辅助{% endif %}</span></td>
+                                    <td>{{ link.anchor }}</td>
+                                    <td><a href="{{ link.url }}" target="_blank" style="color: var(--primary);">{{ link.url|truncate(50) }}</a></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </details>
+                </div>
+                {% endfor %}
+                
+                <div class="btn-group-actions">
+                    <form method="POST" action="/ce:validate" style="display:inline;">
+                        <input type="hidden" name="plans" value="{{ plans }}">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="bi bi-check2-square me-2"></i>验证内容
+                        </button>
+                    </form>
+                    <form method="POST" action="/ce:publish" style="display:inline;">
+                        <input type="hidden" name="plans" value="{{ plans }}">
+                        <input type="hidden" name="platform" value="{{ config.platform }}">
+                        <div class="input-group" style="display:inline-flex;gap:0;">
+                            <select name="publish_mode" class="form-select" style="width:110px;border-radius:10px 0 0 10px;">
+                                <option value="draft">存草稿</option>
+                                <option value="publish">正式发布</option>
+                            </select>
+                            <button type="submit" class="btn btn-success" style="border-radius:0 10px 10px 0;">
+                                <i class="bi bi-upload me-2"></i>发布
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if validated %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-check-circle-fill me-2"></i>验证通过
+            </div>
+            <div class="card-body">
+                <div class="success-box mb-3">
+                    <i class="bi bi-check-circle me-2"></i>内容验证成功！
+                </div>
+                <form method="POST" action="/ce:publish">
+                    <input type="hidden" name="plans" value="{{ validated }}">
+                    <input type="hidden" name="platform" value="{{ config.platform }}">
+                    <div class="input-group" style="max-width:320px;">
+                        <select name="publish_mode" class="form-select" style="border-radius:10px 0 0 10px;">
+                            <option value="draft">存草稿</option>
+                            <option value="publish">正式发布</option>
+                        </select>
+                        <button type="submit" class="btn btn-success" style="border-radius:0 10px 10px 0;">
+                            <i class="bi bi-upload me-2"></i>发布到 {{ config.platform }}
+                        </button>
+                    </div>
+                    <div style="font-size:12px;color:#6b7280;margin-top:6px;">
+                        「存草稿」= 保存到平台草稿箱，「正式发布」= 立即公开上线
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if published %}
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-trophy me-2"></i>发布结果
+            </div>
+            <div class="card-body">
+                <div class="success-box mb-3">
+                    <i class="bi bi-check-circle me-2"></i>
+                    发布成功！
+                </div>
+                {% if publish_results %}
+                {% for r in publish_results %}
+                {% set article_url = r.published_url or r.draft_url %}
+                <div class="result-card" style="border-left-color:{% if r.status == 'published' %}var(--success){% else %}var(--warning){% endif %};">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <div style="font-weight:600;color:var(--dark);margin-bottom:6px;">{{ r.title }}</div>
+                            <span class="status-badge {% if r.status == 'published' %}success{% else %}pending{% endif %}">
+                                {% if r.status == 'published' %}<i class="bi bi-check-circle me-1"></i>已发布
+                                {% elif r.status == 'drafted' %}<i class="bi bi-clock me-1"></i>草稿
+                                {% else %}{{ r.status }}{% endif %}
+                            </span>
+                        </div>
+                        {% if article_url %}
+                        <a href="{{ article_url }}" target="_blank" rel="noopener"
+                           class="btn btn-success btn-sm" style="align-self:center;">
+                            <i class="bi bi-box-arrow-up-right me-1"></i>查看文章
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% if article_url %}
+                    <div style="margin-top:10px;padding:8px 12px;background:#f9fafb;border-radius:6px;
+                                font-size:12px;word-break:break-all;border:1px solid #e5e7eb;">
+                        <i class="bi bi-link-45deg me-1" style="color:var(--primary);"></i>
+                        <a href="{{ article_url }}" target="_blank" rel="noopener"
+                           style="color:var(--primary);">{{ article_url }}</a>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% endif %}
+                <details style="margin-top:12px;">
+                    <summary style="font-size:12px;color:var(--secondary);cursor:pointer;">原始输出</summary>
+                    <pre class="content-preview mt-2" style="font-size:11px;">{{ published }}</pre>
+                </details>
+            </div>
+        </div>
+        {% endif %}
+        
+        {% if error %}
+        <div class="card">
+            <div class="card-header" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+                <i class="bi bi-exclamation-triangle me-2"></i>错误
+            </div>
+            <div class="card-body">
+                <div class="error-box">{{ error }}</div>
+            </div>
+        </div>
+        {% endif %}
+        
+            </div><!-- End newPanel tab -->
+            
+            <!-- History Panel -->
+            <div class="tab-pane fade {% if history_active %}show active{% endif %}" id="historyPanel" role="tabpanel">
+                <!-- ── 草稿队列 ── -->
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-calendar-check me-2"></i>草稿队列</span>
+                        {% set sched_settings = draft_queue | selectattr('status','equalto','scheduled') | list %}
+                        <small class="text-muted">{{ draft_queue | length }} 项 · {{ sched_settings | length }} 已排程</small>
+                    </div>
+                    <div class="card-body">
+                        {% if draft_queue %}
+                        {% for item in draft_queue %}
+                        {% set s = item.status %}
+                        <div class="history-item {% if s == 'published' %}success{% elif s == 'failed' %}failed{% elif s == 'scheduled' %}pending{% else %}{% endif %}" style="{% if s == 'scheduled' %}border-left-color:var(--info);{% endif %}">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <div style="flex:1;min-width:0;">
+                                    <strong style="word-break:break-all;font-size:14px;">{{ item.target_url }}</strong>
+                                    <br><small style="color:var(--secondary);">
+                                        加入 {{ item.created_at }}
+                                        {% if item.platform %} · <i class="bi bi-broadcast"></i> {{ item.platform }}{% endif %}
+                                        · {{ item.publish_mode or 'draft' }}
+                                    </small>
+                                    {% if item.scheduled_at and s == 'scheduled' %}
+                                    <br><small style="color:var(--info);font-weight:600;">
+                                        <i class="bi bi-alarm me-1"></i>排程：{{ item.scheduled_at[:16] | replace('T',' ') }}
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                <span class="status-badge {% if s == 'published' %}success{% elif s == 'failed' %}error{% elif s == 'scheduled' %}pending{% else %}{% endif %}" style="flex-shrink:0;{% if s == 'scheduled' %}background:#dbeafe;color:var(--info);{% endif %}">
+                                    {% if s == 'published' %}<i class="bi bi-check-circle"></i> 已发布
+                                    {% elif s == 'failed' %}<i class="bi bi-x-circle"></i> 失败
+                                    {% elif s == 'scheduled' %}<i class="bi bi-alarm"></i> 已排程
+                                    {% else %}<i class="bi bi-hourglass-split"></i> 待排程{% endif %}
+                                </span>
+                            </div>
+
+                            {% if item.error %}
+                            <div style="margin-top:6px;font-size:12px;color:var(--danger);background:#fee2e2;padding:6px 10px;border-radius:6px;">
+                                <i class="bi bi-exclamation-triangle me-1"></i>{{ item.error[:200] }}
+                            </div>
+                            {% endif %}
+
+                            {% if item.article_urls %}
+                            <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+                                {% for url in item.article_urls %}
+                                <a href="{{ url }}" target="_blank" rel="noopener"
+                                   style="font-size:12px;color:var(--primary);word-break:break-all;">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>{{ url }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <!-- 操作栏 -->
+                            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                                {% if s == 'pending' %}
+                                <!-- 排程表单 -->
+                                <form method="POST" action="/ce:draft/schedule" style="margin:0;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <div>
+                                        <label style="font-size:11px;color:var(--secondary);display:block;margin-bottom:2px;">排程时间</label>
+                                        <input type="datetime-local" name="scheduled_at"
+                                               class="form-control form-control-sm"
+                                               style="width:180px;"
+                                               min="{{ now_iso }}"
+                                               value="{{ suggested_next }}">
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-alarm me-1"></i>排程发布
+                                    </button>
+                                </form>
+                                <form method="POST" action="/ce:draft/publish-now" style="margin:0;">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-success"
+                                            onclick="return confirm('立即发布此草稿？')">
+                                        <i class="bi bi-send me-1"></i>立即发布
+                                    </button>
+                                </form>
+                                {% elif s == 'scheduled' %}
+                                <form method="POST" action="/ce:draft/cancel" style="margin:0;">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning">
+                                        <i class="bi bi-x-circle me-1"></i>取消排程
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <!-- 删除 -->
+                                <form method="POST" action="/ce:draft/delete" style="margin:0;"
+                                      onsubmit="return confirm('确定删除此草稿？')">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <div style="text-align:center;padding:30px;color:var(--secondary);">
+                            <i class="bi bi-calendar-plus" style="font-size:36px;"></i>
+                            <p style="margin-top:10px;">草稿栏暂无任务<br><small>在发布中心点击「加入草稿栏」即可排程</small></p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- ── 发布历史 ── -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-clock-history me-2"></i>发布历史
+                    </div>
+                    <div class="card-body">
+                        {% if history %}
+                        {% for item in history %}
+                        {% set s = item.status %}
+                        <div class="history-item {% if s in ('success','published') %}success{% elif s == 'failed' %}failed{% else %}pending{% endif %}">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                <div style="flex:1;min-width:0;">
+                                    <strong style="word-break:break-all;font-size:14px;">{{ item.target_url }}</strong>
+                                    <br><small style="color:var(--secondary);">{{ item.created_at }}
+                                    {% if item.platform %} · <i class="bi bi-broadcast"></i> {{ item.platform }}{% endif %}
+                                    {% if item.language %} · {{ item.language }}{% endif %}
+                                    </small>
+                                </div>
+                                <span class="status-badge {% if s in ('success','published') %}success{% elif s == 'drafted' %}pending{% elif s == 'failed' %}error{% else %}pending{% endif %}" style="flex-shrink:0;">
+                                    {% if s in ('success','published') %}<i class="bi bi-check-circle"></i> 已发布
+                                    {% elif s == 'drafted' %}<i class="bi bi-clock"></i> 草稿
+                                    {% elif s == 'failed' %}<i class="bi bi-x-circle"></i> 失败
+                                    {% else %}<i class="bi bi-clock"></i> {{ s }}{% endif %}
+                                </span>
+                            </div>
+                            {% if item.article_urls %}
+                            <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
+                                {% for url in item.article_urls %}
+                                <a href="{{ url }}" target="_blank" rel="noopener"
+                                   style="font-size:12px;color:var(--primary);word-break:break-all;">
+                                    <i class="bi bi-box-arrow-up-right me-1"></i>{{ url }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% if item.error %}
+                            <div style="margin-top:6px;font-size:12px;color:var(--danger);background:#fee2e2;padding:6px 10px;border-radius:6px;">
+                                <i class="bi bi-exclamation-triangle me-1"></i>{{ item.error[:200] }}
+                            </div>
+                            {% endif %}
+                            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <form method="POST" action="/ce:history/reuse" style="margin:0;">
+                                    <input type="hidden" name="target_url" value="{{ item.target_url }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-arrow-repeat me-1"></i>重新外链
+                                    </button>
+                                </form>
+                                <form method="POST" action="/ce:history/update-status" style="margin:0;display:flex;gap:4px;">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <select name="status" class="form-select form-select-sm" style="width:100px;">
+                                        <option value="drafted" {% if s == 'drafted' %}selected{% endif %}>草稿</option>
+                                        <option value="published" {% if s in ('published','success') %}selected{% endif %}>已发布</option>
+                                        <option value="failed" {% if s == 'failed' %}selected{% endif %}>失败</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
+                                </form>
+                                <form method="POST" action="/ce:history/delete" style="margin:0;"
+                                      onsubmit="return confirm('确定删除此条记录？')">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% else %}
+                        <div style="text-align:center;padding:40px;color:var(--secondary);">
+                            <i class="bi bi-inbox" style="font-size:48px;"></i>
+                            <p>暂无历史记录</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Batch Panel -->
+            <div class="tab-pane fade {% if batch_tab %}show active{% endif %}" id="batchPanel" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-stack me-2"></i>批量发布 — 多 URL 一键发布
+                    </div>
+                    <div class="card-body">
+                        {% if profiles %}
+                        <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+                            <i class="bi bi-bookmark me-1" style="color:var(--secondary);"></i>
+                            <span style="font-size:13px;color:var(--secondary);">快速载入：</span>
+                            <select class="form-select form-select-sm" style="width:200px;"
+                                    onchange="loadBatchProfile(this.value)">
+                                <option value="">— 选择配置 —</option>
+                                {% for p in profiles %}
+                                <option value="{{ loop.index0 }}">{{ p.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        <form method="POST" action="/ce:batch" id="batchForm">
+                            <div class="mb-3">
+                                <label class="form-label">目标 URL 列表 <small class="text-muted">（每行一个）</small></label>
+                                <textarea name="batch_urls" class="form-control" rows="6"
+                                    placeholder="https://51acgs.com/category/acg&#10;https://51acgs.com/category/manga&#10;https://51acgs.com/page/about"
+                                    style="font-family:monospace;font-size:13px;">{{ batch_urls or '' }}</textarea>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">目标平台</label>
+                                    <select name="platform" class="form-select">
+                                        <option value="blogger">Blogger</option>
+                                        <option value="medium">Medium</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">发布语言</label>
+                                    <select name="language" class="form-select">
+                                        <option value="zh-CN">简体中文</option>
+                                        <option value="en">English</option>
+                                        <option value="ru">Русский</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">连结模式</label>
+                                    <select name="url_mode" class="form-select">
+                                        <option value="A">A — 纯文字</option>
+                                        <option value="B">B — 分类导航</option>
+                                        <option value="C">C — 深度解析</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">发布模式</label>
+                                    <select name="publish_mode" class="form-select">
+                                        <option value="draft">存草稿</option>
+                                        <option value="publish">正式发布</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-play-circle me-2"></i>开始批量发布
+                            </button>
+                            <small class="text-muted ms-3">每篇文章约需 30–60 秒，请耐心等候</small>
+                        </form>
+
+                        {% if batch_results %}
+                        <hr class="my-4">
+                        <h6><i class="bi bi-list-check me-2"></i>发布结果</h6>
+                        <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+                            {% for r in batch_results %}
+                            <div style="padding:12px 16px;border-radius:10px;
+                                background:{% if r.status == 'success' %}#f0fdf4{% else %}#fff1f2{% endif %};
+                                border-left:4px solid {% if r.status == 'success' %}var(--success){% else %}var(--danger){% endif %};">
+                                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+                                    <div style="flex:1;min-width:0;">
+                                        <div style="font-size:13px;font-weight:600;word-break:break-all;">{{ r.url }}</div>
+                                        {% if r.title %}
+                                        <div style="font-size:12px;color:#4b5563;margin-top:3px;">📄 {{ r.title }}</div>
+                                        {% endif %}
+                                        {% if r.error %}
+                                        <div style="font-size:12px;color:var(--danger);margin-top:4px;">{{ r.error[:150] }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+                                        <span class="status-badge {% if r.status == 'success' %}success{% else %}error{% endif %}">
+                                            {% if r.status == 'success' %}✓ 成功{% else %}✗ 失败{% endif %}
+                                        </span>
+                                        {% if r.article_url %}
+                                        <a href="{{ r.article_url }}" target="_blank" rel="noopener"
+                                           class="btn btn-success btn-sm">
+                                            <i class="bi bi-box-arrow-up-right me-1"></i>查看文章
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if r.article_url %}
+                                <div style="margin-top:8px;font-size:11px;word-break:break-all;color:#6b7280;">
+                                    <i class="bi bi-link-45deg me-1"></i>{{ r.article_url }}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div style="margin-top:12px;font-size:13px;color:#6b7280;">
+                            共 {{ batch_results|length }} 篇 ·
+                            成功 {{ batch_results|selectattr('status','eq','success')|list|length }} 篇 ·
+                            失败 {{ batch_results|selectattr('status','eq','failed')|list|length }} 篇
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Publish Panel -->
+            <div class="tab-pane fade" id="publishPanel" role="tabpanel">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-broadcast me-2"></i>发布中心
+                    </div>
+                    <div class="card-body">
+                        {% if ready_to_publish %}
+                        <div class="publish-status success">
+                            <h5><i class="bi bi-check-circle-fill me-2"></i>内容已验证，可以发布</h5>
+                            <p style="margin:8px 0 0;font-size:13px;">目标平台：<strong>{{ ready_to_publish.platform }}</strong></p>
+                        </div>
+                        <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+                            <form method="POST" action="/ce:publish">
+                                <input type="hidden" name="plans" value="{{ ready_to_publish.data }}">
+                                <input type="hidden" name="platform" value="{{ ready_to_publish.platform }}">
+                                <div class="input-group" style="max-width:280px;">
+                                    <select name="publish_mode" class="form-select" style="border-radius:10px 0 0 10px;">
+                                        <option value="draft">存草稿</option>
+                                        <option value="publish">正式发布</option>
+                                    </select>
+                                    <button type="submit" class="btn btn-success" style="border-radius:0 10px 10px 0;">
+                                        <i class="bi bi-send me-2"></i>立即发布
+                                    </button>
+                                </div>
+                            </form>
+                            <form method="POST" action="/ce:draft/save">
+                                <input type="hidden" name="plans" value="{{ ready_to_publish.data }}">
+                                <input type="hidden" name="platform" value="{{ ready_to_publish.platform }}">
+                                <select name="publish_mode" class="form-select form-select-sm mb-1" style="max-width:120px;">
+                                    <option value="draft">存草稿</option>
+                                    <option value="publish">正式发布</option>
+                                </select>
+                                <button type="submit" class="btn btn-outline-primary btn-sm" style="width:100%;">
+                                    <i class="bi bi-calendar-plus me-1"></i>加入草稿栏
+                                </button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <div class="publish-status pending">
+                            <h5><i class="bi bi-info-circle me-2"></i>尚无待发布内容</h5>
+                            <p style="margin:8px 0 0;font-size:13px;">请先在「新建任务」完成文章生成与验证，再来此处发布。</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+        </div><!-- End tab-content -->
+    </div>
+    
+    <script>
+    function loadHistory(id) {
+        window.location.href = '/ce:history?id=' + id;
+    }
+
+    // ── Inline Article Editor ────────────────────────────────────
+    {% if plans_list %}
+    let _plansData = {{ plans_list | tojson }};
+    {% else %}
+    let _plansData = [];
+    {% endif %}
+
+    function _rebuildPlansJsonl() {
+        return _plansData.map(p => JSON.stringify(p)).join('\\n');
+    }
+    function _syncPlansFields() {
+        const jsonl = _rebuildPlansJsonl();
+        document.querySelectorAll('input[name="plans"]').forEach(el => { el.value = jsonl; });
+    }
+    function toggleEditor(idx) {
+        const el = document.getElementById('editor-' + idx);
+        const btn = document.getElementById('editBtn-' + idx);
+        if (el.style.display === 'none') {
+            el.style.display = 'block';
+            btn.innerHTML = '<i class="bi bi-eye me-1"></i>收起编辑器';
+        } else {
+            el.style.display = 'none';
+            btn.innerHTML = '<i class="bi bi-pencil me-1"></i>编辑内容';
+        }
+    }
+    function markDirty(idx) {
+        const s = document.getElementById('editStatus-' + idx);
+        if (s) s.textContent = '（未保存）';
+    }
+    function saveEdit(idx) {
+        const ta = document.getElementById('editorArea-' + idx);
+        if (_plansData[idx]) { _plansData[idx].content_markdown = ta.value; _syncPlansFields(); }
+        const s = document.getElementById('editStatus-' + idx);
+        if (s) { s.textContent = '✓ 已保存'; s.style.color = 'var(--success)'; }
+        const preview = document.getElementById('preview-' + idx);
+        if (preview) preview.innerHTML = '<em style="color:#6b7280;font-size:12px;">内容已修改</em>';
+    }
+    function cancelEdit(idx, original) {
+        const ta = document.getElementById('editorArea-' + idx);
+        ta.value = original;
+        if (_plansData[idx]) { _plansData[idx].content_markdown = original; _syncPlansFields(); }
+        const s = document.getElementById('editStatus-' + idx);
+        if (s) { s.textContent = '已还原'; s.style.color = ''; }
+    }
+
+    // ── Campaign Profiles ────────────────────────────────────────
+    const _PROFILES = {{ profiles | tojson }};
+
+    function loadProfile(idx) {
+        if (idx === '') return;
+        const p = _PROFILES[parseInt(idx)];
+        if (!p) return;
+        const form = document.getElementById('configForm');
+        const setVal = (name, val) => {
+            const el = form ? form.querySelector('select[name="' + name + '"]')
+                            : document.querySelector('select[name="' + name + '"]');
+            if (el) el.value = val;
+        };
+        setVal('platform', p.platform || 'blogger');
+        setVal('target_language', p.language || 'zh-CN');
+        setVal('url_mode', p.url_mode || 'A');
+        setVal('publish_mode', p.publish_mode || 'draft');
+        const picker = document.getElementById('profilePicker');
+        if (picker) picker.value = '';
+    }
+    function loadBatchProfile(idx) {
+        if (idx === '') return;
+        const p = _PROFILES[parseInt(idx)];
+        if (!p) return;
+        const setVal = (name, val) => {
+            const el = document.querySelector('#batchForm select[name="' + name + '"]');
+            if (el) el.value = val;
+        };
+        setVal('platform', p.platform || 'blogger');
+        setVal('language', p.language || 'zh-CN');
+        setVal('url_mode', p.url_mode || 'A');
+        setVal('publish_mode', p.publish_mode || 'draft');
+    }
+    function saveProfilePrompt() {
+        const name = prompt('配置名称（如：51acgs-zh-blogger）：', '');
+        if (!name || !name.trim()) return;
+        const form = document.getElementById('configForm');
+        const getVal = (sel) => {
+            const el = form ? form.querySelector('select[name="' + sel + '"]')
+                           : document.querySelector('select[name="' + sel + '"]');
+            return el ? el.value : '';
+        };
+        const data = new FormData();
+        data.append('profile_name', name.trim());
+        data.append('platform', getVal('platform'));
+        data.append('language', getVal('target_language'));
+        data.append('url_mode', getVal('url_mode'));
+        data.append('publish_mode', getVal('publish_mode'));
+        fetch('/profiles/save', { method: 'POST', body: data })
+            .then(r => r.json())
+            .then(d => { if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓'); });
+    }
+
+    // ── Loading Overlay ──────────────────────────────────────────
+    (function() {
+        const MSGS = {
+            '/ce:plan':              { text: '分析网址中…',     sub: '正在抓取页面元数据' },
+            '/ce:generate':          { text: 'AI 生成文章中…', sub: '调用 AI 生成外链文章，约需 30–60 秒' },
+            '/ce:validate':          { text: '验证内容中…',     sub: '检查外链格式与内容合规性' },
+            '/ce:publish':           { text: '发布中…',         sub: '正在发布到目标平台，请勿关闭页面' },
+            '/ce:publish-real':      { text: '正式发布中…',     sub: '正在写入平台，请勿关闭页面' },
+            '/ce:batch':             { text: '批量发布中…',     sub: '正在逐篇生成并发布，每篇约 30–60 秒，请勿关闭页面' },
+            '/checkpoint/resume':    { text: '恢复发布中…',     sub: '正在处理未完成的发布任务，可能需要数分钟，请勿关闭页面' },
+        };
+        document.addEventListener('submit', function(e) {
+            const form = e.target;
+            const action = (form.getAttribute('action') || '').split('?')[0];
+            if (['/ce:clear','/ce:history/delete','/ce:history/update-status'].includes(action)) return;
+            const msg = MSGS[action] || { text: '处理中…', sub: '请稍候' };
+            document.getElementById('_loadingText').textContent    = msg.text;
+            document.getElementById('_loadingSubtext').textContent = msg.sub;
+            document.getElementById('_loadingOverlay').style.display = 'flex';
+            form.querySelectorAll('[type="submit"]').forEach(function(btn) { btn.disabled = true; });
+        });
+    })();
+    </script>
+
+    <!-- Loading Overlay -->
+    <div id="_loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,15,0.55);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:20px;padding:40px 48px;text-align:center;max-width:320px;box-shadow:0 24px 64px rgba(0,0,0,0.25);">
+            <div class="spinner-border mb-4" style="width:3rem;height:3rem;color:var(--primary);" role="status">
+                <span class="visually-hidden">Loading…</span>
+            </div>
+            <div id="_loadingText" style="font-size:1.1rem;font-weight:700;color:#1f2937;margin-bottom:8px;">处理中…</div>
+            <div id="_loadingSubtext" style="font-size:0.85rem;color:#6b7280;line-height:1.5;">请稍候</div>
+        </div>
+    </div>
+</body>
+</html>

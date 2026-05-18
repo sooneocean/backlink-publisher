@@ -15,13 +15,9 @@ origin: docs/brainstorms/2026-05-18-event-substrate-corpus-requirements.md
 > - `webui_app/routes/*.py`、`webui_app/scheduler.py` **不存在**——这些都是 architecture-refactor 重构产物
 > - 引用的 aligned-plan `2026-05-18-001-refactor-architecture-health-roadmap-plan.md` 在 main 上**不存在**（位于 refactor 分支）
 >
-> **必须由实施者在 `/ce:work` 前决定**（详见末尾 "Present Findings — P0 sequencing")：
-> 1. **方案 A（推荐）**：等 architecture-refactor R1–R4（webui.py 拆分 + JsonStore 抽象）合并到 main 后再实施本 plan——D6 "解耦" 退为 "顺序依赖"。
-> 2. **方案 B**：重写 U5 直接在 monolithic `webui.py` 的模块级函数（`_append_history`、`_save_draft_queue` 等）末尾插 `events.flush_for(path)` 调用——失去 JsonStore "统一 seam" 红利但 v1 即可独立交付。
+> **已选方案 A（2026-05-18 用户决策）**：本 plan 等 architecture-refactor R1–R4（webui.py 拆分 + JsonStore 抽象）合并到 main 后再 `/ce:work`。**D6 "解耦" 升级为 "顺序依赖"**：本 plan 的 Phase 2（U5/U7/U8）被 architecture-refactor R1–R4 gated；Phase 1（U1/U2/U3/U6/U4）可独立先行（不依赖 JsonStore）。Phase 3（U9/U10）部分独立。
 >
-> 选 A 还是 B 直接决定 U5 的实现细节、文件路径、整个 Phase 2 的依赖图。本 banner 之外的 plan body 仍以方案 A 假设（JsonStore 存在）撰写，方案 B 路径需 plan 修订。
->
-> 此外，行号引用（如 `_generate_payload at line 707`）来自 refactor 分支；main 实际行号不同（实际是 line 527）。实施时以 `grep -n "<symbol>"` 重新定位为准。
+> 行号引用（如 `_generate_payload at line 707`）来自 refactor 分支；main 实际行号不同（实际是 line 527）。实施时以 `grep -n "<symbol>"` 重新定位为准。
 
 ## Overview
 
@@ -105,14 +101,15 @@ origin: docs/brainstorms/2026-05-18-event-substrate-corpus-requirements.md
 - **URL 规范化**：新增 `url_utils.canonicalize_url(url)`：lowercase scheme + host、剥末尾斜杠、统一默认端口、剥 `utm_*` query 参数（其他 query 保留）。**不**复用 `strip_fragment_query`（它把整个 query 一起剥）。
 - **R10 enum 实现**：`events/kinds.py` 用 `typing.Literal[...]`；CI 单测扫 events 表 `SELECT DISTINCT kind` 与枚举集合做差集——零容忍。
 - **白名单序列化**：`events/schemas.py` per-kind dict（`{"publish.confirmed": {"target_url", "host", "live_url", "article_id", "run_id", ...}, ...}`）；`EventStore.append(kind, payload)` 在 JSON encode 前做 dict pruning，**未在白名单的字段静默丢弃 + WARN 日志 + counter**。
-- **Free-text scrubber 独立于 `_SENSITIVE_KEYS`**：现有 logger redactor 走精确 key 匹配（注释明令禁 substring）；body / error / message 内嵌 secret 需 regex 集（OAuth Bearer、`eyJ` JWT、`AIza` Google API key、basic-auth URL、高熵 ≥32 chars）。放 `events/scrubber.py`，给 `EventStore.append` 调用。
+- **Free-text scrubber 独立于 `_SENSITIVE_KEYS` + 覆盖面扩到所有 string-typed columns**（security-lens SEC-1/SEC-2）：现有 logger redactor 走精确 key 匹配（注释明令禁 substring）；body / error / message / **以及 events 表的所有 string-typed 结构化列（target_url, host, live_url）+ articles.body** 内嵌 secret 都需 regex 集（OAuth Bearer、`eyJ` JWT、`AIza` Google API key、basic-auth URL、高熵 ≥32 chars）扫一遍。放 `events/scrubber.py`，给 `EventStore.append` + `EventStore.add_article` 在入库前调用。U4 reducer 必须把 scrubber 作为入库前最后一道闸门——payload pruning 之后、INSERT 之前。
 - **Persona salt**：`~/.config/backlink-publisher/persona.salt`（32 字节随机）首次创建；helper `events/persona.py:persona_id(provider, account_label)`；events.db 损坏重建 **不**触发 salt 重生（保持 ID 稳定）。
 - **Bootstrap 分批策略**：`bp-events-rebuild` 按 `run_id` 分批，每批一事务；失败仅回滚当前批；quarantine 跨批累加到 `events.db.quarantine_log` 表。
-- **Doctor invariants**（具体正向断言，对抗"degenerate gate"陷阱）：
-  - `SELECT COUNT(*) FROM events WHERE kind='publish.confirmed'` ≥ 总 checkpoint done items（去重后）
-  - `max(events.ts_utc) ≥ max(JSON 源 mtime) - 5s`（容忍 inline flush 调度延迟）
-  - 每个 articles.live_url 都能在 checkpoint 或 publish-history 中找到 source
-  - quarantine_log 行数 / events 行数 ≤ 5%
+- **Doctor invariants**（具体正向断言，对抗"degenerate gate"陷阱；threshold 按指标语义分开）：
+  - I1 完整性: `SELECT COUNT(*) FROM events WHERE kind='publish.confirmed'` ≥ 总 checkpoint done items（去重后）
+  - I2 新鲜度: `projection_cursor.updated_at ≥ source mtime - 5s`（每个 source 单独判定；用 cursor 时间戳而非 ts_utc）
+  - I3 articles 一致性: 每个 articles.live_url（NOT NULL）都能在 checkpoint.items[].published_url 或 publish-history[].article_urls 中找到 source
+  - I4 漂移率 / 量化 drift: **drift ratio = missing_events / total_expected ≤ 0.5%**（对齐 origin R23 "drift > 0.5% exit non-zero"，**严格**——missing 是真问题）
+  - I5 quarantine 量化阈值: **quarantine_log / events 总数 ≤ 5%**（对齐 RBP-7 quarantine 语义，**宽松**——quarantine 是粒度 noise）
 - **WAL 副文件 0600**：sqlite3 默认 WAL 副文件继承主文件权限——验证；如未继承则手动 chmod。
 - **Backup-exclude xattr 覆盖面**（security-lens 收紧）：macOS 首次创建时不仅给 `events.db` 设 `com.apple.metadata:com_apple_backup_excludeItem`，同时给 `events.db-wal`、`events.db-shm`（创建后）、`persona.salt`、整个 `token/` 目录都设。Linux 无对应 op。WAL/SHM 文件 lazy create，xattr 在首次 commit/checkpoint 触发后立即 set。
 - **Doctor invariant 2 时钟比较**（adversarial 修正）：不比较 `events.ts_utc`（来自 checkpoint.started_at，发布开始时间）vs `source mtime`（最后写时间）——这两个钟差可达小时。改为：比较 **per-source `projection_cursor.updated_at`** vs `source mtime` — 容忍 5s（projector 投影后 cursor 立即更新）。
@@ -244,7 +241,7 @@ flowchart TB
 - Tables（schema_version=1）：
   - `events(id INTEGER PRIMARY KEY AUTOINCREMENT, ts_raw TEXT NOT NULL, ts_utc TEXT NOT NULL, run_id TEXT, kind TEXT NOT NULL, target_url TEXT, host TEXT, article_id INTEGER, payload_json TEXT NOT NULL)`，索引 `(kind, ts_utc)`、`(host, kind)`、`(article_id, kind)`
   - `articles(article_id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT, anchors_json TEXT NOT NULL DEFAULT '[]', target_urls_json TEXT NOT NULL DEFAULT '[]', lang TEXT, host TEXT, live_url TEXT UNIQUE, published_at_raw TEXT, published_at_utc TEXT, run_id TEXT)`，索引 `(host, published_at_utc)`、`(run_id)`
-  - `projection_cursor(source TEXT PRIMARY KEY, last_mtime REAL, last_checksum TEXT, last_seen_state_json TEXT)`
+  - `projection_cursor(source TEXT PRIMARY KEY, last_flush_status TEXT NOT NULL DEFAULT 'unknown', last_attempt_at TEXT, last_success_at TEXT, last_error TEXT)` —— **不存 `last_seen_state_json` 或 mtime/checksum**（RBP-4 关闭 diff-against-cursor 方案）；仅作 flush 失败 sentinel 用于 CLI 启动时扫描重试。dedup 依赖 R17 自然键 + `articles.live_url UNIQUE` + `INSERT OR IGNORE`。
   - `quarantine_log(id INTEGER PRIMARY KEY, ts_utc TEXT, source TEXT, run_id TEXT, reason TEXT, raw_payload_json TEXT)`
   - `schema_version(version INTEGER PRIMARY KEY)` 初始插入 `(1)`
 - FTS5 表 **不创建**（RBP-2）；`schema.py` 留 `def maybe_create_fts5(conn)` 函数但 v1 不调用
@@ -523,8 +520,9 @@ flowchart TB
 - 在 `JsonStore.__init__` 末尾注册 a write hook：每次成功 atomic write 后调 `events.flush_for(self.path)`（lazy import 避免循环）
 - 失败处理（投影失败不影响 JSON 写）：`try: events.flush_for(self.path)` `except Exception as e: events_logger.warn("flush failed, will retry on next write", source=str(self.path), error=type(e).__name__)`——投影是 best-effort，下次 write 会重试整段 diff
 - checkpoint.update_item / mark_complete：直接在函数末尾加 try/except + flush_for
-- **关键性能约束**：webui request handler 内的 flush 延迟必须 <10ms p99（否则违反 WebUI blocking subprocess 教训）。测试用 pytest-benchmark 或手测 timeit；超标走 APScheduler 单 worker 异步触发
-- 暴露开关：环境变量 `BACKLINK_EVENTS_DISABLE=1` 跳过 hook（运维兜底）
+- **关键性能约束 + contention benchmark**：webui request handler 内的 flush 延迟 p99 < 10ms。**测试必须模拟实际并发**——pytest 起 CLI subprocess（连续 100 次 publish flush）+ webui request 并发触发 + APScheduler 单 worker 同时跑——三方共写 events.db 时仍维持 p99 < 10ms。超标走 APScheduler 单 worker 异步触发
+- **flush 失败 sentinel + CLI 启动扫重试**（adversarial adv-002 修复）：projector.flush_for(path) 内部 try/except 包 SQLite ops；成功则 `UPDATE projection_cursor SET last_flush_status='success', last_success_at=now()`；失败则 `UPDATE projection_cursor SET last_flush_status='fail', last_attempt_at=now(), last_error=...`。**CLI 启动钩子**：`bp-events-rebuild` 与 publish-backlinks / validate-backlinks / report-anchors / footprint 入口处加一个轻量"扫描 sentinel 表"步骤：`SELECT source FROM projection_cursor WHERE last_flush_status='fail'` → 对每条调 `flush_for(source)` 重试一次。这把 "等下次写"补成 "等下次任何 CLI 启动"——completed run 也能被重试到。
+- 暴露开关：**移除 `BACKLINK_EVENTS_DISABLE`**（scope-guardian + try/except 已经覆盖优雅降级；env 开关是冗余的 audit-bypass 面）
 
 **Patterns to follow:**
 - `webui_store/base.py:59-66` 的 atomic_write_json pattern 之后插入 hook

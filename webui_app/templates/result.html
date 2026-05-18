@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Run Result · {{ run_id }}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body { background: #f7f8fa; }
+    .container { max-width: 920px; }
+    .badge-success { background: #10b981; }
+    .badge-failed { background: #ef4444; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <h1 class="h4 mb-3">Run Result · <code>{{ run_id }}</code></h1>
+
+  {% if summary.fail_empty %}
+    <div class="alert alert-warning">
+      <strong>未发现作品</strong> — list_url 抓回 0 候选，请检查 list_url 是否正确。
+      可能原因：sitemap 不可访问、HTML 列表页结构非典型、所有候选都命中了排除规则。
+    </div>
+  {% else %}
+    <div class="alert alert-info">
+      <strong>{{ summary.generated }}/{{ summary.total }}</strong> 成功 ·
+      跳过 {{ summary.skipped }}
+    </div>
+  {% endif %}
+
+  {% if rows %}
+  <table class="table table-sm bg-white">
+    <thead>
+      <tr><th>work_url</th><th>status</th></tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><code>{{ row.work_url }}</code></td>
+        <td>
+          {% if row.status == 'success' %}
+            <span class="badge badge-success">success</span>
+          {% else %}
+            <span class="badge badge-failed">{{ row.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <a href="/sites?domain={{ main_url }}" class="btn btn-link">← 返回 /sites 表单</a>
+</div>
+</body>
+</html>

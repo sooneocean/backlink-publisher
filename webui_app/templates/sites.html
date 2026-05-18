@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Work-Themed Backlinks · 站点配置</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <style>
+    body { background: #f7f8fa; }
+    .container { max-width: 920px; }
+    .field-error { color: #b91c1c; font-size: 0.875rem; margin-top: 0.25rem; display: block; }
+    fieldset { border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+    legend { font-size: 1rem; font-weight: 600; padding: 0 0.5rem; width: auto; }
+    .help { color: #6b7280; font-size: 0.85rem; margin-top: 0.25rem; }
+    .toast-saved { background: #ecfdf5; border: 1px solid #6ee7b7; padding: 0.75rem 1rem; border-radius: 0.5rem; }
+    pre.preview { background: #1f2937; color: #f9fafb; padding: 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; max-height: 200px; overflow: auto; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+  <h1 class="h3 mb-3">Work-Themed Backlinks 站点配置</h1>
+
+  {% if saved %}
+    <div class="toast-saved mb-3">✓ 已保存站点：{{ saved }}</div>
+  {% endif %}
+  {% if autofilled %}
+    <div class="alert alert-info mb-3" role="status">
+      <strong>已自动派生：</strong>
+      <span class="mb-0">{{ autofilled|join('、') }}</span>
+      <div class="small text-muted mt-1">
+        系统根据 main_url 的页面元数据（title / description）+ 域名 label 派生了上述字段。
+        如需调整，回到该字段直接编辑即可（下次提交会覆盖派生值）。
+      </div>
+    </div>
+  {% endif %}
+  {% if flash_msg %}
+    <div class="alert alert-{{ flash_type or 'info' }}">{{ flash_msg }}</div>
+  {% endif %}
+
+  <form method="post" action="/sites/save-three-url" novalidate>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <fieldset>
+      <legend>① URLs</legend>
+
+      <div class="mb-3">
+        <label class="form-label" for="f-main-url">main_url（品牌权重承接）</label>
+        <input id="f-main-url" name="main_url" class="form-control"
+               aria-describedby="err-main-url"
+               value="{{ form.main_url|default('') }}"
+               placeholder="https://your-site.com/">
+        <div class="help">必须 https + host-root + 单一尾斜杠（例：https://your-site.com/）。</div>
+        {% if errors.main_url %}<span id="err-main-url" class="field-error">{{ errors.main_url }}</span>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="f-list-url">list_url（同类作品发现源）<span class="text-muted small">— 可选</span></label>
+        <input id="f-list-url" name="list_url" class="form-control"
+               aria-describedby="err-list-url"
+               value="{{ form.list_url|default('') }}"
+               placeholder="https://your-site.com/list">
+        <div class="help">留空：默认用 main_url 当列表页源。work_urls 留空时会从此页的 sitemap.xml 自动发现作品。</div>
+        {% if errors.list_url %}<span id="err-list-url" class="field-error">{{ errors.list_url }}</span>{% endif %}
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="f-work-urls">work_urls（每行一个）<span class="text-muted small">— 可选</span></label>
+        <textarea id="f-work-urls" name="work_urls" class="form-control" rows="4"
+                  aria-describedby="err-work-urls"
+                  placeholder="https://your-site.com/work/1&#10;https://your-site.com/work/2">{{ form.work_urls|default('') }}</textarea>
+        <div class="help">留空：从 list_url 的 sitemap.xml 自动发现（fallback 到 HTML 链接抓取）。失败时 work_urls 留空 list、dispatcher 再试。</div>
+        {% if errors.work_urls %}<span id="err-work-urls" class="field-error">{{ errors.work_urls }}</span>{% endif %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>② Anchor Pools <span class="text-muted small" style="font-weight:400;">（任一池留空将被自动派生）</span></legend>
+
+      <div class="mb-3">
+        <label class="form-label" for="f-branded">branded_pool（每行一个，随机抽一项）<span class="text-muted small">— 可选</span></label>
+        <textarea id="f-branded" name="branded_pool" class="form-control" rows="3"
+                  aria-describedby="err-branded">{{ form.branded_pool|default('') }}</textarea>
+        <div class="help">留空：用 main_url 的 page title 派生（截断 30 字）；TDK 失败时 fallback 到域名 label。</div>
+        {% if errors.branded_pool %}<span class="field-error" id="err-branded">{{ errors.branded_pool }}</span>{% endif %}
+      </div>
+
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="f-partial">partial_pool（每行一个，70%）<span class="text-muted small">— 可选</span></label>
+          <textarea id="f-partial" name="partial_pool" class="form-control" rows="3"
+                    aria-describedby="err-partial">{{ form.partial_pool|default('') }}</textarea>
+          <div class="help">留空：从 page description 按标点切句取前 3 项。</div>
+          {% if errors.partial_pool %}<span class="field-error" id="err-partial">{{ errors.partial_pool }}</span>{% endif %}
+        </div>
+        <div class="col-md-6 mb-3">
+          <label class="form-label" for="f-exact">exact_pool（每行一个，30%）<span class="text-muted small">— 可选</span></label>
+          <textarea id="f-exact" name="exact_pool" class="form-control" rows="3"
+                    aria-describedby="err-exact">{{ form.exact_pool|default('') }}</textarea>
+          <div class="help">留空：派生为 [域名 label]。exact 锚文本建议手动设以避免分布报警。</div>
+          {% if errors.exact_pool %}<span class="field-error" id="err-exact">{{ errors.exact_pool }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label" for="f-templates">work_anchor_templates（每行一个；{title} 占位符；留空使用默认）</label>
+        <textarea id="f-templates" name="work_anchor_templates" class="form-control" rows="3"
+                  placeholder="{{ default_templates }}">{{ form.work_anchor_templates|default('') }}</textarea>
+        <div class="help">默认：{{ default_templates }}</div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>③ Generation Params</legend>
+      <div class="row">
+        <div class="col-sm-3 mb-3">
+          <label class="form-label" for="f-count">count（默认 10）</label>
+          <input type="number" id="f-count" name="count" class="form-control"
+                 min="1" max="100" value="{{ form.count|default('10') }}">
+        </div>
+        <div class="col-sm-9 mb-3 d-flex align-items-end">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="f-tls" name="insecure_tls"
+                   {% if form.insecure_tls %}checked{% endif %}>
+            <label class="form-check-label" for="f-tls">
+              insecure_tls（仅信任目标站 TLS 故障时启用 — 关闭证书校验）
+            </label>
+          </div>
+        </div>
+      </div>
+    </fieldset>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary">保存配置</button>
+      <a href="/" class="btn btn-link">← 返回首页</a>
+    </div>
+  </form>
+
+  <hr class="my-4">
+
+  <fieldset>
+    <legend>预览作品页元数据</legend>
+    <p class="help">先保存配置，再使用此面板验证 work_url 抓取行为。</p>
+    <form method="post" action="/sites/run">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="main_url" value="{{ form.main_url|default('') }}">
+      <button type="submit" class="btn btn-outline-primary"
+              {% if not form.main_url %}disabled{% endif %}>
+        运行（plan-backlinks）
+      </button>
+    </form>
+  </fieldset>
+</div>
+</body>
+</html>
