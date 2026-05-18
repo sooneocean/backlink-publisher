@@ -637,34 +637,47 @@ class TestSitesPostRoutes:
 
 
 def test_every_route_has_at_least_one_contract_test():
-    """Enumerate routes in webui.app + assert each appears in this module's
-    test source. Future-proofs the contract net against silent additions."""
+    """Enumerate routes in webui.app + assert each is exercised by a real
+    client.get / client.post call in this module.
+
+    Two intentional design choices:
+
+    1. Parametrized rules like '/sites/run/<run_id>/result' are translated to
+       a regex where each '<param>' becomes a non-slash / non-quote run. This
+       matches both literal forms (``client.get("/sites/run/abc/result")``)
+       and f-string forms (``client.get(f"/sites/run/{run_id}/result")``).
+    2. Coverage is matched against actual ``client.get(...)`` /
+       ``client.post(...)`` calls — not raw string presence. A route that
+       appears only in a docstring, comment, or assertion message MUST NOT
+       count as covered, otherwise the gate gives a false sense of safety.
+    """
     import webui
 
-    # Collect all unique route rules (skip static)
     rules = {r.rule for r in webui.app.url_map.iter_rules() if r.endpoint != "static"}
 
-    # Parameterized rules like '/sites/run/<run_id>/result' — match prefix
     this_file = open(__file__, encoding="utf-8").read()
 
     uncovered = []
     for rule in sorted(rules):
-        # Reduce '/sites/run/<run_id>/result' to a searchable prefix
-        prefix = re.sub(r"<[^>]+>", "", rule).rstrip("/")
-        # Special-case '/' which can't be searched as a literal
-        if rule == "/":
-            patterns = ('client.get("/")', "client.get('/')")
-        else:
-            patterns = (
-                f'"{rule}"',
-                f"'{rule}'",
-                f'"{prefix}',
-                f"'{prefix}",
-            )
-        if not any(p in this_file for p in patterns):
+        # Translate Flask path params to a permissive segment regex; escape
+        # the literal segments so special chars (e.g. ':' in '/ce:plan')
+        # cannot become regex metacharacters.
+        parts = re.split(r"(<[^>]+>)", rule)
+        rule_pattern = "".join(
+            r"[^/\"']+" if p.startswith("<") else re.escape(p)
+            for p in parts
+        )
+        # Require a real client.{get,post}(...) invocation. The closing char
+        # is a quote (rule ends there) or '?' (query string immediately
+        # follows the path, e.g. '?error=access_denied').
+        call_re = re.compile(
+            rf"client\.(?:get|post)\(\s*f?[\"']{rule_pattern}[\"'?]"
+        )
+        if not call_re.search(this_file):
             uncovered.append(rule)
 
     assert not uncovered, (
         f"Routes without contract test coverage: {uncovered}. "
-        f"Plan 2026-05-18-001 Unit 1 requires every route to have ≥1 test."
+        f"Plan 2026-05-18-001 Unit 1 requires every route to have ≥1 test "
+        f"that invokes client.get/post on the route."
     )
