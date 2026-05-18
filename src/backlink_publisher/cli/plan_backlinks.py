@@ -23,7 +23,9 @@ from .. import (
     work_scraper,
     work_themed_generator,
 )
+import backlink_publisher.publishing.adapters  # noqa: F401  populate registry before argparse
 from backlink_publisher.publishing.adapters.llm_anchor_provider import OpenAICompatibleProvider
+from backlink_publisher.publishing.registry import registered_platforms
 from backlink_publisher.anchor.profile import ProfileEntry
 from backlink_publisher.anchor.scheduler import ScheduleDecision, SecondaryLink
 from backlink_publisher.config import (
@@ -1497,7 +1499,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--default-platform",
         default="blogger",
-        choices=["blogger", "medium"],
+        choices=registered_platforms(),
         help="Platform for --from-csv / --from-sitemap rows (default: blogger)",
     )
     parser.add_argument(

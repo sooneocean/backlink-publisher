@@ -219,6 +219,7 @@ def test_medium_uses_long_max_wait(mock_vp, mock_pub, mock_verify):
     mock_pub.return_value = AdapterResult(
         status="drafted", adapter="medium-api", platform="medium",
         draft_url="https://medium.com/p/abc",
+        post_publish_delay_seconds=30,  # R9c: adapter-declared throttle
     )
     mock_vp.return_value = VerificationResult(ok=True, reason="")
 

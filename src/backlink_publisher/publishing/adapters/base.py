@@ -16,6 +16,7 @@ class AdapterResult:
     draft_url: str = ""
     published_url: str = ""
     error: str | None = None
+    post_publish_delay_seconds: int = 0  # adapter-declared throttle (plan 2026-05-18-009 R9c)
     _dry_run: bool = False
     _command: str = ""
     _provider_meta: dict[str, Any] | None = None  # optional platform-specific metadata

@@ -1,7 +1,10 @@
 """Tests for backlink_publisher.publishing.content_negotiation.
 
-Plan 2026-05-18-006 Unit 5 R9 + R10 — verifies:
-- ROUTE_TIER_MATRIX covers SUPPORTED_PLATFORMS (drift assertion at import)
+Plan 2026-05-18-006 Unit 5 R9 + R10 (drift direction inverted by plan
+2026-05-18-009 R9e — see content_negotiation
+``_assert_matrix_targets_registered_platforms``):
+
+- Every ROUTE_TIER_MATRIX key must refer to a registered adapter platform
 - route_tier_for normalizes input and default-denies unknown platforms
 - extract_publish_html returns content_html for tier (a) platforms,
   renders content_markdown otherwise
@@ -19,11 +22,10 @@ from backlink_publisher.publishing.content_negotiation import (
     extract_publish_html,
     route_tier_for,
 )
-from backlink_publisher.schema import SUPPORTED_PLATFORMS
 
 
 class TestRouteTierMatrixShape:
-    """Drift assertion + matrix content per the R10 spike."""
+    """Drift assertion + matrix content per the R10 spike (R9e invert)."""
 
     def test_blogger_is_tier_a(self) -> None:
         assert ROUTE_TIER_MATRIX["blogger"] == "a"
@@ -34,13 +36,23 @@ class TestRouteTierMatrixShape:
         # under most-restrictive-tier rollup.
         assert ROUTE_TIER_MATRIX["medium"] == "b"
 
-    def test_matrix_covers_all_supported_platforms(self) -> None:
-        """Every SUPPORTED_PLATFORMS entry must have an explicit tier."""
-        for platform in SUPPORTED_PLATFORMS:
-            assert platform in ROUTE_TIER_MATRIX, (
-                f"SUPPORTED_PLATFORMS has '{platform}' but ROUTE_TIER_MATRIX "
-                f"does not classify it. Add a tier (a/b/c) entry."
-            )
+    def test_matrix_keys_are_registered_platforms(self) -> None:
+        """Every ROUTE_TIER_MATRIX key must point to a registered adapter.
+
+        Plan 2026-05-18-009 R9e inverted the drift direction. The default-deny
+        in :func:`route_tier_for` covers the reverse case (registered but no
+        matrix entry → tier ``"c"`` fail-closed).
+        """
+        import backlink_publisher.publishing.adapters  # noqa: F401  populate registry
+        from backlink_publisher.publishing.content_negotiation import (
+            _matrix_targets_registered_platforms,
+        )
+
+        stale = _matrix_targets_registered_platforms()
+        assert not stale, (
+            f"ROUTE_TIER_MATRIX has stale entries with no registered adapter: "
+            f"{stale}. Either register an adapter or remove the matrix entry."
+        )
 
 
 class TestRouteTierFor:

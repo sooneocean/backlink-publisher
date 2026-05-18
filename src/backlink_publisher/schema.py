@@ -31,8 +31,39 @@ INPUT_OPTIONAL_FIELDS = {
 #: (Post-Plan-2026-05-18-001 Unit 6 packaging refactor: language_check.py
 #: moved to linkcheck/language.py; legacy import path still works via the
 #: MetaPathFinder shim in :mod:`backlink_publisher.__init__`.)
-__all__ = ["SUPPORTED_LANGUAGES"]
-SUPPORTED_PLATFORMS = {"blogger", "medium"}
+__all__ = ["SUPPORTED_LANGUAGES", "supported_platforms", "reject_unsupported_platform"]
+
+
+def supported_platforms() -> frozenset[str]:
+    """Return the set of platform names with at least one registered adapter.
+
+    Delegates to :func:`backlink_publisher.publishing.registry.registered_platforms`
+    so the schema-layer enum stays in lockstep with the dispatch registry
+    (plan 2026-05-18-009 R9e). The lazy import inside the function forces the
+    adapter side-effect registration via ``backlink_publisher.publishing.adapters``
+    so callers do not need to remember to import it first.
+    """
+    from .publishing import adapters  # noqa: F401  populate registry
+    from .publishing.registry import registered_platforms
+
+    return frozenset(registered_platforms())
+
+
+def reject_unsupported_platform(platform: str) -> str | None:
+    """Return a user-facing rejection message if ``platform`` lacks an adapter.
+
+    Plan 2026-05-18-009 R9d — folds the three coordinated LinkedIn-specific
+    rejection sites (``schema.py``, ``publish_backlinks.py``,
+    ``validate_backlinks.py``) into a single registry-driven helper. Coverage
+    now extends beyond linkedin to any unregistered platform (e.g. tiktok,
+    threads). Returns ``None`` when the platform is registered.
+    """
+    if platform in supported_platforms():
+        return None
+    supported = ", ".join(sorted(supported_platforms()))
+    return f"platform '{platform}' is not supported. Supported: {supported}"
+
+
 URL_MODES = {"A", "B", "C"}
 PUBLISH_MODES = {"draft", "publish"}
 
@@ -189,10 +220,10 @@ def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
             f"Supported: {', '.join(sorted(SUPPORTED_LANGUAGES))}"
         )
 
-    if "platform" in row and row["platform"] not in SUPPORTED_PLATFORMS:
+    if "platform" in row and row["platform"] not in supported_platforms():
         errors.append(
             f"line {line_num}: unsupported platform '{row['platform']}'. "
-            f"Supported: {', '.join(sorted(SUPPORTED_PLATFORMS))}"
+            f"Supported: {', '.join(sorted(supported_platforms()))}"
         )
 
     if "url_mode" in row and row["url_mode"] not in URL_MODES:
@@ -326,7 +357,9 @@ def validate_publish_payload(row: dict[str, Any]) -> list[str]:
     errors = validate_output_payload(row)
 
     # Additional publish-specific checks
-    if "platform" in row and row["platform"] == "linkedin":
-        errors.append("platform 'linkedin' is not supported in this version")
+    if "platform" in row:
+        msg = reject_unsupported_platform(row["platform"])
+        if msg is not None:
+            errors.append(msg)
 
     return errors

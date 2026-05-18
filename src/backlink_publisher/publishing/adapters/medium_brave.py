@@ -348,6 +348,7 @@ class MediumBraveAdapter(Publisher):
                 adapter="medium-brave",
                 platform="medium",
                 published_url=final_url,
+                post_publish_delay_seconds=30,
                 _provider_meta=meta if meta else None,
             )
         return AdapterResult(
@@ -355,4 +356,5 @@ class MediumBraveAdapter(Publisher):
             adapter="medium-brave",
             platform="medium",
             draft_url=final_url,
+            post_publish_delay_seconds=30,
         )

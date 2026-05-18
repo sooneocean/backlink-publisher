@@ -73,7 +73,8 @@ def _run(rows, argv=None, env=None):
 def _medium_result():
     return AdapterResult(
         status="drafted", adapter="medium-api", platform="medium",
-        draft_url="https://medium.com/p/abc"
+        draft_url="https://medium.com/p/abc",
+        post_publish_delay_seconds=30,  # R9c: adapter-declared throttle
     )
 
 

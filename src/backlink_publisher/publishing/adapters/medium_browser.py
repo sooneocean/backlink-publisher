@@ -194,6 +194,7 @@ class MediumBrowserAdapter(Publisher):
                             adapter="medium-browser",
                             platform="medium",
                             published_url=final_url,
+                            post_publish_delay_seconds=30,
                             _provider_meta=meta if meta else None,
                         )
                     return AdapterResult(
@@ -201,6 +202,7 @@ class MediumBrowserAdapter(Publisher):
                         adapter="medium-browser",
                         platform="medium",
                         draft_url=final_url,
+                        post_publish_delay_seconds=30,
                     )
 
                 except ExternalServiceError:

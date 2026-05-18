@@ -31,7 +31,7 @@ from __future__ import annotations
 from typing import Any
 
 from backlink_publisher._util.markdown import render_to_html
-from backlink_publisher.schema import SUPPORTED_PLATFORMS, _is_field_present
+from backlink_publisher.schema import _is_field_present
 
 __all__ = [
     "ROUTE_TIER_MATRIX",
@@ -42,7 +42,8 @@ __all__ = [
 
 #: Per-platform source-format acceptance tier, post-most-restrictive-tier
 #: rollup across each platform's adapter dispatch chain. Keys are
-#: ``platform`` strings from :data:`backlink_publisher.schema.SUPPORTED_PLATFORMS`.
+#: ``platform`` strings registered in
+#: :func:`backlink_publisher.publishing.registry.registered_platforms`.
 #:
 #: Tier semantics (plan 2026-05-18-006 R10):
 #:
@@ -76,27 +77,25 @@ ROUTE_TIER_MATRIX: dict[str, str] = {
 _DEFAULT_TIER: str = "c"
 
 
-def _assert_matrix_covers_supported_platforms() -> None:
-    """Drift detector: every platform in :data:`SUPPORTED_PLATFORMS` must have
-    an explicit tier classification — surfaces forgotten matrix updates at
-    import time rather than at first ``content_html``-only row reaching the
-    gate.
+def _matrix_targets_registered_platforms() -> list[str]:
+    """Test-time drift detector (post-R9e): returns the sorted list of
+    :data:`ROUTE_TIER_MATRIX` keys that no longer point to a registered
+    adapter — stale config that should be deleted.
 
-    Future tier-(c) platforms (Telegraph after Unit 4 lands) get an explicit
-    entry too; the default-deny in :func:`route_tier_for` is for *unknown*
-    platforms, not for *known-but-unsupported* ones.
+    Not run at module import time on purpose: this module is imported by
+    ``blogger_api`` during ``adapters/__init__`` registration, so the
+    registry is half-populated at our import time. The assertion lives in
+    ``tests/test_content_negotiation.py`` instead.
+
+    Runtime safety does not depend on this check: the
+    :data:`_DEFAULT_TIER` fail-closed default in :func:`route_tier_for`
+    rejects ``content_html``-only rows for unregistered platforms anyway,
+    and rows with unknown platforms are rejected earlier by
+    ``schema.validate_publish_payload`` before reaching this module.
     """
-    missing = set(SUPPORTED_PLATFORMS) - set(ROUTE_TIER_MATRIX.keys())
-    if missing:
-        raise AssertionError(
-            f"ROUTE_TIER_MATRIX is missing entries for SUPPORTED_PLATFORMS: "
-            f"{sorted(missing)}. Either add the tier classification "
-            f"(a/b/c) or remove the platform from SUPPORTED_PLATFORMS. "
-            f"See plan 2026-05-18-006 Unit 5 R10 spike output."
-        )
+    from backlink_publisher.publishing.registry import registered_platforms
 
-
-_assert_matrix_covers_supported_platforms()
+    return sorted(set(ROUTE_TIER_MATRIX.keys()) - set(registered_platforms()))
 
 
 def route_tier_for(platform: str) -> str:

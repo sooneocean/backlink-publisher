@@ -10,7 +10,6 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-_MEDIUM_ADAPTERS = {"medium-api", "medium-browser"}
 _HTTP_5XX_RE = re.compile(r"\b5[0-9]{2}\b")
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,7 +22,8 @@ from backlink_publisher._util.errors import DependencyError, ExternalServiceErro
 from backlink_publisher._util.jsonl import read_jsonl, write_jsonl
 from backlink_publisher.linkcheck.http import MAX_CONCURRENT as _LINKCHECK_MAX_CONCURRENT, check_url
 from backlink_publisher._util.logger import publish_logger
-from ..schema import SUPPORTED_PLATFORMS, validate_publish_payload
+from backlink_publisher.publishing.registry import registered_platforms
+from ..schema import reject_unsupported_platform, supported_platforms, validate_publish_payload
 from backlink_publisher.linkcheck.verify import verify_published
 
 #: First-run banner sentinel — written after the banner fires so subsequent
@@ -116,8 +116,8 @@ def _do_verify(
     verify_url = result.published_url or result.draft_url
     if not verify_url:
         return True, ""
-    is_medium = getattr(result, "adapter", "") in _MEDIUM_ADAPTERS
-    max_wait = 30 if is_medium else 10
+    needs_extended_wait = getattr(result, "post_publish_delay_seconds", 0) > 0
+    max_wait = 30 if needs_extended_wait else 10
     required_links = [lnk["url"] for lnk in row.get("links", []) if lnk.get("required")]
     vr = verify_published(
         verify_url,
@@ -161,7 +161,7 @@ def _run_resume(args: Any) -> None:
     # verify adapter setup for platforms in checkpoint
     platforms_in_ckpt = {item["platform"] for item in ckpt["items"] if item.get("platform")}
     for plat in platforms_in_ckpt:
-        if plat in SUPPORTED_PLATFORMS:
+        if plat in supported_platforms():
             try:
                 verify_adapter_setup(plat, config)
             except DependencyError as exc:
@@ -250,7 +250,12 @@ def _run_resume(args: Any) -> None:
     throttle_max = int(os.environ.get("MEDIUM_THROTTLE_MAX", "300"))
     resume_elapsed_skip_throttle = False
     for item in ckpt["items"]:
-        if item["status"] == "done" and item.get("adapter") in _MEDIUM_ADAPTERS:
+        # Throttle bookkeeping for the resume path. Platform-keyed because at
+        # checkpoint replay time we only have the persisted platform name, not
+        # the AdapterResult.post_publish_delay_seconds value. Pairs with the
+        # `if platform == "medium":` gate below — both are out-of-R9-scope
+        # follow-ups (plan 2026-05-18-009 Unit 2 known-limitation).
+        if item["status"] == "done" and item.get("platform") == "medium":
             try:
                 last_ts = datetime.fromisoformat(item["completed_at"])
                 elapsed = (datetime.now(timezone.utc) - last_ts).total_seconds()
@@ -323,7 +328,7 @@ def _run_resume(args: Any) -> None:
             adapter=result.adapter,
             completed_at=completed_at,
         )
-        if result.adapter in _MEDIUM_ADAPTERS:
+        if result.post_publish_delay_seconds > 0:
             last_medium_success_idx = item_idx
 
         # Post-publish verification
@@ -384,7 +389,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--platform",
-        choices=["blogger", "medium"],
+        choices=registered_platforms(),
         default=None,
         help="Target platform (overrides per-row platform)",
     )
@@ -533,12 +538,9 @@ def main(argv: list[str] | None = None) -> None:
     # Pre-flight: validate all payloads and check for unsupported platforms
     for idx, row in enumerate(rows, start=1):
         platform = args.platform or row.get("platform", "")
-        if platform == "linkedin":
-            emit_error(
-                f"row {idx}: platform 'linkedin' is not supported. "
-                f"Supported platforms: blogger, medium",
-                exit_code=2,
-            )
+        platform_msg = reject_unsupported_platform(platform)
+        if platform_msg is not None:
+            emit_error(f"row {idx}: {platform_msg}", exit_code=2)
         errs = validate_publish_payload(row)
         if errs:
             for e in errs:
@@ -551,7 +553,7 @@ def main(argv: list[str] | None = None) -> None:
             args.platform or row.get("platform", "") for row in rows
         }
         for plat in platforms_in_use:
-            if plat not in SUPPORTED_PLATFORMS:
+            if plat not in supported_platforms():
                 continue
             try:
                 verify_adapter_setup(plat, config)
@@ -633,7 +635,7 @@ def main(argv: list[str] | None = None) -> None:
                 # Leave checkpoint item in 'pending' so --resume retries.
                 continue
 
-        if platform not in SUPPORTED_PLATFORMS:
+        if platform not in supported_platforms():
             outputs.append({
                 "id": row.get("id", ""),
                 "platform": platform,
@@ -756,7 +758,7 @@ def main(argv: list[str] | None = None) -> None:
             fail_count += 1
         else:
             success_count += 1
-            if result.adapter in _MEDIUM_ADAPTERS:
+            if result.post_publish_delay_seconds > 0:
                 last_medium_success_idx = row_idx
 
             # Post-publish verification

@@ -10,6 +10,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlsplit
 
+import backlink_publisher.publishing.adapters  # noqa: F401  populate registry before validation
 from .. import config_echo, errors
 from backlink_publisher.anchor.lang import check_anchor_language
 from backlink_publisher.config import Config, get_anchor_pool_v2, load_config
@@ -26,7 +27,7 @@ from backlink_publisher.linkcheck.http import check_urls_strict
 from backlink_publisher.publishing.content_negotiation import route_tier_for
 from backlink_publisher._util.logger import validate_logger
 from backlink_publisher._util.markdown import validate_markdown_convertible
-from ..schema import SUPPORTED_PLATFORMS, _is_field_present, validate_output_payload
+from ..schema import _is_field_present, reject_unsupported_platform, supported_platforms, validate_output_payload
 
 
 def _resolve_branded_pool(row: dict[str, Any], config: Config | None) -> list[str]:
@@ -434,13 +435,12 @@ def main(argv: list[str] | None = None) -> None:
     validation_drops: list[int] = []
 
     for idx, row in enumerate(rows, start=1):
-        # Check for unsupported platforms (linkedin)
+        # Check for unsupported platforms (post-R9d: helper covers any
+        # unregistered platform, not just linkedin)
         platform = row.get("platform", "")
-        if platform == "linkedin":
-            all_errors.append(
-                f"row {idx}: platform 'linkedin' is not supported. "
-                f"Supported: {', '.join(sorted(SUPPORTED_PLATFORMS))}"
-            )
+        platform_msg = reject_unsupported_platform(platform)
+        if platform_msg is not None:
+            all_errors.append(f"row {idx}: {platform_msg}")
             platform_drops.append(idx)
             continue
 

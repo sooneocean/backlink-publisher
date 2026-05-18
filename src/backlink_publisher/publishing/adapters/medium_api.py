@@ -216,6 +216,7 @@ class MediumAPIAdapter(Publisher):
                 adapter="medium-api",
                 platform="medium",
                 published_url=url,
+                post_publish_delay_seconds=30,
                 _provider_meta=meta if meta else None,
             )
         return AdapterResult(
@@ -223,4 +224,5 @@ class MediumAPIAdapter(Publisher):
             adapter="medium-api",
             platform="medium",
             draft_url=url,
+            post_publish_delay_seconds=30,
         )
