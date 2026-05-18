@@ -17,6 +17,15 @@ Next curation review: **2026-08-15** — *aspirational quarterly cadence; not en
 
 Soft observation (2026-05-15): historical `docs/brainstorms/` and `docs/plans/` files contain real operator domain references (e.g. target hostnames). The sanitization rule above applies to `docs/solutions/` entries; if the project ever needs to extend it to historical decision artifacts, scope a separate pass — do not retrofit silently.
 
+## Worktree Auto-Cleanup
+
+Sibling `bp-<topic>/` git worktrees accumulate after parallel feature work — even with discipline, fresh clones and concurrent agent sessions reintroduce sprawl. Two scripts manage cleanup:
+
+- **`bash scripts/prune-stale-worktrees.sh`** — interactive helper. Lists worktrees whose branch tip is reachable from `origin/main` (handles squash-merge via `gh pr list` when available; falls back to direct `git merge-base --is-ancestor` otherwise). Skips dirty worktrees and the main worktree. Flags: `--dry-run` (list only), `--force` (cron-safe, no prompts), `--help`.
+- **`bash scripts/install-post-merge-hook.sh`** — per-clone installer that writes a `post-merge` hook to `.git/hooks/`. The hook fires after `git merge` / `git pull` on `main` and **notifies by default** about stale worktrees. To enable auto-removal after the hook's dirty-state check, set `export BACKLINK_PUBLISHER_WORKTREE_AUTOREMOVE=1` in your shell rc. Re-run the installer after fresh clones (git hooks are not committed).
+
+Safety: both refuse to remove the worktree the script is running in, both honor the dirty-state guard (no force-remove of uncommitted work), and the prune helper exits 2 if any removal fails so cron-style invocations can alert. Coverage: `tests/scripts/test_prune_stale_worktrees.py`.
+
 ## Monolith Budget
 
 `monolith_budget.toml` at repo root tracks radon SLOC ceilings for five named source files: `src/backlink_publisher/cli/plan_backlinks.py`, `src/backlink_publisher/cli/publish_backlinks.py`, `src/backlink_publisher/content/fetch.py`, `src/backlink_publisher/config/writer.py`, `src/backlink_publisher/_util/markdown.py`. Enforced by `tests/test_no_monolith_regrowth.py` (hard-fail R4 + warning canary R7 + radon counter pinning).
