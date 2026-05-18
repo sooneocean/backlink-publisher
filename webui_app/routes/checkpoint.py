@@ -13,9 +13,11 @@ from backlink_publisher import checkpoint as _checkpoint_mod
 from webui_store import history_store as _history_store
 
 from ..helpers import (
+    _REPO_ROOT,
     _check_localhost,
     _parse_publish_results,
     _render,
+    _rewrite_cli_cmd,
     _validate_webui_run_id,
 )
 
@@ -28,10 +30,10 @@ def checkpoint_resume():
     run_id = request.form.get("run_id", "")
     _validate_webui_run_id(run_id)
 
-    cmd = ["publish-backlinks", "--resume", run_id]
+    cmd, env = _rewrite_cli_cmd(["publish-backlinks", "--resume", run_id])
     result = subprocess.run(
         cmd, input="", capture_output=True, text=True,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))) or os.getcwd(),
+        cwd=_REPO_ROOT, env=env,
     )
 
     publish_results = _parse_publish_results(result.stdout)

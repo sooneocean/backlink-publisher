@@ -13,8 +13,10 @@ from flask import Blueprint, request, session
 from webui_store import history_store as _history_store
 
 from ..helpers import (
+    _REPO_ROOT,
     _parse_publish_results,
     _render,
+    _rewrite_cli_cmd,
     get_main_domain,
     run_pipe,
 )
@@ -83,12 +85,16 @@ def ce_batch():
         return _render('index.html', error=f"验证阶段失败: {e}", batch_tab=True,
                        batch_urls=urls_text, config={})
 
+    pub_cmd, pub_env = _rewrite_cli_cmd(
+        ['publish-backlinks', '--platform', platform, '--mode', publish_mode]
+    )
     pub_result = subprocess.run(
-        ['publish-backlinks', '--platform', platform, '--mode', publish_mode],
+        pub_cmd,
         input=val_res['stdout'],
         capture_output=True,
         text=True,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))) or os.getcwd(),
+        cwd=_REPO_ROOT or os.getcwd(),
+        env=pub_env,
     )
     publish_results = _parse_publish_results(pub_result.stdout)
 

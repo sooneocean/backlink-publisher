@@ -545,15 +545,50 @@ def _draft_tab_extra() -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+_CLI_MODULES = {
+    'publish-backlinks': 'backlink_publisher.cli.publish_backlinks',
+    'plan-backlinks': 'backlink_publisher.cli.plan_backlinks',
+    'validate-backlinks': 'backlink_publisher.cli.validate_backlinks',
+    'footprint': 'backlink_publisher.cli.footprint',
+    'report-anchors': 'backlink_publisher.cli.report_anchors',
+}
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_SRC_DIR = os.path.join(_REPO_ROOT, 'src')
+
+
+def _rewrite_cli_cmd(cmd):
+    """Rewrite bare CLI command (publish-backlinks, plan-backlinks, ...) to
+    ``sys.executable -m <module>`` and inject ``PYTHONPATH=./src``.
+
+    Why: the installed entry-point shims (pyenv shim, .venv/bin/*) can point
+    at a stale editable-install path that no longer exists. Running via the
+    current interpreter + repo src/ bypasses that and is hermetic.
+    """
+    if not cmd:
+        return cmd, None
+    module = _CLI_MODULES.get(cmd[0])
+    if module is None:
+        return cmd, None
+    new_cmd = [sys.executable, '-m', module, *cmd[1:]]
+    env = os.environ.copy()
+    env['PYTHONPATH'] = _SRC_DIR + (
+        os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else ''
+    )
+    return new_cmd, env
+
+
 def run_pipe(cmd, stdin):
     """Run a pipeline command."""
     import subprocess
+    new_cmd, env = _rewrite_cli_cmd(cmd)
     result = subprocess.run(
-        cmd,
+        new_cmd,
         input=stdin,
         capture_output=True,
         text=True,
-        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))) or os.getcwd(),
+        cwd=_REPO_ROOT or os.getcwd(),
+        env=env,
     )
     if result.returncode != 0:
         raise Exception(result.stderr or f"Exit code: {result.returncode}")
