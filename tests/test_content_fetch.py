@@ -9,6 +9,12 @@ These tests mock ``urlopen`` at the consumer reference
 scenarios. The autouse ``disable_socket()`` fixture in ``tests/conftest.py``
 ensures any path that escapes the mock would hard-fail rather than touch the
 network.
+
+The module-level ``pytestmark = pytest.mark.real_content_fetch`` opts every
+test in this file out of the conftest ``_mock_content_fetch`` autouse
+default-pass mock so the production ``verify_urls_batch`` /
+``verify_url_has_content`` code paths actually run. Marker is registered in
+``pyproject.toml [tool.pytest.ini_options] markers``.
 """
 
 from __future__ import annotations
@@ -26,6 +32,8 @@ from backlink_publisher.content_fetch import (
     verify_url_has_content,
     verify_urls_batch,
 )
+
+pytestmark = pytest.mark.real_content_fetch
 
 
 @pytest.fixture(autouse=True)

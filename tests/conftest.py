@@ -83,21 +83,24 @@ def _mock_content_fetch(request, monkeypatch: pytest.MonkeyPatch) -> None:
     each test so cache state never leaks across scenarios.
 
     Tests in ``tests/test_content_fetch.py`` exercise the real functions
-    against mocked ``urlopen`` — this fixture skips patching for that file
-    so its assertions hit the production code path. Other test files that
-    want to drive specific gate-failure paths re-patch
-    ``backlink_publisher.content_fetch.verify_urls_batch`` within their own
-    scope (last-wins monkeypatch semantics).
+    against mocked ``urlopen`` — that file declares ``pytestmark =
+    pytest.mark.real_content_fetch`` at module level, and this fixture
+    honors the marker to skip patching so the assertions hit the production
+    code path. Other test files that want to drive specific gate-failure
+    paths re-patch ``backlink_publisher.content_fetch.verify_urls_batch``
+    within their own scope (last-wins monkeypatch semantics).
+
+    Mirrors the ``real_ssrf_check`` opt-in pattern. Marker registration is
+    in ``pyproject.toml [tool.pytest.ini_options] markers``.
     """
     # Reset cache state up front so previous tests don't contaminate this one.
     from backlink_publisher import content_fetch as _content_fetch
 
     _content_fetch.reset_cache()
 
-    # The content_fetch unit tests exercise the real functions against a
-    # mocked urlopen and must not see the default-pass mock.
-    test_path = str(request.node.fspath)
-    if "test_content_fetch.py" in test_path:
+    # Tests marked ``real_content_fetch`` exercise the real functions
+    # against mocked ``urlopen`` and must not see the default-pass mock.
+    if request.node.get_closest_marker("real_content_fetch"):
         return
 
     def _ok_batch(urls, max_workers=5):
