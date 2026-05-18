@@ -211,11 +211,18 @@ def test_plan_no_synthesized_categories_url_without_config():
     gate then rejected the row with HTTP 404 on sites that don't serve that
     path. Post-fix: with no config, the synthesized category/detail link is
     omitted from the payload entirely.
+
+    Uses ``https://example.com`` as the seed domain to exercise the long-form
+    ``_build_links`` path that the regression targets. A configured domain
+    (with ``[targets."<domain>"]`` in the operator's config) would route to
+    ``_plan_work_themed_row`` instead, bypassing ``_build_links`` and
+    producing zero payloads in CI where ``work_scraper`` can't reach the live
+    site. Test contract: the *domain has no config* — that's the whole point.
     """
     for mode in ("B", "C"):
         seed = {
-            "target_url": "https://51acgs.com/",
-            "main_domain": "https://51acgs.com/",
+            "target_url": "https://example.com/",
+            "main_domain": "https://example.com/",
             "language": "zh-CN",
             "platform": "blogger",
             "url_mode": mode,
@@ -226,10 +233,10 @@ def test_plan_no_synthesized_categories_url_without_config():
         payload = json.loads(stdout.strip())
         urls = [link["url"] for link in payload["links"]]
         # The fictional paths must not appear without config support.
-        assert "https://51acgs.com/categories" not in urls, (
+        assert "https://example.com/categories" not in urls, (
             f"Mode {mode} re-introduced hardcoded /categories link: {urls}"
         )
-        assert "https://51acgs.com/detail" not in urls, (
+        assert "https://example.com/detail" not in urls, (
             f"Mode {mode} re-introduced hardcoded /detail link: {urls}"
         )
         # Same shape check on the rendered markdown — no fictional URL leaks
