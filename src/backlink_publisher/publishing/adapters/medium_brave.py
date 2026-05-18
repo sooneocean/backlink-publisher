@@ -20,7 +20,7 @@ from typing import Any
 from backlink_publisher.config import Config
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
 from backlink_publisher._util.logger import opencli_logger as log
-from backlink_publisher._util.markdown import render_to_html
+from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
 from .link_attr_verifier import verify_link_attributes
@@ -254,7 +254,12 @@ class MediumBraveAdapter(Publisher):
         article_id = payload.get("id", str(uuid.uuid4())[:8])
         title = payload.get("title", "")
         content_markdown = payload.get("content_markdown", "")
-        content_html = render_to_html(content_markdown)
+        # Plan 2026-05-18-006 Unit 5 R9: medium platform-tier (b) —
+        # AppleScript-driven Brave WYSIWYG paste sanitize is lossy, so helper
+        # renders content_markdown even when content_html is supplied.
+        # Validate-time gate (Unit 6) rejects content_html-only medium rows
+        # before reaching this publish path; this is defense in depth.
+        content_html = extract_publish_html(payload, "medium")
 
         log.info(_json_log(adapter="medium-brave", phase="start", id=article_id))
 

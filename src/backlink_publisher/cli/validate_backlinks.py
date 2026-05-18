@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import sys
+import unicodedata
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from typing import Any
+from urllib.parse import urlsplit
 
 from .. import config_echo, errors
 from backlink_publisher.anchor.lang import check_anchor_language
@@ -15,12 +18,15 @@ from backlink_publisher._util.jsonl import read_jsonl, write_jsonl
 from backlink_publisher.linkcheck.language import (
     SUPPORTED_LANGUAGES,
     detect_language,
+    detect_language_from_html,
+    detect_language_from_markdown,
     language_matches,
 )
 from backlink_publisher.linkcheck.http import check_urls_strict
+from backlink_publisher.publishing.content_negotiation import route_tier_for
 from backlink_publisher._util.logger import validate_logger
 from backlink_publisher._util.markdown import validate_markdown_convertible
-from ..schema import SUPPORTED_PLATFORMS, validate_output_payload
+from ..schema import SUPPORTED_PLATFORMS, _is_field_present, validate_output_payload
 
 
 def _resolve_branded_pool(row: dict[str, Any], config: Config | None) -> list[str]:
@@ -49,6 +55,183 @@ def _resolve_branded_pool(row: dict[str, Any], config: Config | None) -> list[st
     return list(get_anchor_pool_v2(config, main_domain, "home", "branded"))
 
 
+class _HrefCollector(HTMLParser):
+    """Stdlib HTML parser subclass that collects ``<a href>`` attribute values.
+
+    Plan 2026-05-18-006 Unit 6 R3 host-parse + Threat Model anti-injection:
+    extract real href values from ``content_html`` so the main_domain check
+    cannot be bypassed by placing ``main_domain`` inside ``data-*`` attributes,
+    HTML comments, or non-linking text nodes.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hrefs: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        for name, value in attrs:
+            if name.lower() == "href" and value is not None:
+                self.hrefs.append(value)
+
+
+def _extract_hrefs_from_html(html: str) -> list[str]:
+    """Return a list of all ``<a href>`` attribute values in ``html``.
+
+    Stdlib ``html.parser`` is permissive about malformed HTML; the validate
+    gate's job is to inspect the hrefs the parser actually finds, not to
+    validate HTML well-formedness.
+    """
+    if not isinstance(html, str) or not html.strip():
+        return []
+    collector = _HrefCollector()
+    try:
+        collector.feed(html)
+        collector.close()
+    except Exception:  # noqa: BLE001 — parser may raise on extreme inputs
+        return collector.hrefs
+    return collector.hrefs
+
+
+def _check_main_domain_in_html(html: str, main_domain_normalized: str) -> bool:
+    """Plan 2026-05-18-006 Unit 6 R3: verify ``main_domain_normalized`` is the
+    host of at least one ``<a href>`` link in ``html``. Closes the
+    subdomain-spoof / userinfo-injection / javascript-href / data-href /
+    Punycode-spoof attack surface.
+
+    Implementation contract (R3 6-step):
+    1. Parse hrefs via stdlib :class:`HTMLParser` (collected in
+       :class:`_HrefCollector`).
+    2. ``urlsplit`` each href; ValueError → treat as non-matching.
+    3. Pre-IDN-encode rejects: scheme.lower() not in {http, https};
+       userinfo (username / password) set; hostname None or empty;
+       hostname contains ``:`` (IPv6 literals — out of v1); whitespace
+       or control codepoints in hostname.
+    4. IDN-encode hostname to ASCII punycode via stdlib ``encodings.idna``
+       (the encode-failure-on-overflow safety net for label > 63 octets).
+    5. Match rule: ``hostname_ascii == main_domain_normalized`` OR
+       ``hostname_ascii.endswith("." + main_domain_normalized)``. The
+       leading dot prevents ``evil-main-domain.com`` matching
+       ``main-domain.com`` as a suffix.
+    6. Return True if any href matches; else False.
+
+    ``main_domain_normalized`` is the punycode-form host produced by
+    :func:`backlink_publisher.schema._normalize_main_domain` at Unit 1
+    schema-time, stored on the row as ``main_domain_normalized``.
+    """
+    if not main_domain_normalized:
+        return False
+    target_host = main_domain_normalized.strip().lower()
+    target_suffix = "." + target_host
+
+    for href in _extract_hrefs_from_html(html):
+        try:
+            parsed = urlsplit(href.strip())
+        except ValueError:
+            continue
+
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            continue
+
+        # Userinfo (username/password) reject — closes
+        # `https://main-domain.com@evil.com/` injection
+        if parsed.username or parsed.password:
+            continue
+
+        host = parsed.hostname
+        if host is None or host == "":
+            continue
+
+        # IPv6 detection — urlsplit strips brackets, so check for colon
+        if ":" in host:
+            continue
+
+        # Whitespace / control codepoints in host
+        if any(c.isspace() or unicodedata.category(c).startswith("C") for c in host):
+            continue
+
+        try:
+            hostname_ascii = host.encode("idna").decode("ascii").lower()
+        except UnicodeError:
+            # Label-length overflow / reserved chars — treat as non-matching
+            continue
+
+        if hostname_ascii == target_host or hostname_ascii.endswith(target_suffix):
+            return True
+
+    return False
+
+
+def _row_field_text(row: dict[str, Any], field: str) -> str:
+    """Read a row field as a string, treating non-strings as empty."""
+    value = row.get(field, "")
+    return value if isinstance(value, str) else ""
+
+
+def _nfc_normalize_in_place(row: dict[str, Any]) -> None:
+    """Plan 2026-05-18-006 Unit 6 R13 + Hangul Jamo deferred-question
+    resolution: apply NFC normalization to row-resident string fields at
+    validate-time entry.
+
+    Closes the macOS-NFD risk that splits Hangul Syllables into Jamo
+    codepoints outside ``U+AC00..U+D7AF`` and defeats the ko codepoint
+    short-circuit. ``zh-CN`` / ``en`` / ``ru`` paths unaffected because
+    their codepoint ranges don't decompose.
+
+    Row-level fields normalized: ``content_markdown``, ``content_html``,
+    and each ``link["anchor"]``. ``branded_pool`` / ``anchor_keywords``
+    are config-resident (not on the row) and get NFC at Unit 7 config-load.
+    """
+    for field in ("content_markdown", "content_html"):
+        value = row.get(field)
+        if isinstance(value, str):
+            row[field] = unicodedata.normalize("NFC", value)
+
+    links = row.get("links")
+    if isinstance(links, list):
+        for link in links:
+            if isinstance(link, dict) and isinstance(link.get("anchor"), str):
+                link["anchor"] = unicodedata.normalize("NFC", link["anchor"])
+
+
+def _detect_row_body_language(row: dict[str, Any]) -> tuple[str, str]:
+    """Plan 2026-05-18-006 Unit 6 R15: dispatch body-language detection by
+    source-field presence. Returns ``(detected, source_used)`` where
+    ``source_used`` is one of ``"markdown"``, ``"html"``, ``"both-match"``,
+    ``"both-mismatch:<md>/<html>"``, or ``"absent"``.
+
+    Field-presence semantics: a field is present iff non-empty + non-whitespace
+    string (see ``schema._is_field_present``). Whitespace-only strings are
+    treated as absent for dispatch.
+
+    Both-present rule (R3 / R15 strict mode): run both detectors; if they
+    disagree, return ``"unknown"`` and a mismatch tag so the caller can emit
+    a clear validation error. If they agree, return the agreed language.
+    """
+    md = row.get("content_markdown")
+    html = row.get("content_html")
+    md_present = _is_field_present(md)
+    html_present = _is_field_present(html)
+
+    if md_present and html_present:
+        md_lang = detect_language_from_markdown(md)
+        html_lang = detect_language_from_html(html)
+        if md_lang == html_lang:
+            return md_lang, "both-match"
+        # Disagreement: surface as "unknown" so language_matches's escape
+        # valve doesn't accidentally pass; the caller separately emits the
+        # mismatch error using the explicit tag.
+        return "unknown", f"both-mismatch:md={md_lang}/html={html_lang}"
+
+    if md_present:
+        return detect_language_from_markdown(md), "markdown"
+    if html_present:
+        return detect_language_from_html(html), "html"
+    return "unknown", "absent"
+
+
 def _enhance_payload(row: dict[str, Any], config: Config | None = None) -> dict[str, Any]:
     """Attach a ``validation`` block; populate errors[] on R2/R4/R5 failure.
 
@@ -60,6 +243,11 @@ def _enhance_payload(row: dict[str, Any], config: Config | None = None) -> dict[
     errors_list: list[str] = []
     warnings_list: list[str] = []
 
+    # Plan 2026-05-18-006 Unit 6: NFC-normalize row-resident string fields
+    # before any codepoint-dependent gate runs. Closes the macOS-NFD risk
+    # that splits Hangul Syllables outside U+AC00..U+D7AF.
+    _nfc_normalize_in_place(row)
+
     requested = row.get("language", "")
 
     # R3 enum guard — non-enum row.language skips R2/R4 with a WARN.
@@ -69,10 +257,19 @@ def _enhance_payload(row: dict[str, Any], config: Config | None = None) -> dict[
             f"{sorted(SUPPORTED_LANGUAGES)}; skipping language and anchor gates"
         )
     else:
-        # R2: body language match.
-        text = row.get("content_markdown", "")
-        detected = detect_language(text)
-        if not language_matches(detected, requested):
+        # R2 / R15: body-language match. Dispatch on (content_markdown,
+        # content_html) presence — supports HTML-source rows (Unit 1 R2)
+        # without losing the body-language gate (pass-1 feasibility P1).
+        detected, source_used = _detect_row_body_language(row)
+        if source_used.startswith("both-mismatch:"):
+            # Explicit dual-source disagreement — surface a precise error.
+            tag = source_used.removeprefix("both-mismatch:")
+            errors_list.append(
+                f"body language mismatch between content_markdown and "
+                f"content_html ({tag}); operator must use single-source "
+                f"workflow or update both fields"
+            )
+        elif not language_matches(detected, requested):
             errors_list.append(
                 f"body language '{detected}' does not match requested '{requested}'"
             )
@@ -86,6 +283,32 @@ def _enhance_payload(row: dict[str, Any], config: Config | None = None) -> dict[
             if not ok:
                 errors_list.append(
                     f"link[{idx}] anchor {anchor!r} failed: {reason}"
+                )
+
+    # Plan 2026-05-18-006 Unit 6 R3: HTML host-parse main_domain check.
+    # Runs only when content_html is present (the markdown substring check
+    # at schema-time already validated MD-only and both-fields rows). For
+    # HTML rows, the substring check is unsafe (data-* attribute injection,
+    # comment placement) so we run the attribute-aware host-parse here.
+    html_present = _is_field_present(row.get("content_html"))
+    if html_present:
+        main_domain_normalized = row.get("main_domain_normalized", "")
+        if not isinstance(main_domain_normalized, str) or not main_domain_normalized:
+            # Schema-time normalization should have populated this; if it
+            # didn't, validation can't proceed for the HTML host-parse path.
+            errors_list.append(
+                "content_html present but main_domain_normalized missing — "
+                "schema-time normalization should have populated it"
+            )
+        else:
+            host_part_match = _check_main_domain_in_html(
+                row["content_html"], main_domain_normalized
+            )
+            if not host_part_match:
+                errors_list.append(
+                    f"main_domain '{main_domain_normalized}' is not the host "
+                    f"of any <a href> in content_html (substring matches in "
+                    f"comments / attributes do not count)"
                 )
 
     row["validation"] = {
@@ -180,6 +403,20 @@ def main(argv: list[str] | None = None) -> None:
             all_urls.add(row.get("main_domain", ""))
             for link in row.get("links", []):
                 all_urls.add(link.get("url", ""))
+            # Plan 2026-05-18-006 Unit 6 + pass-2 security P1: also include
+            # <a href> URLs from content_html in the reachability scan.
+            # Closes the symmetric-coverage gap between content_markdown
+            # (URLs found inline) and content_html sources, so a HTML row
+            # can't ship dead/malicious-redirect links that a markdown row
+            # would have caught.
+            html = row.get("content_html")
+            if isinstance(html, str) and html.strip():
+                for href in _extract_hrefs_from_html(html):
+                    href = href.strip()
+                    # Only http(s) URLs are reachable; other schemes (data:,
+                    # javascript:, etc.) are rejected by R3 elsewhere.
+                    if href.startswith(("http://", "https://")):
+                        all_urls.add(href)
         all_urls.discard("")
 
         if all_urls:
@@ -203,6 +440,24 @@ def main(argv: list[str] | None = None) -> None:
             all_errors.append(
                 f"row {idx}: platform 'linkedin' is not supported. "
                 f"Supported: {', '.join(sorted(SUPPORTED_PLATFORMS))}"
+            )
+            platform_drops.append(idx)
+            continue
+
+        # Plan 2026-05-18-006 Unit 6 R10: tier (b)/(c) content_html-only
+        # gate. Runs as the next check after the platform-enum guard. A
+        # content_html-only row destined for a platform whose route is not
+        # tier (a) is rejected here — closes the silent-empty-publish risk
+        # where the adapter would receive an empty content_markdown.
+        if (
+            _is_field_present(row.get("content_html"))
+            and not _is_field_present(row.get("content_markdown"))
+            and route_tier_for(platform) != "a"
+        ):
+            all_errors.append(
+                f"row {idx}: platform '{platform}' does not yet accept "
+                f"content_html (only markdown). Provide content_markdown or "
+                f"wait for adapter retrofit."
             )
             platform_drops.append(idx)
             continue

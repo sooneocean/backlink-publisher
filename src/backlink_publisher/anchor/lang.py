@@ -33,6 +33,11 @@ _CJK_BMP_START, _CJK_BMP_END = 0x4E00, 0x9FFF
 #: Cyrillic block.
 _CYR_START, _CYR_END = 0x0400, 0x04FF
 
+#: Hangul Syllables block. Jamo (U+1100..U+11FF) deferred to follow-up
+#: (plan 2026-05-18-006 Unit 3 §Scope — widen on first real-world
+#: false-negative).
+_HANGUL_BMP_START, _HANGUL_BMP_END = 0xAC00, 0xD7AF
+
 #: Link kinds whose anchor text is subject to R4. Anything else is exempt.
 _GATED_KINDS = frozenset({"main_domain", "target"})
 
@@ -47,6 +52,10 @@ def _has_cyrillic(text: str) -> bool:
 
 def _has_latin_letter(text: str) -> bool:
     return any(("A" <= c <= "Z") or ("a" <= c <= "z") for c in text)
+
+
+def _has_hangul(text: str) -> bool:
+    return any(_HANGUL_BMP_START <= ord(c) <= _HANGUL_BMP_END for c in text)
 
 
 def _check_zh_cn(anchor: str) -> tuple[bool, str | None]:
@@ -71,10 +80,32 @@ def _check_en(anchor: str) -> tuple[bool, str | None]:
     return True, None
 
 
+def _check_ko(anchor: str) -> tuple[bool, str | None]:
+    """Plan 2026-05-18-006 Unit 3 R7 — ko anchor strict-mirror of en.
+
+    Required: at least one Hangul Syllable codepoint. Forbidden: any CJK
+    BMP codepoint (rejects mixed-script Hanja ko anchors like ``"金正恩"``),
+    any Cyrillic codepoint. Latin letters / digits / punctuation are
+    allowed (mixed ko + Latin brand mentions like ``"Apple 한국"`` pass).
+
+    Mixed-script proper nouns (``"金正恩 인터뷰"``, ``"首爾"``) go via the
+    branded_pool exemption at the call site (see module docstring step 2);
+    Unit 3's rule does not modify the existing exemption order.
+    """
+    if not _has_hangul(anchor):
+        return False, "anchor missing Hangul codepoint"
+    if _has_cjk(anchor):
+        return False, "ko anchor contains CJK codepoint"
+    if _has_cyrillic(anchor):
+        return False, "ko anchor contains Cyrillic codepoint"
+    return True, None
+
+
 _LANGUAGE_RULES = {
     "zh-CN": _check_zh_cn,
     "ru": _check_ru,
     "en": _check_en,
+    "ko": _check_ko,
 }
 
 

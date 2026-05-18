@@ -275,7 +275,9 @@ def test_language_matches_unknown_escape_valve(known):
 
 @given(
     supported=st.sampled_from(sorted(SUPPORTED_LANGUAGES)),
-    out_of_enum=st.sampled_from(["zh-Hant", "ja", "de", "fr", "ko", "", "xx"]),
+    # Plan 2026-05-18-006 Unit 1: ko added to SUPPORTED_LANGUAGES; removed
+    # from the out-of-enum sample list. ja / zh-Hant / de / fr / xx remain.
+    out_of_enum=st.sampled_from(["zh-Hant", "ja", "de", "fr", "", "xx"]),
 )
 def test_language_matches_out_of_enum_treated_as_unknown(supported, out_of_enum):
     """Property: out-of-enum lang values are coerced to ``"unknown"`` semantics.

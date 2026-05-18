@@ -9,7 +9,7 @@ from typing import Any
 from backlink_publisher.config import Config, BloggerOAuthConfig, resolve_blog_id, load_blogger_token, save_blogger_token
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
 from backlink_publisher._util.logger import opencli_logger as log
-from backlink_publisher._util.markdown import render_to_html
+from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
 from .retry import RETRYABLE_HTTP_STATUSES, retry_transient_call
@@ -127,9 +127,15 @@ class BloggerAPIAdapter(Publisher):
             import google.auth.transport.requests as google_requests
 
             service = build("blogger", "v3", credentials=creds)
+            # Plan 2026-05-18-006 Unit 5 R9: extract_publish_html selects the
+            # source format per platform tier. blogger is tier (a) — accepts
+            # operator-supplied content_html directly. Sanitize is delegated
+            # to Google Blogger's server-side filter (locked by
+            # tests/test_adapter_blogger_api_xss_contract.py). If
+            # content_html is absent, falls back to rendering content_markdown.
             body = {
                 "title": payload.get("title", ""),
-                "content": render_to_html(payload.get("content_markdown", "")),
+                "content": extract_publish_html(payload, "blogger"),
                 "labels": payload.get("tags", [])[:20],
             }
             is_draft = mode == "draft"

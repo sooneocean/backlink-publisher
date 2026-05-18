@@ -989,7 +989,11 @@ def _plan_zh_short_row(
             # Site genuinely lacks a non-home category — caller falls back.
             return None
 
-        # Resolve main link.
+        # Resolve main link. Plan 2026-05-18-006 Unit 4 R13: plumb
+        # row["language"] through to the language-aware filter dispatch.
+        # In v1 this is always "zh-CN" (scheduler ko activation reverted
+        # per pass-2 P0); the plumbing is preparatory for the follow-up
+        # that ships ko-localized short-form templates.
         main_anchor = anchor_resolver.resolve_anchor(
             url_category="home",
             anchor_type=decision.main_link_anchor_type,
@@ -1001,6 +1005,7 @@ def _plan_zh_short_row(
             recent_texts=recent,
             provider=llm_provider,
             rng=rng,
+            language=row["language"],
         )
         if main_anchor is None:
             last_errors = ["main_anchor_resolution_failed"]
@@ -1026,6 +1031,7 @@ def _plan_zh_short_row(
                 recent_texts=running_recent,
                 provider=llm_provider,
                 rng=rng,
+                language=row["language"],
             )
             if sec_anchor is None:
                 last_errors = ["secondary_anchor_resolution_failed"]
@@ -1079,7 +1085,13 @@ def _plan_zh_short_row(
         anchor_profile.load_profile(main_domain), n=20,
     )
     branded_pool = get_anchor_pool_v2(config, main_domain, "home", "branded")
-    branded_clean_all = [w for w in branded_pool if anchor_resolver._passes_filters(w)]
+    # Plan 2026-05-18-006 Unit 4 R13: plumb row["language"] to the
+    # language-aware filter. v1 always "zh-CN" (scheduler ko activation
+    # reverted); preparatory for the follow-up that adds ko templates.
+    branded_clean_all = [
+        w for w in branded_pool
+        if anchor_resolver._passes_filters(w, row["language"])
+    ]
     branded_clean = [w for w in branded_clean_all if w not in recent_for_dedup]
     if not branded_clean:
         # Recent-aware filtering exhausted the pool — relax dedup before
@@ -1491,7 +1503,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--default-language",
         default="zh-CN",
-        choices=["zh-CN", "en", "ru"],
+        choices=["zh-CN", "en", "ru", "ko"],
         help="Language for --from-csv / --from-sitemap rows (default: zh-CN)",
     )
     parser.add_argument(

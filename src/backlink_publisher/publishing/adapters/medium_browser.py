@@ -16,7 +16,7 @@ from typing import Any
 from backlink_publisher.config import Config
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
 from backlink_publisher._util.logger import opencli_logger as log
-from backlink_publisher._util.markdown import render_to_html
+from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
 from .link_attr_verifier import verify_link_attributes
@@ -69,7 +69,11 @@ class MediumBrowserAdapter(Publisher):
         )
         user_data_dir.mkdir(parents=True, exist_ok=True)
 
-        html_content = render_to_html(payload.get("content_markdown", ""))
+        # Plan 2026-05-18-006 Unit 5 R9: medium is platform-tier (b)
+        # (browser-paste WYSIWYG sanitize is lossy) — helper renders MD even
+        # when content_html present. Defense in depth: validate-time gate
+        # in Unit 6 rejects content_html-only medium rows before publish.
+        html_content = extract_publish_html(payload, "medium")
         title = payload.get("title", "")
         tags = payload.get("tags", [])[:5]
 

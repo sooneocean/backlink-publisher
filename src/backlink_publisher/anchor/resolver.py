@@ -23,6 +23,8 @@ from __future__ import annotations
 import logging
 import random
 import re
+import unicodedata
+from typing import Callable
 
 from backlink_publisher.publishing.adapters.llm_anchor_provider import (
     LLMAnchorRequest,
@@ -77,9 +79,80 @@ _UNSAFE_ANCHOR_CHARS = re.compile(
 # Chinese anchor text.
 _CJK_CHAR = re.compile(r"[一-鿿]")
 
+# Hangul Syllables block — used by the ko branch of _passes_filters. Plan
+# 2026-05-18-006 Unit 4 R13: only Syllables (U+AC00..U+D7AF); Jamo
+# (U+1100..U+11FF) deferred to a follow-up brainstorm.
+_HANGUL_BMP_START, _HANGUL_BMP_END = 0xAC00, 0xD7AF
+
 _MIN_ANCHOR_LEN: int = 2
 _MAX_ANCHOR_LEN: int = 8
 _MIN_CJK_RATIO: float = 0.5
+
+#: Hangul ratio threshold for the ko branch. Lower than zh-CN's 0.5 because
+#: real-world ko anchors normatively mix Latin brand names (Apple, iPhone)
+#: and the strict 0.5 threshold would false-reject ``"Apple 한국 출시"``
+#: (Hangul ratio ≈ 0.30 over L+M denominator). Uncalibrated v1 default;
+#: corpus calibration spike deferred (plan 2026-05-18-006
+#: Deferred-to-Implementation).
+# TODO(ko-corpus-calibration): threshold=0.30 unvalidated against real ko
+# anchor corpora; revise after spike runs against ~50 Naver Blog / Tistory
+# samples (deferred to post-merge per plan 2026-05-18-006).
+_MIN_KO_HANGUL_RATIO: float = 0.30
+
+
+def _formal_denominator(text: str) -> int:
+    """Count codepoints belonging to a writing system (Unicode L / M categories).
+
+    Plan 2026-05-18-006 Unit 4 R13 — shared with the R5 codepoint
+    short-circuit in :mod:`backlink_publisher.linkcheck.language`. Excludes
+    whitespace, digits, punctuation, and control codepoints so the per-script
+    ratio reflects real text density, not noise.
+    """
+    return sum(1 for c in text if unicodedata.category(c)[0] in ("L", "M"))
+
+
+def _passes_zh_cn_ratio(text: str) -> bool:
+    """Existing zh-CN CJK-ratio check — bit-exact preserved (R13).
+
+    Denominator is ``len(text)`` (includes whitespace, digits, punctuation)
+    NOT the R5 formal denominator. This preserves the legacy behavior locked
+    in by every existing zh-CN ``_passes_filters`` test on the corpus.
+    """
+    cjk_count = len(_CJK_CHAR.findall(text))
+    return cjk_count / len(text) >= _MIN_CJK_RATIO
+
+
+def _passes_ko_ratio(text: str) -> bool:
+    """ko Hangul-ratio check (plan 2026-05-18-006 Unit 4 R13).
+
+    Applies NFC normalization at entry — macOS NFD-decomposed Hangul defeats
+    the ``U+AC00..U+D7AF`` range check by splitting syllables into Jamo
+    codepoints outside the BMP Syllables block. Denominator is the R5 formal
+    denominator (Unicode L+M categories) so Latin/digit/punctuation noise
+    doesn't inflate the divisor.
+
+    **Preparatory-only in v1**: no production caller invokes ``_passes_filters``
+    with ``language="ko"`` because Unit 7's scheduler activation is reverted
+    (pass-2 P0). Exercised exclusively by unit tests until ko-localized
+    short-form templates ship.
+    """
+    text = unicodedata.normalize("NFC", text)
+    denom = _formal_denominator(text)
+    if denom == 0:
+        return False
+    hangul_count = sum(1 for c in text if _HANGUL_BMP_START <= ord(c) <= _HANGUL_BMP_END)
+    return hangul_count / denom >= _MIN_KO_HANGUL_RATIO
+
+
+#: Per-language ratio rules. Mirrors :data:`anchor_lang._LANGUAGE_RULES` —
+#: same ``language → callable`` shape. Cross-extend both registries when
+#: adding a new language. Currently only zh-CN + ko (Unit 4 v1 scope); ru/en
+#: not in v1 (pass-2 scope-guardian: adding ru/en filter dispatch is scope
+#: creep beyond ko-first).
+_RATIO_RULES: dict[str, Callable[[str], bool]] = {
+    "zh-CN": _passes_zh_cn_ratio,
+    "ko": _passes_ko_ratio,
+}
 
 
 def resolve_anchor(
@@ -94,6 +167,7 @@ def resolve_anchor(
     recent_texts: list[str],
     provider: OpenAICompatibleProvider | None,
     rng: random.Random | None = None,
+    language: str = "zh-CN",
 ) -> str | None:
     """Pick one anchor text for one link slot. ``None`` means "exhausted".
 
@@ -105,13 +179,19 @@ def resolve_anchor(
 
     ``rng`` is dependency-injected to make tests reproducible; production
     callers can leave it ``None`` to use module-level randomness.
+
+    ``language`` (plan 2026-05-18-006 Unit 4 R13) selects the per-language
+    ratio rule in :func:`_passes_filters`. Default ``"zh-CN"`` preserves
+    legacy single-arg callers. ko routing is preparatory-only in v1.
     """
     rng = rng or random.Random()
     recent_set = set(recent_texts)
 
     # 1. Try the static pool first.
     pool = get_anchor_pool_v2(config, main_domain, url_category, anchor_type)
-    pool_candidates = [w for w in pool if _passes_filters(w) and w not in recent_set]
+    pool_candidates = [
+        w for w in pool if _passes_filters(w, language) and w not in recent_set
+    ]
     if pool_candidates:
         return rng.choice(pool_candidates)
 
@@ -129,22 +209,35 @@ def resolve_anchor(
     )
     candidates = provider.generate_candidates(request)
     for c in candidates:
-        if _passes_filters(c) and c not in recent_set:
+        if _passes_filters(c, language) and c not in recent_set:
             return c
     return None
 
 
-def _passes_filters(text: str) -> bool:
+def _passes_filters(text: str, language: str = "zh-CN") -> bool:
     """Return True iff ``text`` is a publishable anchor.
 
-    Four checks, in order of cheapness:
+    Five checks, in order of cheapness:
+    - ``text`` must be a string
     - Length must be 2-8 characters (brainstorm R25)
     - Must not be in the FORBIDDEN_ANCHOR_TEXTS deny-list
     - Must contain none of the unsafe character classes
-    - Must be predominantly CJK Unified Ideographs (≥50% by char count)
+    - Language-specific ratio check via :data:`_RATIO_RULES` dispatch
+
+    Plan 2026-05-18-006 Unit 4 R13: ``language`` defaults to ``"zh-CN"`` so
+    every existing single-arg call site preserves bit-exact behavior. Other
+    languages dispatch through :data:`_RATIO_RULES`; languages not in the
+    dict (ru/en in v1) skip the ratio check entirely — the language baseline
+    checks (length, deny-list, unsafe chars) still apply but no script-ratio
+    filter runs. ko is the only non-zh-CN entry in v1; the ko branch is
+    preparatory-only (no production caller per pass-2 P0 revert of scheduler
+    activation).
     """
     if not isinstance(text, str):
         return False
+    # Normalize language arg defensively — production callers pass canonical
+    # strings but tests/fixtures may include accidental whitespace.
+    language = language.strip() if language else "zh-CN"
     length = len(text)
     if length < _MIN_ANCHOR_LEN or length > _MAX_ANCHOR_LEN:
         return False
@@ -152,10 +245,14 @@ def _passes_filters(text: str) -> bool:
         return False
     if _UNSAFE_ANCHOR_CHARS.search(text):
         return False
-    cjk_count = len(_CJK_CHAR.findall(text))
-    if cjk_count / length < _MIN_CJK_RATIO:
-        return False
-    return True
+    # Language-specific ratio dispatch. Languages absent from _RATIO_RULES
+    # (ru/en in v1) skip the ratio check — the baseline checks above still
+    # apply. Pre-Unit-4 single-arg callers default to "zh-CN" and exercise
+    # the existing CJK ratio path unchanged.
+    ratio_check = _RATIO_RULES.get(language)
+    if ratio_check is None:
+        return True
+    return ratio_check(text)
 
 
 # ─── Work-themed anchor filter (Plan 2026-05-13-004 Unit 4) ─────────────────

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
+
+from .linkcheck.language import SUPPORTED_LANGUAGES
 
 INPUT_SCHEMA_FIELDS = {
     "target_url": str,
@@ -22,7 +25,13 @@ INPUT_OPTIONAL_FIELDS = {
     "custom_tags": str,
 }
 
-SUPPORTED_LANGUAGES = {"zh-CN", "en", "ru"}
+#: Re-export from :mod:`backlink_publisher.linkcheck.language` for back-compat —
+#: the canonical source is :data:`linkcheck.language.SUPPORTED_LANGUAGES`. Plan
+#: 2026-05-18-006 Unit 1 de-duplicated the previous parallel ``set`` literal.
+#: (Post-Plan-2026-05-18-001 Unit 6 packaging refactor: language_check.py
+#: moved to linkcheck/language.py; legacy import path still works via the
+#: MetaPathFinder shim in :mod:`backlink_publisher.__init__`.)
+__all__ = ["SUPPORTED_LANGUAGES"]
 SUPPORTED_PLATFORMS = {"blogger", "medium"}
 URL_MODES = {"A", "B", "C"}
 PUBLISH_MODES = {"draft", "publish"}
@@ -40,18 +49,126 @@ OUTPUT_REQUIRED_FIELDS = {
     "slug": str,
     "excerpt": str,
     "tags": list,
-    "content_markdown": str,
     "links": list,
     "seo": dict,
+}
+
+#: Output fields that are individually optional but appear in groups where at
+#: least one must be present. Plan 2026-05-18-006 R2 / Unit 1 — ``content_html``
+#: was added as a peer to ``content_markdown``; rows must carry at least one.
+#: Future Telegraph node format can extend the existing group rather than
+#: requiring a new top-level structure (extensibility per arch-strategist).
+OUTPUT_ONE_OF_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("content_markdown", "content_html"),
+)
+
+#: Optional output fields with type expectations. Validated only when present.
+OUTPUT_OPTIONAL_FIELDS = {
+    "content_markdown": str,
+    "content_html": str,
+    "main_domain_normalized": str,
 }
 
 LINK_KINDS = {"main_domain", "target", "supporting", "extra", "category", "detail"}
 
 MAX_PAYLOAD_SIZE_BYTES = 256 * 1024  # 256 KB
 
+#: Cap on ``content_html`` byte length. Defends the script/style strip regex
+#: in :mod:`language_check` and stdlib ``html.parser`` (Unit 6) from
+#: regex-bomb / memory-pressure inputs. ``content_markdown`` left uncapped
+#: in v1 (existing baseline; no regression). Plan 2026-05-18-006 Unit 1 +
+#: Threat Model DoS row.
+MAX_CONTENT_HTML_BYTES = 1_048_576  # 1 MiB
+
+
+def _is_field_present(value: Any) -> bool:
+    """Return True iff ``value`` is a non-empty, non-whitespace string.
+
+    Field-presence predicate shared between schema-time validation (this module)
+    and validate-time dispatch (:mod:`backlink_publisher.cli.validate_backlinks`).
+    A ``None`` value or whitespace-only string is treated as absent.
+
+    Plan 2026-05-18-006 Unit 1 + Unit 6 (consistent semantics across phases).
+    """
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _normalize_main_domain(url: str) -> str:
+    """Return ``url`` with hostname IDN-encoded to ASCII punycode + lowercased.
+
+    Operator-supplied ``main_domain`` is a full URL with scheme. Splits the
+    URL, extracts the hostname, IDN-encodes (handling Unicode hostnames like
+    ``löve.de`` → ``xn--lve-1la.de``), lowercases, strips trailing dot, and
+    reconstructs.
+
+    Raises :class:`ValueError` if the URL has no hostname or the IDN-encode
+    fails (e.g. label longer than 63 octets, fully empty hostname after split).
+    Callers should handle the exception as a per-row validation error rather
+    than aborting the batch (plan 2026-05-18-006 security P2).
+    """
+    parts = urlsplit(url.strip())
+    if not parts.hostname:
+        raise ValueError("main_domain has no parseable hostname")
+    try:
+        hostname_ascii = parts.hostname.encode("idna").decode("ascii").lower().rstrip(".")
+    except UnicodeError as exc:
+        raise ValueError(f"main_domain IDN-encode failed: {exc}") from exc
+    if not hostname_ascii:
+        raise ValueError("main_domain IDN-encode produced empty hostname")
+    # Reconstruct with the normalized hostname. Preserve scheme, port, path,
+    # query, fragment as-is — only the host component is normalized.
+    netloc = hostname_ascii
+    if parts.port is not None:
+        netloc = f"{hostname_ascii}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+
+
+def _check_main_domain_presence(row: dict[str, Any]) -> str | None:
+    """Verify ``main_domain`` appears in the row's content.
+
+    Returns an error message if the invariant is violated, ``None`` otherwise.
+    Routing:
+
+    - ``content_markdown`` present → existing substring check, unchanged
+      behavior.
+    - ``content_html`` present, ``content_markdown`` absent → defers to the
+      host-aware check at validate-time
+      (:mod:`backlink_publisher.cli.validate_backlinks`); this schema-level
+      helper returns ``None`` so the row isn't rejected at schema time
+      (the actual HTML check requires :mod:`html.parser` which lives outside
+      schema).
+    - Both present → substring check still runs on the markdown side; the
+      HTML side is also checked downstream.
+    - Neither present → handled by ``OUTPUT_ONE_OF_GROUPS``, not here.
+
+    Plan 2026-05-18-006 Unit 1 (refactor of inline check) + Unit 6 (HTML
+    host-parse).
+    """
+    if "main_domain" not in row:
+        return None
+    md_domain = row["main_domain"]
+    if not isinstance(md_domain, str):
+        return None
+    if _is_field_present(row.get("content_markdown")):
+        md = row["content_markdown"]
+        md_domain_norm = md_domain.rstrip("/")
+        if md_domain_norm not in md and md_domain not in md:
+            return f"main_domain '{md_domain}' does not appear in content_markdown"
+    # HTML-only path is validated in cli.validate_backlinks (Unit 6) which
+    # has access to html.parser.
+    return None
+
 
 def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
-    """Validate an input seed row. Returns list of error messages."""
+    """Validate an input seed row. Returns list of error messages.
+
+    Side effect (plan 2026-05-18-006 Unit 1): when ``main_domain`` is a valid
+    URL, the normalized punycode form is stored as ``row["main_domain_normalized"]``
+    for downstream consumers (Unit 6 HTML host-parse). The original
+    ``row["main_domain"]`` is preserved verbatim for display / logging.
+    Normalization failures become per-row errors, not batch-aborting
+    ``SystemExit`` (plan-review security P2).
+    """
     errors: list[str] = []
 
     for field, ftype in INPUT_SCHEMA_FIELDS.items():
@@ -90,12 +207,22 @@ def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
             f"Supported: {', '.join(sorted(PUBLISH_MODES))}"
         )
 
-    # Validate URLs
+    # Validate URLs (scheme prefix) and normalize main_domain for downstream
+    # host-parse comparison (Unit 6). target_url is not normalized — it flows
+    # to adapters which need the operator's exact URL.
     for url_field in ("target_url", "main_domain"):
         if url_field in row:
             url_val = str(row[url_field])
             if not re.match(r"^https?://", url_val):
                 errors.append(f"line {line_num}: field '{url_field}' is not a valid URL: {url_val}")
+                continue
+            if url_field == "main_domain":
+                try:
+                    row["main_domain_normalized"] = _normalize_main_domain(url_val)
+                except ValueError as exc:
+                    errors.append(
+                        f"line {line_num}: field 'main_domain' could not be normalized: {exc}"
+                    )
 
     # Validate seed_keywords item types (list type already checked above)
     if "seed_keywords" in row and isinstance(row["seed_keywords"], list):
@@ -115,6 +242,30 @@ def validate_output_payload(row: dict[str, Any]) -> list[str]:
             errors.append(f"missing required output field '{field}'")
         elif not isinstance(row[field], ftype):
             errors.append(f"field '{field}' must be {ftype.__name__}, got {type(row[field]).__name__}")
+
+    # Validate optional output fields' types when present (e.g., content_html
+    # peer of content_markdown). Plan 2026-05-18-006 Unit 1.
+    for field, ftype in OUTPUT_OPTIONAL_FIELDS.items():
+        if field in row and not isinstance(row[field], ftype):
+            errors.append(f"field '{field}' must be {ftype.__name__}, got {type(row[field]).__name__}")
+
+    # At-least-one cross-field predicate per OUTPUT_ONE_OF_GROUPS. Uses
+    # _is_field_present (treats whitespace-only as absent — symmetric with
+    # validate-time dispatch in Unit 6).
+    for group in OUTPUT_ONE_OF_GROUPS:
+        if not any(_is_field_present(row.get(field)) for field in group):
+            errors.append(
+                f"at least one of {list(group)} must be present and non-empty"
+            )
+
+    # content_html size cap — defends downstream regex + html.parser from
+    # regex-bomb / memory-pressure attacks. Plan Threat Model DoS row.
+    if "content_html" in row and isinstance(row["content_html"], str):
+        size = len(row["content_html"].encode("utf-8"))
+        if size > MAX_CONTENT_HTML_BYTES:
+            errors.append(
+                f"content_html size {size} bytes exceeds {MAX_CONTENT_HTML_BYTES} byte cap"
+            )
 
     # Validate links structure
     if "links" in row and isinstance(row["links"], list):
@@ -155,16 +306,11 @@ def validate_output_payload(row: dict[str, Any]) -> list[str]:
     if "slug" in row and isinstance(row["slug"], str) and not row["slug"].strip():
         errors.append("slug must not be empty")
 
-    # Validate main_domain appears in content_markdown
-    # Strip trailing slash from both sides before comparing so that
-    # 'https://example.com/' and 'https://example.com' are treated as equal.
-    if "main_domain" in row and "content_markdown" in row:
-        md = row["content_markdown"]
-        md_domain = row["main_domain"]
-        if isinstance(md, str) and isinstance(md_domain, str):
-            md_domain_norm = md_domain.rstrip("/")
-            if md_domain_norm not in md and md_domain not in md:
-                errors.append(f"main_domain '{md_domain}' does not appear in content_markdown")
+    # Validate main_domain appears in content (markdown substring; HTML host-parse
+    # lives in cli.validate_backlinks per Unit 6).
+    main_domain_error = _check_main_domain_presence(row)
+    if main_domain_error is not None:
+        errors.append(main_domain_error)
 
     return errors
 

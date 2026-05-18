@@ -10,7 +10,7 @@ import requests
 from backlink_publisher.config import Config
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
 from backlink_publisher._util.logger import opencli_logger as log
-from backlink_publisher._util.markdown import render_to_html
+from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
 from .link_attr_verifier import verify_link_attributes
@@ -120,7 +120,15 @@ class MediumAPIAdapter(Publisher):
         log.info(_json_log(adapter="medium-api", phase="lookup", id=article_id))
 
         tags = payload.get("tags", [])[:5]
-        content_html = render_to_html(payload.get("content_markdown", ""))
+        # Plan 2026-05-18-006 Unit 5 R9: extract_publish_html selects the
+        # source format per platform tier. medium is **platform-tier (b)**
+        # per the most-restrictive-tier rollup (MediumAPI alone is tier (a)
+        # but the dispatcher falls back to MediumBrave/MediumBrowser whose
+        # WYSIWYG paste sanitize is lossy). v1 conservative: helper renders
+        # content_markdown for medium even when content_html is present —
+        # validate-time gate (Unit 6) rejects content_html-only rows for
+        # medium before they reach this code path.
+        content_html = extract_publish_html(payload, "medium")
         canonical_url = payload.get("seo", {}).get("canonical_url") or None
 
         publish_status = "public" if mode == "publish" else "draft"
