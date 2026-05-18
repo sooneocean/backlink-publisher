@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "target_url": "https://51acgs.com",
+  "published_at": "2026-05-18",
+  "description": "Sanitized public manifest of telegra.ph pages from Phase 0 batch run. Contains URLs and structural metadata only; access_token is in the gitignored run_output/telegraph-phase0-token.json. recheck.py prefers this file over run_output/results.json when run_output/ is unavailable (e.g. remote scheduled agents).",
+  "pages": [
+    {
+      "idx": 1,
+      "group": "A",
+      "velocity": "",
+      "title": "A Beginner's Roadmap for Anime Genre Exploration",
+      "filename": "A1-anime-recommendation-guide.md",
+      "url": "https://telegra.ph/A-Beginners-Roadmap-for-Anime-Genre-Exploration-05-18",
+      "slug": "A-Beginners-Roadmap-for-Anime-Genre-Exploration-05-18",
+      "anchors_count": 1,
+      "utf8_bytes": 2135
+    },
+    {
+      "idx": 2,
+      "group": "A",
+      "velocity": "",
+      "title": "Reading-Order Pitfalls in Long-Running Manga Series",
+      "filename": "A2-manga-reading-order-primer.md",
+      "url": "https://telegra.ph/Reading-Order-Pitfalls-in-Long-Running-Manga-Series-05-18",
+      "slug": "Reading-Order-Pitfalls-in-Long-Running-Manga-Series-05-18",
+      "anchors_count": 1,
+      "utf8_bytes": 2056
+    },
+    {
+      "idx": 3,
+      "group": "A",
+      "velocity": "",
+      "title": "Sustainable Habits for Seasonal Anime Tracking",
+      "filename": "A3-seasonal-anime-tracking-habits.md",
+      "url": "https://telegra.ph/Sustainable-Habits-for-Seasonal-Anime-Tracking-05-18",
+      "slug": "Sustainable-Habits-for-Seasonal-Anime-Tracking-05-18",
+      "anchors_count": 1,
+      "utf8_bytes": 1941
+    },
+    {
+      "idx": 4,
+      "group": "B",
+      "velocity": "V1",
+      "title": "How Studio Identity Shapes Anime Adaptations",
+      "filename": "B1-studio-comparison-essay.md",
+      "url": "https://telegra.ph/How-Studio-Identity-Shapes-Anime-Adaptations-05-18",
+      "slug": "How-Studio-Identity-Shapes-Anime-Adaptations-05-18",
+      "anchors_count": 3,
+      "utf8_bytes": 2204
+    },
+    {
+      "idx": 5,
+      "group": "B",
+      "velocity": "V2",
+      "title": "Notes on Voice Acting as Performance, Not Decoration",
+      "filename": "B2-voice-acting-craft-notes.md",
+      "url": "https://telegra.ph/Notes-on-Voice-Acting-as-Performance-Not-Decoration-05-18",
+      "slug": "Notes-on-Voice-Acting-as-Performance-Not-Decoration-05-18",
+      "anchors_count": 3,
+      "utf8_bytes": 2155
+    },
+    {
+      "idx": 6,
+      "group": "B",
+      "velocity": "",
+      "title": "A Practical Comparison of Manga Reading Platforms",
+      "filename": "B3-manga-platforms-overview.md",
+      "url": "https://telegra.ph/A-Practical-Comparison-of-Manga-Reading-Platforms-05-18",
+      "slug": "A-Practical-Comparison-of-Manga-Reading-Platforms-05-18",
+      "anchors_count": 3,
+      "utf8_bytes": 2309
+    },
+    {
+      "idx": 7,
+      "group": "C",
+      "velocity": "V3",
+      "title": "A Working Photographer's Notes on Cosplay Shoots",
+      "filename": "C1-cosplay-photography-deepdive.md",
+      "url": "https://telegra.ph/A-Working-Photographers-Notes-on-Cosplay-Shoots-05-18",
+      "slug": "A-Working-Photographers-Notes-on-Cosplay-Shoots-05-18",
+      "anchors_count": 5,
+      "utf8_bytes": 2762
+    },
+    {
+      "idx": 8,
+      "group": "C",
+      "velocity": "",
+      "title": "The Economics of Independent Doujin Circles",
+      "filename": "C2-doujin-circle-economics.md",
+      "url": "https://telegra.ph/The-Economics-of-Independent-Doujin-Circles-05-18",
+      "slug": "The-Economics-of-Independent-Doujin-Circles-05-18",
+      "anchors_count": 5,
+      "utf8_bytes": 2601
+    },
+    {
+      "idx": 9,
+      "group": "C",
+      "velocity": "",
+      "title": "A Listener's Tour Through Anime Soundtrack Composition",
+      "filename": "C3-soundtrack-composition-tour.md",
+      "url": "https://telegra.ph/A-Listeners-Tour-Through-Anime-Soundtrack-Composition-05-18",
+      "slug": "A-Listeners-Tour-Through-Anime-Soundtrack-Composition-05-18",
+      "anchors_count": 5,
+      "utf8_bytes": 2725
+    },
+    {
+      "idx": 10,
+      "group": "C",
+      "velocity": "",
+      "title": "Translation Workflows: Fan Subs, Scanlation, and Professional Localisation",
+      "filename": "C4-translation-workflows-fan-and-pro.md",
+      "url": "https://telegra.ph/Translation-Workflows-Fan-Subs-Scanlation-and-Professional-Localisation-05-18",
+      "slug": "Translation-Workflows-Fan-Subs-Scanlation-and-Professional-Localisation-05-18",
+      "anchors_count": 5,
+      "utf8_bytes": 2968
+    }
+  ]
+}

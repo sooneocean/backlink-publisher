@@ -1,0 +1,5 @@
+# Telegraph Phase 0 batch run artifacts.
+# Contains the anonymous createAccount access_token (0600) and per-run
+# results — kept out of git deliberately. The published telegra.ph URLs
+# themselves live in the report under docs/phase0/, which is committed.
+run_output/
