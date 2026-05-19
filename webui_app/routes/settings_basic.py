@@ -1,12 +1,19 @@
-"""/settings (GET) + /settings/save-* (non-OAuth) — Plan Unit 3."""
+"""/settings (GET) + /settings/save-* (non-OAuth) — Plan Unit 3.
+
+Plan 2026-05-19-006 Unit 4 — adds generic /api/<channel>/{status,verify,dry-run}
+routes consumed by the dashboard JS in Unit 5.
+"""
 
 from __future__ import annotations
 
-from flask import Blueprint, redirect, render_template, request
+from flask import Blueprint, abort, jsonify, redirect, render_template, request
 
 from backlink_publisher.config import load_config, save_config
+from backlink_publisher.publishing.adapters import verify_adapter_setup
+from backlink_publisher.publishing.registry import registered_platforms
 
-from ..helpers import _save_schedule_settings, _settings_context
+from ..binding_status import get_channel_status
+from ..helpers import _check_csrf_or_abort, _save_schedule_settings, _settings_context
 
 bp = Blueprint("settings_basic", __name__)
 
@@ -17,6 +24,63 @@ def settings():
     flash_msg = request.args.get('flash_msg')
     flash = {"type": flash_type, "msg": flash_msg} if flash_type else None
     return render_template('settings.html', **_settings_context(flash=flash))
+
+
+# ── Generic channel binding API (Plan 2026-05-19-006 Unit 4) ─────────────────
+
+
+def _verify_result_to_json(result) -> dict:
+    """Serialize VerifyResult dataclass → plain dict for JSON response."""
+    return {
+        "ok": result.ok,
+        "identity": result.identity,
+        "last_verified_at": result.last_verified_at,
+        "last_verify_result": result.last_verify_result,
+        "blockers": list(result.blockers),
+        "dofollow": result.dofollow,
+    }
+
+
+def _require_known_channel(channel: str) -> None:
+    """404 for any platform not in the dynamic registry. Drift between this
+    route and dashboard cards is enforced by ``tests/test_dashboard_drift``.
+    """
+    if channel not in registered_platforms():
+        abort(404)
+
+
+@bp.route('/api/<channel>/status', methods=['GET'])
+def api_channel_status(channel: str):
+    """Cheap offline status — config presence, no network call."""
+    _require_known_channel(channel)
+    config = load_config()
+    return jsonify(get_channel_status(channel, config))
+
+
+@bp.route('/api/<channel>/verify', methods=['POST'])
+def api_channel_verify(channel: str):
+    """Live verify — calls platform's lightweight verify endpoint.
+
+    CSRF guarded. Per-channel live impl deferred to Unit 6 backfill — Unit 4
+    ships the dispatch + JSON contract.
+    """
+    _check_csrf_or_abort()
+    _require_known_channel(channel)
+    config = load_config()
+    result = verify_adapter_setup(channel, config, mode='live')
+    return jsonify(_verify_result_to_json(result))
+
+
+@bp.route('/api/<channel>/dry-run', methods=['POST'])
+def api_channel_dry_run(channel: str):
+    """Dry-run — builds payload but ZERO real HTTP (defense-in-depth via
+    Session.send monkey-patch in publishing._verify.dry_run_intercept)."""
+    _check_csrf_or_abort()
+    _require_known_channel(channel)
+    config = load_config()
+    payload = request.get_json(silent=True) or {}
+    result = verify_adapter_setup(channel, config, mode='dry-run', payload=payload)
+    return jsonify(_verify_result_to_json(result))
 
 
 @bp.route('/settings/save-target-keywords', methods=['POST'])

@@ -515,7 +515,14 @@ def _ensure_csrf_token() -> str:
 
 
 def _check_csrf_or_abort() -> None:
-    token = request.form.get("csrf_token", "")
+    """Accept CSRF token from ``request.form['csrf_token']`` (form POST) OR
+    ``X-CSRFToken`` header (JS fetch with JSON body). The dashboard JS in
+    Unit 5 calls /api/<ch>/* via fetch(), which can't easily multipart-encode
+    a CSRF field — header threading is the canonical JSON-fetch pattern.
+
+    Plan 2026-05-19-006 Unit 4 — SEC-4 review recommendation.
+    """
+    token = request.form.get("csrf_token") or request.headers.get("X-CSRFToken", "")
     expected = session.get("csrf_token", "")
     if not token or not expected or not secrets.compare_digest(token, expected):
         from flask import abort

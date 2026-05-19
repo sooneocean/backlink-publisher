@@ -877,6 +877,26 @@ class TestBindRoutes:
         assert resp.status_code == 403
 
 
+class TestChannelBindingAPIRoutes:
+    """Plan 2026-05-19-006 Unit 4 — generic /api/<channel>/* dashboard endpoints.
+
+    Full behavior tests live in tests/test_generic_channel_api.py. These
+    smoke tests satisfy the route-coverage gate below.
+    """
+
+    def test_get_channel_status_returns_200(self, client):
+        resp = client.get("/api/blogger/status")
+        assert resp.status_code == 200
+
+    def test_post_channel_verify_missing_csrf_returns_403(self, client):
+        resp = client.post("/api/blogger/verify")
+        assert resp.status_code == 403
+
+    def test_post_channel_dry_run_missing_csrf_returns_403(self, client):
+        resp = client.post("/api/blogger/dry-run")
+        assert resp.status_code == 403
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".
