@@ -1,11 +1,14 @@
-"""Medium + Blogger OAuth flows — Plan Unit 3."""
+"""Blogger OAuth flows.
+
+Medium OAuth registration has been closed since 2023-03-02 (Medium API archived).
+The oauth-start and oauth-callback routes have been removed. Existing
+medium-token.json files remain valid; the /settings/clear-medium-oauth route
+is kept so legacy users can revoke their token via the UI.
+"""
 
 from __future__ import annotations
 
 import os
-import secrets
-from datetime import datetime, timezone
-from urllib.parse import urlencode
 
 from flask import Blueprint, redirect, request, session
 
@@ -17,127 +20,14 @@ bp = Blueprint("oauth", __name__)
 
 
 # ── Medium OAuth ────────────────────────────────────────────────────────────
-
-
-@bp.route('/settings/medium/oauth-start', methods=['POST'])
-def settings_medium_oauth_start():
-    """Save credentials, generate Medium auth URL, redirect user's browser there."""
-    client_id = request.form.get('client_id', '').strip()
-    client_secret = request.form.get('client_secret', '').strip()
-
-    if not client_id or not client_secret:
-        return redirect('/settings?flash_type=warning&flash_msg='
-                        + '请填写 Client ID 和 Client Secret#channel-medium')
-
-    try:
-        from backlink_publisher.config import MediumOAuthConfig
-        cfg = load_config()
-        cfg.medium_oauth = MediumOAuthConfig(
-            client_id=client_id, client_secret=client_secret,
-        )
-        session['medium_client_id'] = client_id
-        session['medium_client_secret'] = client_secret
-    except Exception as e:
-        return redirect(f'/settings?flash_type=danger&flash_msg=凭据保存失败: {e}#channel-medium')
-
-    state = secrets.token_urlsafe(32)
-    session['medium_oauth_state'] = state
-
-    redirect_uri = _oauth_callback_uri().replace(
-        '/blogger/oauth-callback', '/medium/oauth-callback'
-    )
-    oauth_params = {
-        'client_id': client_id,
-        'redirect_uri': redirect_uri,
-        'response_type': 'code',
-        'state': state,
-        'scope': 'basicProfile,publishPost',
-    }
-    auth_url = f"https://medium.com/m/oauth/authorize?{urlencode(oauth_params)}"
-    return redirect(auth_url)
-
-
-@bp.route('/settings/medium/oauth-callback')
-def settings_medium_oauth_callback():
-    """Medium redirects here after user approves."""
-    import requests as req
-
-    err = request.args.get('error')
-    if err:
-        SAFE_ERROR_MESSAGES = {
-            'access_denied': '用户拒绝了授权',
-            'invalid_scope': '请求的权限无效',
-            'invalid_request': '授权请求参数有误',
-            'server_error': 'Medium 服务器出错，请稍后重试',
-            'temporarily_unavailable': 'Medium 服务暂时不可用，请稍后重试',
-        }
-        error_msg = SAFE_ERROR_MESSAGES.get(err, '授权失败，请重试')
-        return redirect(f'/settings?flash_type=danger&flash_msg={error_msg}#channel-medium')
-
-    state = session.get('medium_oauth_state')
-    code = request.args.get('code')
-    client_id = session.get('medium_client_id')
-    client_secret = session.get('medium_client_secret')
-
-    if not state or not code or not client_id or not client_secret:
-        return redirect('/settings?flash_type=warning&flash_msg='
-                        + '授权会话已过期，请重新点击授权按钮#channel-medium')
-
-    if request.args.get('state') != state:
-        return redirect('/settings?flash_type=danger&flash_msg='
-                        + 'OAuth state 不匹配（可能是 CSRF 攻击）#channel-medium')
-
-    redirect_uri = _oauth_callback_uri().replace(
-        '/blogger/oauth-callback', '/medium/oauth-callback'
-    )
-    try:
-        token_resp = req.post(
-            "https://api.medium.com/v1/tokens",
-            data={
-                "code": code, "client_id": client_id,
-                "client_secret": client_secret,
-                "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
-            },
-            timeout=30,
-        )
-        if token_resp.status_code != 200:
-            raise Exception(f"Token exchange failed with status {token_resp.status_code}")
-
-        token_data = token_resp.json()
-        access_token = token_data.get("access_token")
-        if not access_token:
-            raise Exception("Missing access_token in Medium response")
-
-        if "expires_in" in token_data and "expires_at" not in token_data:
-            token_data["expires_at"] = (
-                int(datetime.now(timezone.utc).timestamp())
-                + int(token_data["expires_in"])
-            )
-
-        from backlink_publisher.config import (
-            MediumOAuthConfig, save_medium_token,
-        )
-        save_medium_token(token_data)
-        cfg = load_config()
-        cfg.medium_oauth = MediumOAuthConfig(
-            client_id=client_id, client_secret=client_secret,
-        )
-        save_config(cfg, target_three_url=None)
-
-        session.pop('medium_oauth_state', None)
-        session.pop('medium_client_id', None)
-        session.pop('medium_client_secret', None)
-
-        return redirect('/settings?flash_type=success&flash_msg=Medium OAuth 授权成功！#channel-medium')
-
-    except Exception:
-        return redirect('/settings?flash_type=danger&flash_msg=获取 Token 失败，请检查凭证并重试#channel-medium')
+# Note: /settings/medium/oauth-start and /settings/medium/oauth-callback
+# have been removed — Medium closed new app registration on 2023-03-02.
+# Users can still revoke an existing stored token via the route below.
 
 
 @bp.route('/settings/clear-medium-oauth', methods=['POST'])
 def settings_clear_medium_oauth():
-    """Clear Medium OAuth configuration."""
+    """Clear Medium OAuth token file."""
     try:
         from backlink_publisher.config import _config_dir
         token_file = _config_dir() / "medium-token.json"

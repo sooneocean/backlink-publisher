@@ -18,8 +18,10 @@ def register_blueprints(app: Flask) -> None:
     from .sites import bp as sites_bp
     from .queue import bp as queue_bp
     from .dashboard import bp as dashboard_bp
+    from .medium_login import bp as medium_login_bp
 
     for bp in (main_bp, pipeline_bp, batch_bp, checkpoint_bp,
                history_bp, drafts_bp, settings_basic_bp, oauth_bp,
-               profiles_bp, sites_bp, queue_bp, dashboard_bp):
+               profiles_bp, sites_bp, queue_bp, dashboard_bp,
+               medium_login_bp):
         app.register_blueprint(bp)

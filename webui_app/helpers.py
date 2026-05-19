@@ -207,16 +207,6 @@ def fetch_full_tdk(url):
         }
     except Exception as e:
         return {'status': 'error', 'error': str(e)}
-2. 自然地嵌入目标网站链接
-3. 保持专业、流畅的写作风格
-4. 字数控制在100-200字之间
-
-请生成一篇有价值的文章内容。"""
-        return {'title': title, 'description': description, 'keywords': keywords,
-                'system_prompt': system_prompt, 'status': 'success'}
-    except Exception as e:
-        return {'title': '', 'description': '', 'keywords': '',
-                'system_prompt': '', 'status': 'error', 'error': str(e)}
 
 
 def detect_platform(url):
@@ -497,12 +487,77 @@ def _derive_exact_pool(main_url: str) -> list[str]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Medium browser status (filesystem-only probe, no network / Playwright calls)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _get_medium_browser_status(cfg, *, session=None) -> dict:
+    """Return a dict describing the Medium browser fallback readiness.
+
+    Reads only the filesystem and Python import state — no Playwright launch,
+    no network call.  ``logged_in`` state is set only via flask.session after
+    a successful probe_login_status() invocation (Unit 5).
+    """
+    import platform as _plat
+    from datetime import datetime, timezone
+
+    try:
+        from backlink_publisher.publishing.adapters.medium_browser import (
+            sync_playwright as _spw,
+        )
+        playwright_installed = _spw is not None
+    except Exception:
+        playwright_installed = False
+
+    brave_macos = _plat.system() == "Darwin"
+    user_data_dir = cfg.medium_user_data_dir or (cfg.config_dir / "chrome-profile-default")
+    cookies_path = user_data_dir / "Default" / "Cookies"
+    singleton_path = user_data_dir / "SingletonLock"
+
+    profile_has_cookies = cookies_path.exists()
+    singleton_lock_present = singleton_path.exists()
+    cookies_mtime: str | None = None
+    cookies_age_days: int | None = None
+
+    if profile_has_cookies:
+        try:
+            mtime = cookies_path.stat().st_mtime
+            dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+            cookies_mtime = dt.isoformat()
+            cookies_age_days = (datetime.now(timezone.utc) - dt).days
+        except OSError:
+            cookies_age_days = 0
+
+    if not playwright_installed and not brave_macos:
+        state = "not_installed"
+    elif not profile_has_cookies:
+        state = "no_profile"
+    elif session is not None and session.get("medium_probe_logged_in"):
+        state = "logged_in"
+    else:
+        state = "profile_exists_unverified"
+
+    return dict(
+        playwright_installed=playwright_installed,
+        brave_macos=brave_macos,
+        profile_dir=str(user_data_dir),
+        profile_has_cookies=profile_has_cookies,
+        cookies_mtime=cookies_mtime,
+        cookies_age_days=cookies_age_days,
+        singleton_lock_present=singleton_lock_present,
+        state=state,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Settings context
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _settings_context(flash=None):
     """Build template context for the settings page."""
+    from flask import session as _flask_session
+
     from backlink_publisher.config import load_medium_token
 
     cfg = load_config()
@@ -518,12 +573,18 @@ def _settings_context(flash=None):
 
     return dict(
         flash=flash,
+        medium_browser_status=_get_medium_browser_status(cfg, session=_flask_session),
         blogger_token=bool(token_data),
         blogger_client_id=cfg.blogger_oauth.client_id if cfg.blogger_oauth else "",
         blogger_client_secret=cfg.blogger_oauth.client_secret if cfg.blogger_oauth else "",
         blog_ids=cfg.blogger_blog_ids,
         medium_token_set=bool(token),
         medium_token_masked=masked if token else "",
+        # Single-source truth for whether a medium-token.json exists on disk.
+        # Used to show/hide the "clear OAuth token" button for legacy users.
+        # Avoids the AND-race where save_config drops [medium.oauth] block,
+        # causing medium_oauth_configured to silently flip False.
+        medium_token_file_exists=bool(medium_token_data),
         medium_oauth_configured=bool(medium_token_data and cfg.medium_oauth),
         config_path=str(cfg.config_dir / "config.toml"),
         token_path=str(cfg.blogger_token_path),

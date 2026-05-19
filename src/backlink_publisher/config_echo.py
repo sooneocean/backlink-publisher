@@ -123,14 +123,27 @@ def active_platforms(config: Config) -> list[str]:
 
     ``blogger`` is active when ``blogger_blog_ids`` is non-empty (regardless
     of OAuth credentials — the API call path needs blog_id mapping).
-    ``medium`` is active when an integration token exists OR ``medium_oauth``
-    is configured. Returned in stable alphabetical order.
+    ``medium`` is active when any viable publishing path exists: integration
+    token, stored OAuth token file, or Playwright library installed (browser
+    fallback). This mirrors verify_adapter_setup's ready-set so the CLI banner
+    and the UI badge agree on the same truth. Returned in stable alphabetical order.
     """
     out: list[str] = []
     if config.blogger_blog_ids:
         out.append("blogger")
-    if config.medium_integration_token or config.medium_oauth:
+
+    from backlink_publisher.config import load_medium_token
+    from backlink_publisher.publishing.adapters.medium_browser import (
+        sync_playwright as _spw,
+    )
+    medium_ready = bool(
+        config.medium_integration_token
+        or load_medium_token()
+        or _spw is not None
+    )
+    if medium_ready:
         out.append("medium")
+
     return sorted(out)
 
 

@@ -68,14 +68,24 @@ def verify_adapter_setup(platform: str, config: Config) -> None:
         return
 
     if platform == "medium":
+        # verify_adapter_setup is a library-availability check, not an auth
+        # check — the four-state badge in /settings is the real auth signal.
         has_token = bool(config.medium_integration_token)
+        from backlink_publisher.config import load_medium_token
+        has_oauth = bool(load_medium_token())   # existing medium-token.json
         from .medium_browser import sync_playwright as _spw
         has_playwright = _spw is not None
+        # has_brave intentionally excluded: MediumBraveAdapter.available()
+        # only checks platform.system(), not whether Brave.app is installed.
+        # AppleScript failure raises ExternalServiceError (not DependencyError),
+        # which does NOT fall through the chain — so counting Brave as ready
+        # here would let verify pass but publish crash non-recoverably.
 
-        if not has_token and not has_playwright:
+        if not (has_token or has_oauth or has_playwright):
             raise DependencyError(
-                "Medium requires either an integration_token in config.toml "
-                "or Playwright installed (run: playwright install chromium)."
+                "Medium adapter not ready: no integration_token, no OAuth token file, "
+                "and Playwright is not installed. "
+                "Run 'playwright install chromium' or configure a token in /settings."
             )
         return
 

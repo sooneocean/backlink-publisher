@@ -203,7 +203,12 @@ class TestDetectEnvOverrides:
 
 
 class TestActivePlatforms:
-    def test_no_credentials_returns_empty(self):
+    def test_no_credentials_returns_empty(self, monkeypatch):
+        # Plan 013: active_platforms includes 'medium' when Playwright is
+        # installed. Explicitly set sync_playwright to None so this test covers
+        # the true "no-credentials + no-library" baseline.
+        from backlink_publisher.publishing.adapters import medium_browser
+        monkeypatch.setattr(medium_browser, "sync_playwright", None)
         cfg = Config()
         assert active_platforms(cfg) == []
 
@@ -217,6 +222,14 @@ class TestActivePlatforms:
 
     def test_medium_when_oauth_present(self):
         cfg = Config(medium_oauth=MediumOAuthConfig(client_id="cid", client_secret="cs"))
+        assert "medium" in active_platforms(cfg)
+
+    def test_medium_when_playwright_installed(self, monkeypatch):
+        # Plan 013: active_platforms mirrors verify_adapter_setup — Playwright
+        # installed counts as a viable publishing path even without a stored token.
+        from backlink_publisher.publishing.adapters import medium_browser
+        monkeypatch.setattr(medium_browser, "sync_playwright", object())
+        cfg = Config()
         assert "medium" in active_platforms(cfg)
 
     def test_both_platforms_sorted_alphabetically(self):

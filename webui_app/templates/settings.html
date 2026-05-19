@@ -107,15 +107,14 @@
                     <i class="bi bi-medium" aria-hidden="true"></i>
                     <span>Medium</span>
                     <span class="badges">
-                        {% if medium_oauth_configured %}
-                        <span class="badge-status ok">OAuth ✓</span>
-                        {% else %}
-                        <span class="badge-status err">OAuth ✗</span>
+                        {% if medium_token_file_exists %}
+                        <span class="badge-status ok">已授权 ✓</span>
                         {% endif %}
                         {% if medium_token_set %}
                         <span class="badge-status ok">Token ✓</span>
-                        {% else %}
-                        <span class="badge-status err">Token ✗</span>
+                        {% endif %}
+                        {% if not medium_token_file_exists and not medium_token_set %}
+                        <span class="badge-status warn">未配置</span>
                         {% endif %}
                     </span>
                     <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
@@ -348,7 +347,15 @@
             '/ce:validate':     { text: '验证内容中…',     sub: '检查外链格式与内容合规性' },
             '/ce:publish':      { text: '发布中…',         sub: '正在发布到目标平台，请勿关闭页面' },
             '/ce:publish-real': { text: '正式发布中…',     sub: '正在写入平台，请勿关闭页面' },
-        '/ce:batch':        { text: '批量发布中…',     sub: '正在逐篇生成并发布，每篇约 30–60 秒，请勿关闭页面' },
+            '/ce:batch':        { text: '批量发布中…',     sub: '正在逐篇生成并发布，每篇约 30–60 秒，请勿关闭页面' },
+            '/settings/medium/launch-browser-login': {
+                text: '正在打开浏览器…',
+                sub: '请在弹出窗口中完成登录（含可能的 email 验证码 / 2FA），完成后页面自动跳转',
+            },
+            '/settings/medium/probe-browser-login': {
+                text: '探测 Medium 登录状态…',
+                sub: '约需 5–15 秒',
+            },
         };
 
         document.addEventListener('submit', function(e) {
