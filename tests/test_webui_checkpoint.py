@@ -121,6 +121,49 @@ def test_resume_route_exit0_appends_history(client, tmp_path):
             assert result[0]["status"] == "published"
 
 
+def test_resume_route_exit0_empty_stdout_does_not_persist_fake_published(client):
+    """Regression: exit 0 + empty stdout (stale checkpoint with no work left)
+    must NOT write a status='published' row with article_urls=[].
+
+    Before this guard, _checkpoint_path → ``publish-backlinks --resume`` could
+    return 0 with no output (nothing pending), and the route still appended a
+    {status:'published', platform:'unknown', article_urls:[]} entry, giving
+    operators a green check for a publish that never happened."""
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = ""
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result):
+        with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
+            resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
+            assert resp.status_code == 200
+            # The regression signal is no history write — proves the route
+            # no longer persists a fake "published" entry.
+            mock_hist.assert_not_called()
+
+
+def test_resume_route_exit0_results_without_urls_does_not_persist_fake_published(client):
+    """Regression: exit 0 + parsed rows but all URLs blank must NOT write a
+    status='published' row. Adapter returning success with empty URL is a
+    silent no-op, not a real publish."""
+    no_url_jsonl = json.dumps({
+        "id": "r0", "platform": "blogger", "status": "done",
+        "title": "T", "draft_url": "", "published_url": "",
+        "created_at": "2026-01-01T00:00:00+00:00", "adapter": "blogger-api", "error": None,
+    })
+    mock_result = MagicMock()
+    mock_result.returncode = 0
+    mock_result.stdout = no_url_jsonl + "\n"
+    mock_result.stderr = ""
+
+    with patch("subprocess.run", return_value=mock_result):
+        with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
+            resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
+            assert resp.status_code == 200
+            mock_hist.assert_not_called()
+
+
 def test_resume_route_exit4_shows_partial(client, tmp_path):
     done_jsonl = json.dumps({
         "id": "r0", "platform": "blogger", "status": "done",

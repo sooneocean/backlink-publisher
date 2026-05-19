@@ -254,17 +254,25 @@ def ce_publish():
                 config=config, history_active=True)
 
         publish_results = _parse_publish_results(published)
-        article_urls = [r.get('published_url') or r.get('draft_url', '')
-                        for r in publish_results if r]
-        history_store.update(lambda hist: [{
+        article_urls = [u for u in (r.get('published_url') or r.get('draft_url', '')
+                                    for r in publish_results if r) if u]
+        # Invariant: a "drafted"/"published" row must carry at least one URL.
+        # If the CLI returned 0 but emitted no usable URL, downgrade to
+        # "failed" so the UI doesn't show a false green check. Mirrors
+        # _push_history_per_row in helpers.py (Plan 2026-05-19-006 Unit 1).
+        status = ('drafted' if publish_mode == 'draft' else 'published') if article_urls else 'failed'
+        entry = {
             'id': str(uuid.uuid4())[:8],
             'target_url': config.get('target_url', 'unknown'),
             'platform': platform,
             'language': config.get('target_language', 'zh-CN'),
-            'status': 'drafted',
+            'status': status,
             'created_at': datetime.now().strftime('%Y-%m-%d %H:%M'),
-            'article_urls': [u for u in article_urls if u],
-        }, *hist][:100])
+            'article_urls': article_urls,
+        }
+        if not article_urls:
+            entry['error'] = 'publish-backlinks returned 0 but emitted no URL'
+        history_store.update(lambda hist: [entry, *hist][:100])
 
         return _render('index.html', published=published,
                        publish_results=publish_results,
