@@ -1,0 +1,64 @@
+name: phase0-seal/verify-head
+
+# Telegraph Phase 0 ship-seal CI gate — plan-009 Unit 7.
+#
+# Re-runs scripts/telegraph_spike/verify_seal.py at the PR's HEAD SHA for any
+# PR whose head branch matches a Telegraph staged-branch family. Becomes a
+# required check on main (plan-009 Unit 8 runbook).
+#
+# Triggers on PR events (opened / synchronize / reopened) rather than
+# `pull_request: branches: [main]`. The `branches` filter would match the
+# BASE branch, not the head — and we want to gate on head's name pattern
+# (closes v1 feasibility F1).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read        # for `git fetch refs/notes/phase0-seal`
+  pull-requests: read   # for PR metadata read
+  issues: read          # for `gh api repos/.../issues/comments/<id>` — required
+                        # even though the comment is attached to a PR (closes
+                        # v1 security F7 + auto-fix v2-F9)
+
+jobs:
+  verify:
+    if: |
+      startsWith(github.event.pull_request.head.ref, 'feat/telegraph-adapter-unit') ||
+      startsWith(github.event.pull_request.head.ref, 'test/telegraph-rel-absent') ||
+      startsWith(github.event.pull_request.head.ref, 'feat/telegraph-webui-docs')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Explicit PR head SHA — actions/checkout's default is the merge ref,
+          # which is NOT what we want (closes v1 feasibility F2).
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package
+        # verify_seal.py imports backlink_publisher.phase0.validation; we need
+        # the editable install + pyyaml in deps. The `[dev]` extra is not
+        # required at runtime, but installing it keeps the CI parity with
+        # local development.
+        run: pip install -e ".[dev]"
+
+      - name: Fetch phase0-seal notes
+        # `+` is OK here — CI's local notes ref is throwaway per-job; no
+        # operator writes are happening on the runner. Contrast with the
+        # operator-side pre-push hook (Unit 5), which fetches into a TEMP
+        # ref WITHOUT `+` to preserve uncommitted local notes.
+        run: git fetch origin "+refs/notes/phase0-seal:refs/notes/phase0-seal"
+
+      - name: Verify seal at PR head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/telegraph_spike/verify_seal.py \
+            "${{ github.event.pull_request.head.sha }}"
