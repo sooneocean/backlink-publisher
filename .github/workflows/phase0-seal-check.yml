@@ -24,6 +24,10 @@ permissions:
 
 jobs:
   verify:
+    # `name:` makes the check_run report this string as the check name.
+    # Without it, the check_run.name defaults to the job key (`verify`),
+    # which is too generic for branch-protection's required-context match.
+    name: phase0-seal/verify-head
     if: |
       startsWith(github.event.pull_request.head.ref, 'feat/telegraph-adapter-unit') ||
       startsWith(github.event.pull_request.head.ref, 'test/telegraph-rel-absent') ||
