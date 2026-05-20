@@ -58,6 +58,15 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
             ]
         }
 
+    # Plan 2026-05-20-002 Unit 5 — register csrf_token() Jinja global so
+    # the homepage <meta name="csrf-token"> tag can read the per-session
+    # token for the new /url-verify POST endpoint. Calling
+    # _ensure_csrf_token() is idempotent within a request.
+    @app.context_processor
+    def inject_csrf_token():
+        from .helpers import _ensure_csrf_token
+        return {"csrf_token": _ensure_csrf_token}
+
     # Start scheduler unless under pytest (tests don't need background jobs)
     if start_scheduler is None:
         start_scheduler = 'PYTEST_CURRENT_TEST' not in os.environ

@@ -44,6 +44,7 @@ from bs4 import BeautifulSoup
 from backlink_publisher._util.logger import opencli_logger
 from backlink_publisher._util.net_safety import (
     _check_url_for_ssrf,
+    _make_ssrf_opener,
     _SSRF_OPENER,
     _SSRFSafeRedirectHandler,
 )
@@ -70,6 +71,12 @@ MAX_BODY_BYTES: int = 1_000_000
 #: User-Agent identifies this fetcher distinctly from ``linkcheck``'s probe so
 #: target sites can rate-limit / allowlist the two independently.
 USER_AGENT: str = "backlink-publisher/0.1 content-fetch"
+
+#: Below this byte count, a 200 with neither ``</head>`` parsed nor a
+#: ``<title>`` extracted is rejected as ``body_too_small`` — likely a stub /
+#: interstitial / placeholder page. Strictly tighter than
+#: ``http_200_no_title``: legitimate short pages WITH a title still pass.
+BODY_TOO_SMALL_BYTES: int = 2048
 
 #: Loose TLS context (matches ``linkcheck``'s default — self-signed and
 #: expired certs are tolerated because backlink targets historically include
@@ -294,8 +301,17 @@ def _extract_title(body: bytes) -> Optional[str]:
     return None
 
 
-def _check_once(url: str) -> CheckResult:
+def _check_once(
+    url: str,
+    timeout_seconds: Optional[float] = None,
+    max_redirects: Optional[int] = None,
+) -> CheckResult:
     """Single GET attempt. Returns the canonical CheckResult; never raises.
+
+    ``timeout_seconds`` overrides :data:`FETCH_TIMEOUT` when set; ``None`` =
+    default. ``max_redirects`` builds a fresh SSRF opener with a custom
+    redirect cap; ``None`` = reuse the shared :data:`_SSRF_OPENER`
+    (default 10 redirects).
 
     SSRF defence lives in ``backlink_publisher._util.net_safety``:
 
@@ -319,8 +335,10 @@ def _check_once(url: str) -> CheckResult:
 
     req = Request(url, method="GET")
     req.add_header("User-Agent", USER_AGENT)
+    opener = _make_ssrf_opener(max_redirects) if max_redirects is not None else _SSRF_OPENER
+    effective_timeout = timeout_seconds if timeout_seconds is not None else FETCH_TIMEOUT
     try:
-        resp = _SSRF_OPENER.open(req, timeout=FETCH_TIMEOUT)
+        resp = opener.open(req, timeout=effective_timeout)
     except HTTPError as exc:
         code = exc.code
         if 400 <= code < 500:
@@ -364,6 +382,9 @@ def _check_once(url: str) -> CheckResult:
 
     title = _extract_title(body)
     if not title:
+        has_head_close = b"</head>" in body.lower()
+        if not has_head_close and len(body) < BODY_TOO_SMALL_BYTES:
+            return False, "body_too_small", None
         return False, "http_200_no_title", None
     if _is_soft_404_title(title):
         # Page returned HTTP 200 but its title advertises a 404 state.
@@ -391,6 +412,8 @@ def _is_valid_http_url(url: str) -> bool:
 def verify_url_has_content(
     url: str,
     max_age_seconds: Optional[float] = None,
+    timeout_seconds: Optional[float] = None,
+    max_redirects: Optional[int] = None,
 ) -> CheckResult:
     """Verify ``url`` returns HTTP 200 and a parseable non-empty title.
 
@@ -437,7 +460,7 @@ def verify_url_has_content(
     started = time.monotonic()
     last_result: CheckResult = (False, "network_error", None)
     for attempt in range(MAX_RETRIES + 1):
-        ok, reason, title = _check_once(url)
+        ok, reason, title = _check_once(url, timeout_seconds, max_redirects)
         if ok:
             last_result = (True, None, title)
             break

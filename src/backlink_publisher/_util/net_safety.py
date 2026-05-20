@@ -11,7 +11,7 @@ import socket
 from typing import Optional
 from urllib.error import URLError
 from urllib.parse import urlparse
-from urllib.request import HTTPRedirectHandler, build_opener
+from urllib.request import HTTPRedirectHandler, OpenerDirector, build_opener
 
 
 _BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
@@ -100,4 +100,17 @@ class _SSRFSafeRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-_SSRF_OPENER = build_opener(_SSRFSafeRedirectHandler())
+def _make_ssrf_opener(max_redirects: int = 10) -> OpenerDirector:
+    """Build a fresh SSRF-safe :class:`OpenerDirector` with a redirect cap.
+
+    ``max_redirects`` is settable per-call because the stdlib stores the cap
+    on the handler instance (``max_redirections`` class attr is overridable
+    on an instance). Default 10 matches the stdlib default. Used by
+    ``content_fetch._check_once`` when a caller threads down a custom cap.
+    """
+    handler = _SSRFSafeRedirectHandler()
+    handler.max_redirections = max_redirects
+    return build_opener(handler)
+
+
+_SSRF_OPENER = _make_ssrf_opener()

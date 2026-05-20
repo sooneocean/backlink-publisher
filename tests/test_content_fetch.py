@@ -897,3 +897,157 @@ class TestSoftFourOhFour:
             verify_url_has_content("https://example.com/missing")
         snap = stats_snapshot()
         assert snap["reason_counts"].get("soft_404_title") == 1
+
+
+# ── Unit 1 (autoderive v1): timeout/redirect kwargs + body_too_small ──────
+
+from backlink_publisher._util.net_safety import _make_ssrf_opener
+from urllib.request import OpenerDirector
+
+
+class TestVerifyKwargs:
+    """``verify_url_has_content`` accepts ``timeout_seconds`` / ``max_redirects``
+    without breaking back-compat. None preserves the historical defaults
+    (10s timeout / 10 max redirects).
+    """
+
+    def test_explicit_kwargs_accepted_and_succeed(self):
+        body = b"<html><head><title>OK</title></head></html>"
+        fake_opener = MagicMock()
+        fake_opener.open.return_value = _mock_response(200, body)
+        with patch(
+            "backlink_publisher.content_fetch._make_ssrf_opener",
+            return_value=fake_opener,
+        ) as factory:
+            ok, reason, title = verify_url_has_content(
+                "https://example.com/",
+                timeout_seconds=5,
+                max_redirects=3,
+            )
+        assert ok is True
+        assert reason is None
+        assert title == "OK"
+        # Custom max_redirects routed through the factory with the right cap.
+        factory.assert_called_once_with(3)
+
+    def test_default_kwargs_preserve_unchanged_behavior(self):
+        """``timeout_seconds=None`` and ``max_redirects=None`` (or omitted)
+        keep the legacy behaviour — same call shape as before this Unit.
+        """
+        body = b"<html><head><title>Default</title></head></html>"
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ) as mocked:
+            ok, _, title = verify_url_has_content(
+                "https://example.com/",
+                timeout_seconds=None,
+                max_redirects=None,
+            )
+        assert ok is True
+        assert title == "Default"
+        # Confirm the shared opener was used (max_redirects=None branch).
+        assert mocked.called
+
+    def test_custom_timeout_threaded_to_opener(self):
+        """Custom ``timeout_seconds`` ends up in the ``timeout=`` kwarg
+        passed to opener.open — confirms thread-through.
+        """
+        body = b"<html><head><title>T</title></head></html>"
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ) as mocked:
+            verify_url_has_content("https://example.com/", timeout_seconds=2.5)
+        # Inspect the timeout kwarg on the actual open() call.
+        _, kwargs = mocked.call_args
+        assert kwargs.get("timeout") == 2.5
+
+
+class TestBodyTooSmall:
+    """``body_too_small`` fires only when ALL three conditions hold:
+    HTTP 200, no ``</head>`` in body, no ``<title>`` extracted, AND
+    total bytes < 2048. Legitimate short pages with a title still pass.
+    """
+
+    def test_200_short_body_no_title_returns_body_too_small(self):
+        body = b"x" * 1024  # no </head>, no <title>, well under 2048
+        # Streaming-accurate mock: read() drains a BytesIO so subsequent
+        # reads return b"" — needed because the deduper otherwise yields
+        # the same chunk forever and inflates buf past 2048.
+        resp = MagicMock()
+        resp.getcode.return_value = 200
+        buf = BytesIO(body)
+        resp.read.side_effect = lambda *args: buf.read(*args)
+        resp.close = MagicMock()
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=resp,
+        ):
+            ok, reason, title = verify_url_has_content("https://example.com/")
+        assert ok is False
+        assert reason == "body_too_small"
+        assert title is None
+
+    def test_200_short_body_with_title_still_passes(self):
+        """Legitimate brevity — 60-byte page with a valid <title> succeeds."""
+        body = b"<html><head><title>X</title></head><body></body></html>"
+        assert len(body) < 2048
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ):
+            ok, reason, title = verify_url_has_content("https://example.com/")
+        assert ok is True
+        assert reason is None
+        assert title == "X"
+
+    def test_200_large_body_no_title_remains_http_200_no_title(self):
+        """Large body (>=2048) without title → unchanged ``http_200_no_title``."""
+        body = b"<html><body>" + b"x" * 4096 + b"</body></html>"
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ):
+            ok, reason, _ = verify_url_has_content("https://example.com/")
+        assert ok is False
+        assert reason == "http_200_no_title"
+
+    def test_200_short_body_with_head_close_but_no_title_is_not_too_small(self):
+        """If ``</head>`` parsed but no title → unchanged ``http_200_no_title``,
+        NOT ``body_too_small``. body_too_small is the tighter subset.
+        """
+        body = b"<html><head></head><body>x</body></html>"
+        assert len(body) < 2048
+        assert b"</head>" in body
+        with patch(
+            "backlink_publisher.content_fetch._SSRF_OPENER.open",
+            return_value=_mock_response(200, body),
+        ):
+            ok, reason, _ = verify_url_has_content("https://example.com/")
+        assert ok is False
+        assert reason == "http_200_no_title"
+
+
+class TestMakeSSRFOpener:
+    def test_factory_default_is_10_redirects(self):
+        opener = _make_ssrf_opener()
+        assert isinstance(opener, OpenerDirector)
+        # Find the redirect handler on the opener and inspect its cap.
+        handlers = [h for h in opener.handlers if hasattr(h, "max_redirections")]
+        assert handlers, "expected an SSRF redirect handler on the opener"
+        assert any(h.max_redirections == 10 for h in handlers)
+
+    def test_factory_custom_cap(self):
+        opener = _make_ssrf_opener(3)
+        assert isinstance(opener, OpenerDirector)
+        handlers = [h for h in opener.handlers if hasattr(h, "max_redirections")]
+        assert any(h.max_redirections == 3 for h in handlers)
+
+    def test_factory_returns_fresh_instances(self):
+        a = _make_ssrf_opener(2)
+        b = _make_ssrf_opener(5)
+        assert a is not b
+        a_caps = [h.max_redirections for h in a.handlers if hasattr(h, "max_redirections")]
+        b_caps = [h.max_redirections for h in b.handlers if hasattr(h, "max_redirections")]
+        assert 2 in a_caps and 5 in b_caps

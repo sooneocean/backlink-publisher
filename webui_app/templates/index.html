@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Backlink Publisher</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
@@ -816,23 +817,37 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="/ce:plan">
+                    <!-- Plan 2026-05-20-002 Unit 5 — paste-to-derive input.
+                         Nameless: browser never submits this field, so /ce:plan
+                         handler's extras-loop (key.startswith('url_')) cannot
+                         capture it under any future field-rename. -->
+                    <div class="url-derive-row" style="margin-bottom: 0.75rem;">
+                        <input type="text" id="derive_source" class="form-control form-control-lg"
+                               placeholder="粘贴作品页或类别页 URL，自动派生三栏 (例: https://51acgs.com/comic/6)"
+                               aria-label="粘贴 URL 自动派生">
+                        <small class="text-muted">粘贴一个 URL → 自动填入下方三栏并验证</small>
+                    </div>
+
                     <div class="url-input-group">
                         <div class="url-item">
                             <span class="url-badge main">主</span>
-                            <input type="url" class="form-control" name="main_url" placeholder="https://example.com/" value="{{ target_url }}" required>
+                            <input type="url" class="form-control" name="main_url" placeholder="https://example.com/" value="{{ target_url }}" aria-describedby="status-main" required>
                         </div>
+                        <span class="verify-status text-muted" id="status-main" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">主网域 — 要做反向链接的根目标 (必填)</div>
 
                         <div class="url-item">
                             <span class="url-badge cat">类</span>
-                            <input type="url" class="form-control" name="category_url" placeholder="https://example.com/category" value="{{ category_url|default('') }}">
+                            <input type="url" class="form-control" name="category_url" placeholder="https://example.com/category" value="{{ category_url|default('') }}" aria-describedby="status-category">
                         </div>
+                        <span class="verify-status text-muted" id="status-category" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">分类页 — 站内分类/列表页 (可选；填了会自动写入 config)</div>
 
                         <div class="url-item">
                             <span class="url-badge work">漫</span>
-                            <input type="url" class="form-control" name="work_url" placeholder="https://example.com/article/1" value="{{ work_url|default('') }}">
+                            <input type="url" class="form-control" name="work_url" placeholder="https://example.com/article/1" value="{{ work_url|default('') }}" aria-describedby="status-work">
                         </div>
+                        <span class="verify-status text-muted" id="status-work" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">漫画页 — 站内具体作品/内容页 (可选；填了会触发自动升级到 ThreeUrlConfig)</div>
 
                         {% for extra_url in extra_urls %}
@@ -1932,5 +1947,29 @@
             <div id="_loadingSubtext" style="font-size:0.85rem;color:#6b7280;line-height:1.5;">请稍候</div>
         </div>
     </div>
+
+    <!-- Plan 2026-05-20-002 Unit 4/5 — URL auto-derive: paste a URL into
+         #derive_source above to auto-fill main/category/work + verify. -->
+    <script src="{{ url_for('static', filename='js/url_derive.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (!window.urlDerive) return;
+            var pasteEl = document.getElementById('derive_source');
+            if (!pasteEl) return;
+            window.urlDerive.bindPasteInput(
+                pasteEl,
+                {
+                    main: document.querySelector('input[name="main_url"]'),
+                    category: document.querySelector('input[name="category_url"]'),
+                    work: document.querySelector('input[name="work_url"]'),
+                },
+                {
+                    main: document.getElementById('status-main'),
+                    category: document.getElementById('status-category'),
+                    work: document.getElementById('status-work'),
+                }
+            );
+        });
+    </script>
 </body>
 </html>
