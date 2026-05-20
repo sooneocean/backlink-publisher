@@ -14,6 +14,7 @@ from .types import (
     MediumOAuthConfig,
     ThreeUrlConfig,
     GhpagesConfig,
+    HashnodeConfig,
     VelogConfig,
 )
 
@@ -176,6 +177,15 @@ def load_config(path: Path | None = None) -> Config:
             ),
         )
 
+    hashnode_section = data.get("hashnode")
+    hashnode: HashnodeConfig | None = None
+    if hashnode_section is not None:
+        # PAT lives in hashnode-token.json (SEC-3) — only routing fields here.
+        hashnode = HashnodeConfig(
+            publication_id=str(hashnode_section.get("publication_id", "")),
+            host=str(hashnode_section.get("host", "")),
+        )
+
     return Config(
         blogger_blog_ids=blog_ids,
         blogger_oauth=blogger_oauth,
@@ -191,6 +201,7 @@ def load_config(path: Path | None = None) -> Config:
         anchor_alarm=anchor_alarm,
         velog=velog,
         ghpages=ghpages,
+        hashnode=hashnode,
     )
 
 
