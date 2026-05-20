@@ -284,6 +284,14 @@
             text-decoration: underline;
         }
         
+        .content-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            margin: 12px 0;
+            border: 1px solid #374151;
+        }
+        
         .content-preview h1, .content-preview h2, .content-preview h3 {
             color: #fbbf24;
             margin: 16px 0 8px;
@@ -1000,6 +1008,13 @@
                             <span style="font-size:11px;">⚠️ 需 6-8</span>
                             {% endif %}
                         </span>
+                        {% if plan.cover_image_warning %}
+                        <span class="badge bg-warning text-dark"
+                              data-bs-toggle="tooltip" data-bs-placement="bottom"
+                              title="{{ plan.cover_image_warning }}">
+                            <i class="bi bi-image-alt me-1"></i>封面降级
+                        </span>
+                        {% endif %}
                     </div>
                     
                     <div class="tag-list">
@@ -1009,13 +1024,7 @@
                     <details>
                         <summary><i class="bi bi-eye me-1"></i>HTML 内容预览</summary>
                         <div class="content-preview mt-3" id="preview-{{ loop.index0 }}">
-{% set content = plan.content_markdown %}
-{% set content = content.replace('## References', '<hr><h3>References</h3>') %}
-{% set content = content.replace('## Additional Resources', '<hr><h3>Additional Resources</h3>') %}
-{% for link in plan.links %}
-{% set content = content.replace('[' ~ link.anchor ~ '](' ~ link.url ~ ')', '<a href="' ~ link.url ~ '" target="_blank">' ~ link.anchor ~ '</a>') %}
-{% endfor %}
-{{ content|safe }}
+{{ plan.content_markdown | render_markdown | safe }}
                         </div>
                     </details>
 
@@ -1934,6 +1943,26 @@
         };
         if (refreshDraft) refreshDraft();
         if (refreshHistory) refreshHistory();
+
+        // Bootstrap tooltips + lazy loaded images fallback handling
+        document.addEventListener("DOMContentLoaded", function () {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+
+            // Fallback for broken/slow cover images
+            document.querySelectorAll(".content-preview img").forEach(function(img) {
+                img.onerror = function() {
+                    img.style.display = "none";
+                    var warn = document.createElement("div");
+                    warn.className = "alert alert-secondary py-1 px-2 my-2 d-inline-block";
+                    warn.style.fontSize = "12px";
+                    warn.innerHTML = "<i class='bi bi-image-alt me-1'></i>封面图片加载失败";
+                    img.parentNode.insertBefore(warn, img.nextSibling);
+                };
+            });
+        });
     })();
     </script>
 

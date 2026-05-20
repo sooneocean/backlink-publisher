@@ -939,6 +939,7 @@ class TestUrlVerifyRoutes:
         assert resp.status_code == 403
 
 
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".
@@ -1026,14 +1027,47 @@ class TestPreviewRoutes:
 
 
 class TestVelogApiRoutes:
-    def test_velog_login_spawns_ok(self, client, monkeypatch):
-        """POST /api/velog/login returns JSON {ok: true} (subprocess stubbed)."""
-        import subprocess as _sp
-        monkeypatch.setattr(_sp, "Popen", lambda *a, **kw: None)
+    def test_velog_login_spawns_ok(self, client, monkeypatch, tmp_path):
+        """POST /api/velog/login returns 200 + ok:true when helper reports survival."""
+        from pathlib import Path
+
+        from webui_app.services import browser_login as bl
+
+        log_path = tmp_path / "velog_login.log"
+        log_path.write_bytes(b"")
+        monkeypatch.setattr(
+            bl,
+            "spawn_browser_login",
+            lambda module, **kw: bl.SpawnResult(ok=True, error=None, log_path=log_path),
+        )
         resp = client.post("/api/velog/login")
         assert resp.status_code == 200
         assert resp.is_json
-        assert resp.get_json()["ok"] is True
+        body = resp.get_json()
+        assert body["ok"] is True
+        assert body["log_path"] == str(log_path)
+
+    def test_velog_login_surfaces_subprocess_error(self, client, monkeypatch, tmp_path):
+        """POST /api/velog/login returns 500 + tail when helper reports early death."""
+        from webui_app.services import browser_login as bl
+
+        log_path = tmp_path / "velog_login.log"
+        log_path.write_bytes(b"")
+        monkeypatch.setattr(
+            bl,
+            "spawn_browser_login",
+            lambda module, **kw: bl.SpawnResult(
+                ok=False,
+                error="TypeError: PipelineLogger.info() takes 2 positional arguments",
+                log_path=log_path,
+            ),
+        )
+        resp = client.post("/api/velog/login")
+        assert resp.status_code == 500
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert "PipelineLogger" in body["error"]
+        assert body["log_path"] == str(log_path)
 
     def test_velog_status_returns_json(self, client):
         """GET /api/velog/status returns JSON with a 'state' key."""

@@ -33,6 +33,11 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+    # Share the publish-path markdown→HTML renderer with Jinja so preview
+    # visual matches the published article (Plan 2026-05-19-007 Unit 2).
+    from backlink_publisher._util.markdown import render_to_html
+    app.jinja_env.filters['render_markdown'] = render_to_html
+
     # Register all blueprints
     from .routes import register_blueprints
     register_blueprints(app)

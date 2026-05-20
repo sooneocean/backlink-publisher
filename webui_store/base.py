@@ -137,13 +137,9 @@ class JsonStore:
             return self._default_factory()
 
     def save(self, value: Any) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp.write_text(
-            json.dumps(value, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp.replace(self._path)
+        from backlink_publisher.persistence.safe_write import atomic_write
+        text = json.dumps(value, ensure_ascii=False, indent=2)
+        atomic_write(self._path, text)
 
     def update(self, fn: Callable[[Any], Any]) -> Any:
         with self._lock:
