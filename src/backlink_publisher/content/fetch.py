@@ -179,7 +179,8 @@ def _is_transient(reason: str) -> bool:
     """Return True for failure reasons safe to retry. 4xx and 200-no-title
     are not transient — the page state is structurally stable.
     """
-    return reason in {"timeout", "network_error", "http_5xx"}
+    from backlink_publisher.publishing.adapters.retry import is_transient_reason
+    return is_transient_reason(reason)
 
 
 #: Title patterns that signal a "soft 404" — HTTP 200 with a body whose

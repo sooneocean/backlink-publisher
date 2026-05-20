@@ -18,6 +18,8 @@ _LLM_TEMPERATURE_ENV_VAR = "BACKLINK_LLM_TEMPERATURE"
 _LLM_SYSTEM_PROMPT_ENV_VAR = "BACKLINK_LLM_SYSTEM_PROMPT"
 _LLM_USE_ARTICLE_GEN_ENV_VAR = "BACKLINK_LLM_USE_ARTICLE_GEN"
 _LLM_ARTICLE_SYSTEM_PROMPT_ENV_VAR = "BACKLINK_LLM_ARTICLE_SYSTEM_PROMPT"
+_LLM_USE_IMAGE_GEN_ENV_VAR = "BACKLINK_LLM_USE_IMAGE_GEN"
+_LLM_IMAGE_GEN_API_KEY_ENV_VAR = "BACKLINK_LLM_IMAGE_GEN_API_KEY"
 
 _log = logging.getLogger(__name__)
 
@@ -46,6 +48,8 @@ def _parse_llm_anchor_provider(
     env_system = os.environ.get(_LLM_SYSTEM_PROMPT_ENV_VAR)
     env_use_article = os.environ.get(_LLM_USE_ARTICLE_GEN_ENV_VAR)
     env_article_system = os.environ.get(_LLM_ARTICLE_SYSTEM_PROMPT_ENV_VAR)
+    env_use_image = os.environ.get(_LLM_USE_IMAGE_GEN_ENV_VAR)
+    env_image_key = os.environ.get(_LLM_IMAGE_GEN_API_KEY_ENV_VAR)
 
     toml_api_key_raw = section.get("api_key")
     toml_has_api_key = isinstance(toml_api_key_raw, str) and bool(toml_api_key_raw)
@@ -78,6 +82,14 @@ def _parse_llm_anchor_provider(
         use_article_gen = bool(section["use_article_gen"])
         
     article_system_prompt = env_article_system or section.get("article_system_prompt")
+
+    use_image_gen = False
+    if env_use_image:
+        use_image_gen = env_use_image.lower() in ("1", "true", "yes")
+    elif "use_image_gen" in section:
+        use_image_gen = bool(section["use_image_gen"])
+
+    image_gen_api_key = env_image_key or section.get("image_gen_api_key")
 
     api_key = env_api_key or (toml_api_key_raw if toml_has_api_key else None)
 
@@ -120,4 +132,6 @@ def _parse_llm_anchor_provider(
         system_prompt=system_prompt,
         use_article_gen=use_article_gen,
         article_system_prompt=article_system_prompt,
+        use_image_gen=use_image_gen,
+        image_gen_api_key=image_gen_api_key,
     )

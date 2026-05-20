@@ -88,6 +88,8 @@ class LLMProviderConfig:
     system_prompt: str | None = None
     use_article_gen: bool = False
     article_system_prompt: str | None = None
+    use_image_gen: bool = False
+    image_gen_api_key: str | None = None
 
     # ── Deprecated image-gen fields (Plan 2026-05-20-001 Unit 1) ──────────
     #

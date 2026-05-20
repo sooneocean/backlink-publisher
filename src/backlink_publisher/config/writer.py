@@ -189,78 +189,23 @@ def _preserve_unknown_sections(
 
 
 def _atomic_write_text(path: Path, text: str, mode: int = 0o600) -> None:
-    """Write ``text`` to ``path`` atomically via a sibling .new + replace.
-
-    Mirrors :func:`io_utils.atomic_write_json` for plain text. Readers see
-    either the old file or the fully written new one — never a torn write.
-    chmod best-effort; the rename is load-bearing.
-    """
-    tmp = path.with_name(path.name + ".new")
-    tmp.write_text(text, encoding="utf-8")
-    try:
-        os.chmod(tmp, mode)
-    except OSError:
-        pass
-    tmp.replace(path)
+    """Write ``text`` to ``path`` atomically via a sibling .new + replace."""
+    from backlink_publisher.persistence.safe_write import atomic_write
+    atomic_write(path, text, mode)
 
 
 def _snapshot_config(path: Path, max_history: int = _CONFIG_HISTORY_MAX) -> None:
     """Best-effort: copy current ``path`` to ``.config-history/<UTC-ts>.toml``.
 
-    Pre-save snapshot for time-travel recovery. Failures (missing source,
-    unwritable dir, full disk) are logged but never raise — operator data
-    safety on the main save path dominates. Rotates oldest snapshots so the
-    directory does not grow unbounded.
+    Pre-save snapshot for time-travel recovery.
     """
-    if not path.exists():
-        return
-    snapshot_dir = path.parent / ".config-history"
-    try:
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(snapshot_dir, stat.S_IRWXU)  # 0700
-        except OSError:
-            pass
-    except OSError as exc:
-        plan_logger.warn(
-            "config_snapshot_dir_failed",
-            path=str(snapshot_dir),
-            reason=type(exc).__name__,
-        )
-        return
-
-    # UTC ISO timestamp with colons replaced (Windows-safe).
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%fZ")
-    snap_path = snapshot_dir / f"{ts}.toml"
-    try:
-        snap_path.write_bytes(path.read_bytes())
-        try:
-            os.chmod(snap_path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
-        except OSError:
-            pass
-    except OSError as exc:
-        plan_logger.warn(
-            "config_snapshot_write_failed",
-            path=str(snap_path),
-            reason=type(exc).__name__,
-        )
-        return
-
-    # Rotate: keep the newest `max_history` files by mtime.
-    try:
-        snapshots = sorted(
-            (p for p in snapshot_dir.glob("*.toml") if p.is_file()),
-            key=lambda p: p.stat().st_mtime,
-        )
-        excess = len(snapshots) - max_history
-        for old in snapshots[:max(0, excess)]:
-            try:
-                old.unlink()
-            except OSError:
-                pass
-    except OSError:
-        # Rotation failure is benign — operator will see one extra file.
-        pass
+    from backlink_publisher.persistence.safe_write import rotate_snapshots
+    rotate_snapshots(
+        path,
+        snapshot_dir=path.parent / ".config-history",
+        file_suffix=".toml",
+        max_history=max_history,
+    )
 
 
 def save_config(
