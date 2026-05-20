@@ -4,6 +4,10 @@ type: feat
 status: active
 date: 2026-05-20
 deepened: 2026-05-20
+claims: {}  # opt-out: portfolio plan spanning multiple unrelated PRs;
+            # each shipped unit (e.g. A.2 #114/#116, B.1 #119) lives on
+            # its own branch with no shared SHA story. Re-tighten if/when
+            # a single bundling PR closes the plan.
 ---
 
 # Portfolio: save_config round-trip + Medium GraphQL spike + dofollow quality audit
@@ -268,7 +272,7 @@ config.toml                      │     │    attempts, success rate from stat
 
 ### Phase B — Medium GraphQL spike (collapsed to 2 units)
 
-- [ ] **B.1: Reconnaissance + rate-limit + rotation characterisation (single ≤1-day pass)**
+- [ ] **B.1: Reconnaissance + rate-limit + rotation characterisation (single ≤1-day pass)** — **Scaffold landed via PR #119 squash `ba74bd2` 2026-05-20 06:22 UTC** (scrub gate + scratch template + B.2 deliverable skeleton + gitignore for real scratch path). Operator reconnaissance still pending: needs throwaway Medium account on separate VPN/IP, DevTools probe, ≤6-post rate test, ToS read. Preflight already recorded in template header: "Plan 005 = Medium Phase 1" memory pointer was mis-labelled (repo plan-005 is unrelated PR landing cleanup); this plan is the authoritative origin.
 
 **Goal:** In one timeboxed pass, capture the GraphQL operations Medium's authoring UI sends; probe rate limits within a strict budget; observe credential-rotation behaviour. All findings go to a working-notes scratchpad that is **git-rm'd at end of spike** regardless of verdict.
 

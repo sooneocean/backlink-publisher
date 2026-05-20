@@ -1,9 +1,12 @@
 ---
 title: Worktree / Branch / PR Cleanup — Post-2026-05-20 Ship Burst
 type: refactor
-status: active
+status: completed
 date: 2026-05-20
 origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
+claims: {}  # opt-out: cleanup plan, no code SHAs to anchor; tracked
+            # by reflog of the ship-burst PRs (#108..#127) which already
+            # individually plan-claim their own deliverables.
 ---
 
 # Worktree / Branch / PR Cleanup — Post-2026-05-20 Ship Burst
@@ -89,7 +92,7 @@ origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
 
 ## Implementation Units
 
-- [ ] **Unit 1: Audit `scripts/prune-stale-worktrees.sh --dry-run` 输出 + 跑 `pytest tests/`**
+- [x] **Unit 1: Audit `scripts/prune-stale-worktrees.sh --dry-run` 输出 + 跑 `pytest tests/`**
 
 **Goal:** 建立 cleanup baseline + 验证现有 pruner 覆盖范围 + 看 main 上有无 already-failing 测试（3 个 adapter token test）。
 
@@ -115,7 +118,7 @@ origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
 - `dry-run-output.txt` + `pytest-baseline.txt` 两件 artifact 落盘（临时位置即可）。
 - 已知：剩多少 candidate 给 Unit 2、3 adapter test 是否 fail、bp-banner-image-gen 是否被 pruner detect。
 
-- [ ] **Unit 2: Prune 5 direct-merge + 2 PR-merge local branch + orphan worktree**
+- [x] **Unit 2: Prune 5 direct-merge + 2 PR-merge local branch + orphan worktree**
 
 **Goal:** 删 7 个本地 branch + 1 个 orphan worktree，使 `git branch` 仅余 `main` + `feat/save-config-extend-managed-roots`。
 
@@ -142,7 +145,7 @@ origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
 - `git worktree list` output 仅 main worktree + bp-roundtrip-a2。
 - pytest 仍 pass（Unit 1 baseline 一致）。
 
-- [ ] **Unit 3: chore-catchall 3 commit 拆分处置**
+- [x] **Unit 3: chore-catchall 3 commit 拆分处置** *(并发 agent 在 commit `5bb27b2` 完成 3a 适配测试 + 3c plan 归档；3b Makefile/scripts 按 plan 决策丢弃)*
 
 **Goal:** 从 `chore/debris-catchall-2026-05-20` 抽出真 value 内容到独立 commit/PR，删除 catch-all branch。
 
@@ -177,7 +180,7 @@ origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
 - 3c 完成后：`git status` clean；`docs/plans/` + `docs/brainstorms/` 含 4 个新 doc。
 - 最终 `git branch -a` 不含 `chore/debris-catchall-2026-05-20`。
 
-- [ ] **Unit 4: bp-roundtrip-a2 完成 Plan 003 Phase A.2 + ship**
+- [x] **Unit 4: bp-roundtrip-a2 完成 Plan 003 Phase A.2 + ship** *(并发 agent ship 为 PR #116 squash `b23c87e`；后续 ceiling 修正 `a4b95f6` 385→370)*
 
 **Goal:** bp-roundtrip-a2 dirty WIP commit + push + 开 PR + ship。
 
@@ -213,7 +216,7 @@ origin: docs/brainstorms/2026-05-20-worktree-branch-pr-cleanup-requirements.md
 - 主 worktree `git status` clean（Plan 003 + RUNBOOK 已 commit）。
 - bp-roundtrip-a2 worktree 退或保留为下一 Phase 的 base（看 plan 003 是否还有 Phase A.3+）。
 
-- [ ] **Unit 5: 收尾 — prune origin remnants + telegraph 保留确认 + 最终 invariant 验**
+- [x] **Unit 5: 收尾 — prune origin remnants + telegraph 保留确认 + 最终 invariant 验**
 
 **Goal:** 删除 origin 上的 C 类 squash-merge 残留 branch；写最终 audit report。
 

@@ -175,7 +175,7 @@ Unit 3 is operationally independent of Unit 4 but should land before 2026-05-20 
 
 ---
 
-- [ ] **Unit 2: Tier-2 `/ce:review` report-only audit on `b632bc0`**
+- [x] **Unit 2: Tier-2 `/ce:review` report-only audit on `b632bc0`** — shipped 2026-05-20 via PR #104 (`0bdb546`, falsy-coerce P1 #1 + RECON-always AGENTS.md correction + 10 tests) + PR #105 (`03f288e`, P2 #8 gate `--diff-filter=d` excludes deletions) + PR #106 (`b450426`, P1 #3 exit-9 / `--strict-fetch` defer-with-docs annotation). P1 #2 subprocess timeouts deferred post-promotion; P2 #12 marked false-positive (`bash -eo pipefail` default). No items block 2026-06-02 promotion.
 
 **Goal:** Run the deferred Tier-2 review pass that PR #98 owed but couldn't complete due to subagent rate limit, capturing structured findings now that the limit reset.
 
@@ -210,7 +210,7 @@ Unit 3 is operationally independent of Unit 4 but should land before 2026-05-20 
 
 ---
 
-- [ ] **Unit 3: Author-readiness — AGENTS.md additions for cutoff visibility + YAML SHA quoting**
+- [x] **Unit 3: Author-readiness — AGENTS.md additions for cutoff visibility + YAML SHA quoting** — shipped via PR #101 squash `97cb34f` (2026-05-20 01:59 UTC): plan + AGENTS.md cutoff banner + YAML SHA quoting convention; first real-world no-op-path validation (gate exit 0 via grandfather short-circuit).
 
 **Goal:** Two single-paragraph additions to `AGENTS.md` so authors discover the claims-block requirement and the YAML SHA quoting convention without needing memory access.
 
