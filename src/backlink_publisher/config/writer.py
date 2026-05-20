@@ -13,7 +13,10 @@ from backlink_publisher.logger import plan_logger
 from .types import (
     Config,
     DEFAULT_WORK_TEMPLATES,
+    GhpagesConfig,
+    HashnodeConfig,
     ThreeUrlConfig,
+    WriteAsConfig,
 )
 
 if sys.version_info >= (3, 11):
@@ -45,7 +48,7 @@ _log = logging.getLogger(__name__)
 import re
 
 _SAVE_CONFIG_KNOWN_ROOTS: frozenset[str] = frozenset(
-    {"blogger", "medium", "targets"}
+    {"blogger", "medium", "targets", "ghpages", "hashnode", "writeas"}
 )
 
 # Cap on rolling config.toml snapshots kept under .config-history/.
@@ -217,6 +220,9 @@ def save_config(
     blogger_client_secret: str | None = None,
     target_anchor_keywords: dict[str, list[str]] | None = None,
     target_three_url: dict[str, ThreeUrlConfig] | None = None,
+    ghpages_config: GhpagesConfig | None = None,
+    hashnode_config: HashnodeConfig | None = None,
+    writeas_config: WriteAsConfig | None = None,
 ) -> None:
     """Write (or update) config.toml with the supplied values.
 
@@ -228,13 +234,18 @@ def save_config(
     - ``{}`` — explicitly clear the corresponding section
     - non-empty dict — write exactly the provided contents (overrides disk)
 
-    Section taxonomy (Plan 2026-05-19-010):
+    Section taxonomy (Plan 2026-05-19-010; channel additions Plan 2026-05-20-003 A.2):
 
     (a) **Emitted on every call (rewritten from in-memory Config):**
         ``[blogger]``, ``[medium]``, and one ``[targets."<domain>"]`` per
         resolved domain in the anchor-keywords/three-URL emit set.
     (b) **Emitted conditionally:** ``[blogger.oauth]`` only when at least
-        one of ``client_id`` / ``client_secret`` is non-empty.
+        one of ``client_id`` / ``client_secret`` is non-empty. ``[ghpages]``,
+        ``[hashnode]``, ``[writeas]`` only when the resolved channel cfg is
+        not ``None`` (kwarg, in-memory Config, or on-disk → load_config →
+        existing.<channel>). The non-secret routing fields are emitted; the
+        PAT / login token lives in a separate 0600 sidecar JSON file under
+        the same config dir (per SEC-3 of Plan 2026-05-19-006).
     (c) **Depth-2 subsections under managed roots NOT emitted on this
         call** (e.g. ``[medium.oauth]``, ``[medium.browser]``, operator-
         added ``[targets.X]`` / ``[blogger.X]`` / ``[medium.X]``, dormant
@@ -324,6 +335,14 @@ def save_config(
     else:
         three_url_by_domain = dict(target_three_url)
 
+    # Channel-config kwargs follow the same None-means-preserve-existing pattern
+    # as medium_token / target_anchor_keywords above. PATs/tokens live in
+    # separate 0600 sidecar JSON files (per SEC-3 of Plan 2026-05-19-006), so
+    # these blocks contain only routing fields — no credentials in TOML.
+    ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
+    hashnode_cfg = hashnode_config if hashnode_config is not None else existing.hashnode
+    writeas_cfg = writeas_config if writeas_config is not None else existing.writeas
+
     lines: list[str] = []
 
     # [blogger] — domain → blog_id pairs first
@@ -376,6 +395,29 @@ def save_config(
                 )
             if tu.insecure_tls:
                 lines.append("insecure_tls = true")
+        lines.append("")
+
+    # [ghpages] / [hashnode] / [writeas] — channel routing config (Plan 2026-05-20-003 A.2).
+    # PATs/tokens live in separate sidecar JSON files (SEC-3); these blocks
+    # carry only non-secret routing fields. The dataclass defaults round-trip
+    # exactly when set explicitly by load_config — see config/loader.py:169-197.
+    if ghpages_cfg is not None:
+        lines.append("[ghpages]")
+        lines.append(f"repo          = {_toml_str(ghpages_cfg.repo)}")
+        lines.append(f"branch        = {_toml_str(ghpages_cfg.branch)}")
+        lines.append(f"path_template = {_toml_str(ghpages_cfg.path_template)}")
+        lines.append("")
+
+    if hashnode_cfg is not None:
+        lines.append("[hashnode]")
+        lines.append(f"publication_id = {_toml_str(hashnode_cfg.publication_id)}")
+        lines.append(f"host           = {_toml_str(hashnode_cfg.host)}")
+        lines.append("")
+
+    if writeas_cfg is not None:
+        lines.append("[writeas]")
+        lines.append(f"collection_alias = {_toml_str(writeas_cfg.collection_alias)}")
+        lines.append(f"api_base         = {_toml_str(writeas_cfg.api_base)}")
         lines.append("")
 
     # Preserve every section save_config did not emit on this call:
