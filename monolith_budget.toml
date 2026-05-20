@@ -26,8 +26,8 @@ ceiling = 290
 rationale = "SSRF defence extracted to _util/net_safety.py in 2026-05-19 — SLOC dropped from 340 to 253. Ceiling 290 provides 30-SLOC headroom for minor accretion."
 
 [files."src/backlink_publisher/config/writer.py"]
-ceiling = 370
-rationale = "Plan 2026-05-20-003 A.2 promotes ghpages/hashnode/writeas to managed roots (+3 dataclass imports, 3 emission blocks, ~25 SLOC). R5 F3 safe_write carve landed in parallel, dropping SLOC from 375 to 333. Ceiling=370 per policy (round_up_to_10(333+30)=370), net +30 headroom."
+ceiling = 200
+rationale = "Unit 2 monolith split (2026-05-20): TOML heading utilities extracted to _toml_utils.py (~80 SLOC), file I/O helpers to _config_io.py (~20 SLOC), merge_site_url_categories to _merge_categories.py (~80 SLOC). writer.py dropped from ~618 to ~169 SLOC, now holds only save_config(). Ceiling 200 = round_up_to_10(169+30) per policy."
 
 [files."src/backlink_publisher/_util/markdown.py"]
 ceiling = 240

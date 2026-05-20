@@ -43,19 +43,21 @@ from .loader import (
     load_config,
     resolve_blog_id,
 )
-from .writer import (
+from ._config_io import (
     _atomic_write_text,
     _CONFIG_HISTORY_MAX,
+    _snapshot_config,
+)
+from ._toml_utils import (
     _preserve_unknown_sections,
     _SAVE_CONFIG_KNOWN_ROOTS,
-    _snapshot_config,
     _TOML_HEADING_RE,
     _toml_heading_root,
     _toml_list,
     _toml_str,
-    merge_site_url_categories,
-    save_config,
 )
+from ._merge_categories import merge_site_url_categories
+from .writer import save_config
 from .tokens import (
     load_blogger_token,
     load_ghpages_token,
