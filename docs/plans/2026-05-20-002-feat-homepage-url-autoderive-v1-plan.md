@@ -5,6 +5,7 @@ status: completed
 date: 2026-05-20
 deepened: 2026-05-20
 origin: docs/brainstorms/2026-05-20-homepage-url-autoderive-and-ui-polish-requirements.md
+claims: {}
 ---
 
 # Homepage URL Auto-Derive v1.0
