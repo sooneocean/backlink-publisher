@@ -194,17 +194,22 @@ def api_velog_login():
     """Spawn velog-login in a detached subprocess (headed Playwright).
 
     The operator completes social login in the popped-up Chromium window.
-    Returns JSON {ok: true} immediately — the login is async.
+    Probes briefly for early startup crash (e.g. Playwright missing).
     """
-    try:
-        subprocess.Popen(
-            [sys.executable, '-m', 'backlink_publisher.cli.velog_login'],
-            env={**__import__('os').environ, 'PYTHONPATH': 'src'},
-            start_new_session=True,
-        )
-        return jsonify({'ok': True})
-    except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+    from ..services.browser_login import spawn_browser_login
+
+    result = spawn_browser_login("backlink_publisher.cli.velog_login")
+    if not result.ok:
+        return jsonify({
+            "ok": False,
+            "error": result.error,
+            "log_path": str(result.log_path),
+        }), 500
+
+    return jsonify({
+        "ok": True,
+        "log_path": str(result.log_path),
+    })
 
 
 @bp.route('/api/velog/status', methods=['GET'])
