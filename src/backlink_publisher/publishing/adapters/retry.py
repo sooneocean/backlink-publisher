@@ -16,6 +16,9 @@ MAX_ATTEMPTS: int = 3
 BACKOFF_BASE: int = 2
 JITTER_FACTOR: float = 0.15
 
+from enum import Enum
+import re
+
 # HTTP status codes that indicate a transient server-side failure worth retrying.
 # Only used by call-site is_retryable predicates — not enforced here.
 # NOTE: 5xx errors are NOT retried because neither Blogger API v3 nor Medium API
@@ -24,6 +27,48 @@ JITTER_FACTOR: float = 0.15
 # sending response). Retrying without deduplication risks duplicate posts.
 # See: https://sophiabits.com/blog/you-cant-always-retry-a-5xx
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429})
+
+
+class ErrorClass(str, Enum):
+    TRANSIENT = "transient"
+    AUTH_EXPIRED = "auth_expired"
+    HTTP_5XX = "http_5xx"
+    SSRF_BLOCKED = "ssrf_blocked"
+    UNEXPECTED = "unexpected"
+
+
+_HTTP_5XX_RE = re.compile(r"\b5[0-9]{2}\b")
+
+
+def classify_exception(exc: Exception) -> ErrorClass:
+    """Classify an exception to the ErrorClass taxonomy.
+
+    Used by the publisher and event projectors to route and store failure reasons.
+    """
+    from backlink_publisher._util.errors import AuthExpiredError, ExternalServiceError
+
+    if isinstance(exc, AuthExpiredError):
+        return ErrorClass.AUTH_EXPIRED
+
+    msg = str(exc)
+    if "ssrf_blocked" in msg or "ssrf_redirect" in msg or "ssrf_https_downgrade" in msg:
+        return ErrorClass.SSRF_BLOCKED
+
+    if _HTTP_5XX_RE.search(msg):
+        return ErrorClass.HTTP_5XX
+
+    if isinstance(exc, ExternalServiceError):
+        return ErrorClass.TRANSIENT
+
+    return ErrorClass.UNEXPECTED
+
+
+def is_transient_reason(reason: str) -> bool:
+    """Return True if the content_fetch failure reason is transient and safe to retry.
+
+    Used by content_fetch to decide whether to retry a GET request.
+    """
+    return reason in {"timeout", "network_error", "http_5xx"}
 
 
 def retry_transient_call(
