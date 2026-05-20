@@ -40,8 +40,12 @@ jobs:
         id: touched
         run: |
           # $base...$head diff finds plan-docs added or modified in this PR
-          # (D12 semantics). `|| true` suppresses grep's exit 1 on no matches.
-          touched=$(git diff --name-only \
+          # (D12 semantics). `--diff-filter=d` excludes deletions so a PR
+          # that legitimately archives a plan-doc doesn't false-block on
+          # `plan-check <deleted-path>` -> UsageError exit 1. Renames are
+          # kept (renamed-to paths still need validation). `|| true`
+          # suppresses grep's exit 1 on no matches.
+          touched=$(git diff --name-only --diff-filter=d \
             "${{ steps.refs.outputs.base_sha }}...${{ steps.refs.outputs.head_sha }}" \
             -- 'docs/plans/*.md' 'docs/plans/**/*.md' || true)
           if [ -z "$touched" ]; then
