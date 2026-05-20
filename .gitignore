@@ -21,3 +21,6 @@ test_payload.jsonl
 
 # runtime logs
 webui.log
+
+# spike scratch (raw API response bodies — may echo credentials)
+/.spike/

@@ -37,6 +37,14 @@ rationale = "Post-split: body templates (9 functions, ~130 SLOC) extracted to _b
 ceiling = 580
 rationale = "U4 read-side projector (SLOC 548 at seed): flush_for dispatch + 3 reducers (_project_checkpoint / _project_history / _project_drafts) + shared helpers (cursor I/O, dt normalisation, anchor filter, JSON read retry). Reducers share enough plumbing that splitting into a subpackage would re-import most of that surface; keep the unit whole until U5 inline-flush seam reveals a real boundary. Re-evaluate when U7 bp-events-rebuild bootstrap reuses the reducer entry points."
 
+[files."src/backlink_publisher/publishing/adapters/__init__.py"]
+ceiling = 680
+rationale = "Registry + re-export hub (SLOC 625): 41 register() calls, 9 chained-adapter tuples, tier matrix, content-negotiation dispatch, and re-exports for 18 publishing sub-modules. Warning-only canary until a decomposition boundary appears (e.g., tier matrix + helpers → _tiers.py)."
+
+[files."src/backlink_publisher/cli/phase0_seal.py"]
+ceiling = 780
+rationale = "Phase 0 seal CLI (SLOC 720): 7 subcommands (init, show, verify, reseal, verify-seal-hooks, bootstrap, runbook), allowlist parsing, XDG-helper plumbing, worktree-policy lib call. Post-G1 refactor will split runbook and CI-helper into sub-modules; ceiling 780 holds 60-SLOC headroom until then."
+
 [files."src/backlink_publisher/cli/plan_check.py"]
 ceiling = 620
 rationale = "Plan-claims drift gate CLI (Plan 2026-05-19-009). SLOC 572 at seed across three layers landed across Units 1-3: schema (frontmatter parser, 4 named exceptions, SHA format check, R11b filename-date lock), git resolution (FETCH_HEAD freshness + path/sha checks with stderr classification), and CLI wiring (argparse, exit-code dispatch 0/2/7/8, --json + human formatters, RECON log lines). D1 chose a flat single-file CLI mirroring report_anchors.py + footprint.py precedent; package split is YAGNI until a second consumer emerges. Ceiling 620 gives 48-SLOC headroom for minor accretion (e.g., a future --strict-fetch flag or symbols claim type)."
