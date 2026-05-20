@@ -5,16 +5,8 @@ import json
 import logging
 import os
 import stat
-import sys
 from pathlib import Path
 from typing import Any
-
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass  # type: ignore[no-redef]
-
 
 
 def _resolve_config_dir():
@@ -59,10 +51,10 @@ def _save_token(data: dict[str, Any], path: Path | None, default_filename: str) 
     
     existing = _load_token(token_path, default_filename)
     current_rev = existing.get("token_rev", 0) if existing else 0
-    data["token_rev"] = current_rev + 1
+    payload = {**data, "token_rev": current_rev + 1}
 
     with open(token_path, "w", encoding="utf-8") as f:
-        json.dump(data, f)
+        json.dump(payload, f)
     try:
         os.chmod(token_path, stat.S_IRUSR | stat.S_IWUSR)
     except OSError:

@@ -94,7 +94,7 @@ class TestGhpagesTokenIO:
     def test_save_and_load_round_trip(self, tmp_path):
         path = tmp_path / "ghpages-token.json"
         save_ghpages_token({"token": "ghp_xyz"}, path)
-        assert load_ghpages_token(path) == {"token": "ghp_xyz"}
+        assert load_ghpages_token(path) == {"token": "ghp_xyz", "token_rev": 1}
 
     def test_save_sets_0600_permissions(self, tmp_path):
         path = tmp_path / "ghpages-token.json"

@@ -112,7 +112,7 @@ class TestHashnodeTokenIO:
     def test_save_and_load_round_trip(self, tmp_path):
         path = tmp_path / "hashnode-token.json"
         save_hashnode_token({"token": "hn_xyz"}, path)
-        assert load_hashnode_token(path) == {"token": "hn_xyz"}
+        assert load_hashnode_token(path) == {"token": "hn_xyz", "token_rev": 1}
 
     def test_save_sets_0600_permissions(self, tmp_path):
         path = tmp_path / "hashnode-token.json"

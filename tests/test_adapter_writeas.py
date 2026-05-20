@@ -108,7 +108,7 @@ class TestWriteAsTokenIO:
     def test_save_and_load_round_trip(self, tmp_path):
         path = tmp_path / "writeas-token.json"
         save_writeas_token({"token": "wa_xyz"}, path)
-        assert load_writeas_token(path) == {"token": "wa_xyz"}
+        assert load_writeas_token(path) == {"token": "wa_xyz", "token_rev": 1}
 
     def test_save_sets_0600_permissions(self, tmp_path):
         path = tmp_path / "writeas-token.json"

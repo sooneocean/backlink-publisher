@@ -89,7 +89,7 @@ def test_save_and_load_blogger_token(tmp_path):
     save_blogger_token(data, token_path)
 
     loaded = load_blogger_token(token_path)
-    assert loaded == data
+    assert loaded == {**data, "token_rev": 1}
 
 
 def test_save_blogger_token_mode_0600(tmp_path):

@@ -527,6 +527,8 @@ def _generate_payload(
             tdk_section += f"- 描述: {tdk_description[:150]}...\n"
         body = body + tdk_section
 
+    cover_image_url = None
+    cover_image_warning = None
     # Banner image generation moved to `image_gen` adapter + `Config.image_gen`
     # in Plan 2026-05-20-001 Unit 4. The legacy
     # `LLMProviderConfig.{use_image_gen, image_gen_api_key}` branch was

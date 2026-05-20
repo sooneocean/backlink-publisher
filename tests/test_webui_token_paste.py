@@ -89,7 +89,7 @@ class TestSaveGhpagesToken:
         if os.name != "nt":
             assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
         data = json.loads(token_file.read_text())
-        assert data == {"token": "ghp_testabc123def456"}
+        assert data == {"token": "ghp_testabc123def456", "token_rev": 1}
 
     def test_empty_token_does_not_modify(self, client, tmp_path):
         # Seed an existing token first
@@ -124,7 +124,7 @@ class TestSaveWriteasToken:
         if os.name != "nt":
             assert stat.S_IMODE(token_file.stat().st_mode) == 0o600
         data = json.loads(token_file.read_text())
-        assert data == {"token": "wa_testtok_xyz"}
+        assert data == {"token": "wa_testtok_xyz", "token_rev": 1}
 
 
 class TestClearToken:
