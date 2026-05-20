@@ -285,3 +285,30 @@ client_secret = "your-client-secret"
 # repo = "your-github-handle/your-pages-repo"
 # branch = "gh-pages"                # or "main" for modern Pages repos
 # path_template = "_posts/{date}-{slug}.md"
+
+# ────────────────────────────────────────────────────────────
+# [image_gen] — AI banner image generation (Plan 2026-05-20-001)
+# ────────────────────────────────────────────────────────────
+# When configured, plan-backlinks generates a 1200×630 OG banner per
+# article using the operator's OpenAI-compatible image-gen endpoint
+# (the operator's LLM gateway — e.g. self-hosted, Freepik, fal.ai).
+# Banner is downloaded locally and re-uploaded to each platform's own
+# CDN at publish time so older backlinks don't break when the source
+# CDN's TTL expires.
+#
+# The API key does NOT live in this file. Run `frw-login` once to
+# write it to ~/.config/backlink-publisher/frw-token.json (0600).
+#
+# Feature is fully opt-in — leave this section commented out for
+# text-only backlinks.
+#
+# [image_gen]
+# base_url = "https://api.openai.com/v1"      # any OpenAI-compatible /images/generations endpoint
+# model = "dall-e-3"                          # provider-specific; check your gateway's /models
+# banner_size = "1200x630"                    # OG default; fall back to 1024x1024 if endpoint rejects non-square
+# daily_cap = 50                              # image-gen calls per UTC day; soft fail (skip + warn) past cap
+# per_run_cap = 10                            # image-gen calls per plan-backlinks invocation
+# timeout_s = 30
+# max_retries = 3
+# auto_disable_threshold = 5                  # consecutive 401/5xx before auto-disable for the rest of the run
+# strict = false                              # true: banner upload failure fails the publish; false: skip banner + publish body anyway

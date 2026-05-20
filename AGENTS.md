@@ -328,6 +328,24 @@ The R9 proof in `tests/test_r9_extension_readiness.py` already exercises cross-l
 
 Related: `docs/plans/2026-05-18-009-refactor-cli-extension-readiness-plan.md` (the R9 plan that made this recipe possible), `src/backlink_publisher/publishing/registry.py` (the `Publisher` ABC and dispatcher).
 
+## Adding banner embedding to an adapter
+
+When `Config.image_gen` is set, `plan-backlinks` produces a `banner` dict per row containing a local file path. To get that banner onto the platform's own CDN at publish time (so the embedded URL survives the upstream image-gen CDN's TTL), an adapter opts in by defining `embed_banner(self, artifact_path: Path, alt: str) -> str | None`. The dispatcher in `publish-backlinks` (Unit 5) checks `hasattr(adapter, "embed_banner")` — no registration, no protocol class — and:
+
+- Returns the platform-hosted URL on success → dispatcher prepends `![alt](platform_url)\n\n` to the body.
+- Returns `None` → dispatcher falls back to the source URL (where available) with a warning that the link may rot.
+- Raises → handled by `config.image_gen.strict`: `false` (default) logs warn and publishes without the banner; `true` propagates and fails the row.
+
+Per-platform upload contract (existing references):
+- **telegraph**: `POST https://telegra.ph/upload` with raw bytes; returns `telegra.ph/file/<sha>.<ext>` URL.
+- **hashnode**: `uploadMedia` GraphQL mutation (the existing hashnode adapter already maintains a GraphQL client).
+- **velog**: `image_upload_url` GraphQL mutation returns a presigned URL → PUT bytes.
+- **ghpages**: commit the file to `<repo>/assets/banners/<sha>.<ext>` and return the `raw.githubusercontent.com` URL.
+- **writeas**: NO media-upload API → `embed_banner` returns `None`; dispatcher falls back to source URL (or omits entirely if `source_url` is also None from b64-only providers).
+- **blogger**: Blogger API `images.insert` returns a Blogger-hosted URL.
+
+Reference: Plan 2026-05-20-001 Unit 5 + `src/backlink_publisher/publishing/adapters/image_gen/` for the artifact contract.
+
 ## Binding a channel
 
 Browser-based credential binding is **orthogonal** to publisher adapters. Adding a new publish-platform follows the recipe above; teaching the platform's credential lifecycle to the operator-facing surface follows this section. Plan: `docs/plans/2026-05-19-001-feat-settings-browser-binding-plan.md`.

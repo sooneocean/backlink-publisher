@@ -29,6 +29,7 @@ from .types import (
     DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
     HashnodeConfig,
+    ImageGenConfig,
     LLMProviderConfig,
     MediumOAuthConfig,
     ThreeUrlConfig,
@@ -73,6 +74,7 @@ from .parsers.anchor import (
     get_anchor_pool_v2,
 )
 from .parsers.alarm import _coerce_threshold, _parse_anchor_alarm
+from .parsers.image_gen import _parse_image_gen
 from .parsers.llm import _parse_llm_anchor_provider
 from .parsers.target import (
     _clean_pool,
@@ -102,6 +104,7 @@ __all__ = [
     "get_three_url_config",
     "GhpagesConfig",
     "HashnodeConfig",
+    "ImageGenConfig",
     "load_blogger_token",
     "load_config",
     "load_ghpages_token",

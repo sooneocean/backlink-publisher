@@ -14,8 +14,8 @@
 # plan_backlinks.py was decomposed into a package (plan_backlinks/) in 2026-05-19.
 # Monitoring the largest sub-file (core.py) post-split.
 [files."src/backlink_publisher/cli/plan_backlinks/core.py"]
-ceiling = 870
-rationale = "Post-P1-decomposition: core.py holds the main generation orchestrator after splitting work_themed + zh_short into sub-modules. SLOC 835 at split. Ceiling 870 provides 30-SLOC headroom for minor additions; lower when F5 ThrottleClock or further sub-module extraction lands."
+ceiling = 960
+rationale = "Post-P1-decomposition + Plan 2026-05-20-001 Unit 4 banner wiring (+105 SLOC over the post-Unit-2 baseline of 818): _build_banner_runtime helper (~45 SLOC including the four lazy imports + frw-token error handling) and _generate_banner_for_payload helper (~50 SLOC across check_caps / LLM prompt fallback / 3-way exception classification / storage step) plus the per-row attach point in main(). Current 923. Ceiling 960 keeps 30-SLOC headroom; Unit 5 will lift two helpers (_build_banner_runtime + the per-row attach) out into image_gen.runtime so this file shrinks back toward 900 once Unit 5's BannerEmbedder protocol lands and tightens its scope."
 
 [files."src/backlink_publisher/cli/publish_backlinks.py"]
 ceiling = 780

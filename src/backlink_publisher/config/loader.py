@@ -26,6 +26,7 @@ else:
 
 from .parsers.alarm import _parse_anchor_alarm
 from .parsers.anchor import _parse_anchor_proportions
+from .parsers.image_gen import _parse_image_gen
 from .parsers.llm import _parse_llm_anchor_provider
 from .parsers.target import (
     _parse_target_anchor_keywords,
@@ -196,6 +197,8 @@ def load_config(path: Path | None = None) -> Config:
             api_base=str(writeas_section.get("api_base", "https://write.as/api")),
         )
 
+    image_gen = _parse_image_gen(data.get("image_gen"))
+
     return Config(
         blogger_blog_ids=blog_ids,
         blogger_oauth=blogger_oauth,
@@ -213,6 +216,7 @@ def load_config(path: Path | None = None) -> Config:
         ghpages=ghpages,
         hashnode=hashnode,
         writeas=writeas,
+        image_gen=image_gen,
     )
 
 

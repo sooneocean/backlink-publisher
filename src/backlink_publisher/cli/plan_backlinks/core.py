@@ -23,7 +23,6 @@ from ... import (
 )
 import backlink_publisher.publishing.adapters  # noqa: F401  populate registry before argparse
 from backlink_publisher.publishing.adapters.llm_anchor_provider import OpenAICompatibleProvider
-from backlink_publisher.publishing.adapters.frw_image_gen import generate_cover_image
 from backlink_publisher.publishing.registry import registered_platforms
 from backlink_publisher.anchor.profile import ProfileEntry
 from backlink_publisher.anchor.scheduler import ScheduleDecision, SecondaryLink
@@ -528,23 +527,14 @@ def _generate_payload(
             tdk_section += f"- 描述: {tdk_description[:150]}...\n"
         body = body + tdk_section
 
-    cover_image_url = None
-    if config and config.llm_anchor_provider and config.llm_anchor_provider.use_image_gen and config.llm_anchor_provider.image_gen_api_key:
-        try:
-            llm_p = OpenAICompatibleProvider(
-                base_url=config.llm_anchor_provider.base_url,
-                api_key=config.llm_anchor_provider.api_key,
-                model=config.llm_anchor_provider.model,
-                temperature=config.llm_anchor_provider.temperature,
-                system_prompt=config.llm_anchor_provider.system_prompt,
-            )
-            image_prompt = llm_p.generate_image_prompt(title, body)
-            cover_image_url = generate_cover_image(config.llm_anchor_provider.image_gen_api_key, image_prompt)
-            if cover_image_url:
-                body = f"![{title}]({cover_image_url})\n\n" + body
-                plan_logger.info(f"AI cover image generated for {main_domain}")
-        except Exception as e:
-            plan_logger.warn(f"AI cover image generation failed: {e}")
+    # Banner image generation moved to `image_gen` adapter + `Config.image_gen`
+    # in Plan 2026-05-20-001 Unit 4. The legacy
+    # `LLMProviderConfig.{use_image_gen, image_gen_api_key}` branch was
+    # retired alongside `frw_image_gen.py` in Unit 2 because the stub
+    # endpoint URL (`api.frw.ai`) was never live. The new wiring lands
+    # banner artifacts as a separate JSONL field, never as `![](url)` in
+    # the body, so older backlinks don't break when an upstream CDN
+    # expires the URL.
 
     if extra_urls:
         extra_intro = f"\n\n除了主要的{domain_label}资源外，我们还整理了以下相关页面供您参考：\n"
@@ -648,6 +638,141 @@ def _generate_payload(
             "description": seo_desc,
             "canonical_url": target_url,
         },
+    }
+
+
+# ── Banner image generation seam (Plan 2026-05-20-001 Unit 4) ──────────
+
+
+def _build_banner_runtime(cfg: Config) -> dict[str, Any] | None:
+    """Construct the per-run image-gen state, or return ``None``.
+
+    Returns ``None`` when ``[image_gen]`` is absent, ``use_image_gen``
+    is false, or the ``frw-token.json`` file is missing — image-gen
+    is fully opt-in and these are graceful skips, not errors.
+
+    On success returns a dict bundling the adapter, auto-disable
+    tracker, event store, and a mutable per-run counter so a single
+    closure-shaped struct can flow through the per-row loop.
+    """
+    if cfg.image_gen is None or not cfg.image_gen.use_image_gen:
+        return None
+
+    try:
+        from backlink_publisher._util.secrets import load_frw_token
+        api_key = load_frw_token()
+    except RuntimeError as exc:
+        plan_logger.warn(
+            f"image_gen disabled for this run: {exc}",
+        )
+        return None
+
+    from backlink_publisher.publishing.adapters.image_gen import ImageGenAdapter
+    from backlink_publisher.publishing.adapters.image_gen.caps import (
+        AutoDisableTracker,
+    )
+    from backlink_publisher.events.store import EventStore
+
+    adapter = ImageGenAdapter(
+        base_url=cfg.image_gen.base_url,
+        model=cfg.image_gen.model,
+        banner_size=cfg.image_gen.banner_size,
+        api_key=api_key,
+        timeout_s=cfg.image_gen.timeout_s,
+        max_retries=cfg.image_gen.max_retries,
+    )
+    tracker = AutoDisableTracker(threshold=cfg.image_gen.auto_disable_threshold)
+    store = EventStore()
+    return {
+        "adapter": adapter,
+        "tracker": tracker,
+        "store": store,
+        "config": cfg.image_gen,
+        "run_counter": [0],  # mutable for in-place increment
+    }
+
+
+def _generate_banner_for_payload(
+    payload: dict[str, Any],
+    *,
+    runtime: dict[str, Any],
+    llm_provider: "OpenAICompatibleProvider | None",
+) -> dict[str, Any]:
+    """Generate (or skip) a banner for ``payload``.
+
+    Returns a dict suitable for the JSONL ``banner`` field:
+
+      * ``{path, alt, mime, sha}`` on success
+      * ``{path: None, status: "<reason>"}`` on every degraded path
+
+    Body markdown is intentionally NOT touched — per-platform CDN
+    upload (Unit 5) happens later and prepends ``![](platform_url)``
+    once the platform-hosted URL is known.
+    """
+    from backlink_publisher.publishing.adapters.image_gen.caps import (
+        check_caps,
+        record_cap_hit,
+        record_invocation,
+    )
+    from backlink_publisher.publishing.adapters.image_gen.storage import save_banner
+    from backlink_publisher._util.errors import ExternalServiceError
+
+    tracker = runtime["tracker"]
+    if tracker.disabled:
+        return {"path": None, "status": "auto_disabled"}
+
+    decision = check_caps(
+        runtime["store"],
+        runtime["config"],
+        run_counter=runtime["run_counter"][0],
+    )
+    if not decision.allowed:
+        record_cap_hit(runtime["store"], decision.reason or "unknown")
+        return {"path": None, "status": f"capped:{decision.reason}"}
+
+    title = payload.get("title", "")
+    body = payload.get("content_markdown", "")
+
+    if llm_provider is not None:
+        try:
+            prompt = llm_provider.generate_image_prompt(title, body)
+        except Exception as exc:
+            plan_logger.warn(f"image prompt LLM failed, falling back: {exc}")
+            prompt = f"Professional article cover for: {title}"
+    else:
+        prompt = f"Professional article cover for: {title}"
+
+    try:
+        artifact = runtime["adapter"].generate(prompt)
+    except RuntimeError as exc:
+        tracker.record_failure()
+        msg = str(exc)
+        if "401" in msg or "frw-login" in msg:
+            return {"path": None, "status": "auth_failed"}
+        return {"path": None, "status": "gen_failed"}
+    except ExternalServiceError:
+        tracker.record_failure()
+        return {"path": None, "status": "gen_failed"}
+    except Exception as exc:
+        plan_logger.warn(f"image_gen unexpected failure: {exc}")
+        tracker.record_failure()
+        return {"path": None, "status": "gen_failed"}
+
+    try:
+        saved_path = save_banner(artifact)
+    except Exception as exc:
+        plan_logger.warn(f"banner storage failed: {exc}")
+        return {"path": None, "status": "storage_failed"}
+
+    record_invocation(runtime["store"], artifact.prompt_sha)
+    runtime["run_counter"][0] += 1
+    tracker.record_success()
+
+    return {
+        "path": str(saved_path),
+        "alt": title,
+        "mime": artifact.mime,
+        "sha": artifact.prompt_sha,
     }
 
 
@@ -861,6 +986,12 @@ def main(argv: list[str] | None = None) -> None:
             system_prompt=cfg.llm_anchor_provider.system_prompt,
         )
 
+    # Plan 2026-05-20-001 Unit 4 — banner image-gen runtime is
+    # opt-in.  None when [image_gen] absent / use_image_gen=false /
+    # frw-token.json missing; otherwise a per-run bundle of adapter +
+    # tracker + event store + mutable counter.
+    image_gen_runtime = _build_banner_runtime(cfg)
+
     rng = random.Random()
 
     outputs: list[dict[str, Any]] = []
@@ -913,6 +1044,16 @@ def main(argv: list[str] | None = None) -> None:
                 metadata["branded_pool"] = list(branded_pool)
                 metadata["config_sha"] = config_sha
                 payload["metadata"] = metadata
+
+                if image_gen_runtime is not None:
+                    payload["banner"] = _generate_banner_for_payload(
+                        payload,
+                        runtime=image_gen_runtime,
+                        llm_provider=llm_provider,
+                    )
+                else:
+                    payload["banner"] = None
+
                 plan_logger.debug(
                     f"generated payload: id={payload['id']} platform={payload['platform']}",
                     extra={"id": payload["id"], "platform": payload["platform"]},

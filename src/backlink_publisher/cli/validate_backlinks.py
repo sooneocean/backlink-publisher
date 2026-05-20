@@ -308,6 +308,22 @@ def _enhance_payload(row: dict[str, Any], config: Config | None = None) -> dict[
                     f"comments / attributes do not count)"
                 )
 
+    # Plan 2026-05-20-001 Unit 4: validate optional banner field. None
+    # or absent → pass.  Dict with non-None path → file must exist
+    # (plan-backlinks claimed it persisted the banner here).  Status-only
+    # dicts (path=None, status="capped:..." / "auth_failed" / etc.) pass
+    # through unchecked — they're operator-actionable signals, not data
+    # integrity issues.
+    banner = row.get("banner")
+    if isinstance(banner, dict):
+        banner_path = banner.get("path")
+        if isinstance(banner_path, str) and banner_path:
+            from pathlib import Path as _P
+            if not _P(banner_path).exists():
+                errors_list.append(
+                    f"banner.path points to a file that does not exist: {banner_path}"
+                )
+
     row["validation"] = {
         "status": "failed" if errors_list else "passed",
         "checked_at": datetime.now(timezone.utc).isoformat(),

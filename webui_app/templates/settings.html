@@ -460,12 +460,95 @@
             </div>
         </div>
 
+        <!-- ⑦ AI Banner 图生成 (Plan 2026-05-20-001) -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-image me-2"></i>AI Banner 图生成 (可选)</span>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="testImageGenBtn"
+                        onclick="testImageGenConnection()" style="font-size:12px;">
+                    <i class="bi bi-cloud-check me-1"></i>Test Connection
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="font-size:13px;">
+                    每篇外链文自动生成 1200×630 OG banner 图，内容由文案驱动。配置在
+                    <code>config.toml</code> 的 <code>[image_gen]</code> section；API key
+                    通过 CLI <code>frw-login</code> 写入 0600 文件（不放 config.toml）。
+                </p>
+
+                {% if image_gen_status.configured %}
+                <div class="row g-2 mb-3" style="font-size:13px;">
+                    <div class="col-md-6">
+                        <strong>Endpoint:</strong>
+                        <code>{{ image_gen_status.config.base_url }}</code>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Model:</strong>
+                        <code>{{ image_gen_status.config.model }}</code>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Size:</strong>
+                        <code>{{ image_gen_status.config.banner_size }}</code>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Daily cap:</strong>
+                        {{ image_gen_status.config.daily_cap }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Per-run cap:</strong>
+                        {{ image_gen_status.config.per_run_cap }}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Toggle:</strong>
+                        {% if image_gen_status.config.use_image_gen %}
+                          <span class="badge bg-success">enabled</span>
+                        {% else %}
+                          <span class="badge bg-secondary">disabled</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Strict:</strong>
+                        {% if image_gen_status.config.strict %}
+                          <span class="badge bg-warning text-dark">on (publish blocked on banner failure)</span>
+                        {% else %}
+                          <span class="badge bg-info text-dark">off (degrade: skip banner)</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-secondary" style="font-size:13px;">
+                    <code>[image_gen]</code> section 未配置 — 查看 <code>config.example.toml</code> 末尾示例后填入 config.toml。
+                </div>
+                {% endif %}
+
+                <div class="border-top pt-3" style="font-size:13px;">
+                    <strong><i class="bi bi-key me-1"></i>FRW Token:</strong>
+                    <code>{{ image_gen_status.token_path }}</code>
+                    {% if image_gen_status.token_present %}
+                      <span class="badge bg-success">present</span>
+                      {% if image_gen_status.token_mtime %}
+                        <span class="text-muted" style="font-size:12px;">
+                          (modified {{ image_gen_status.token_mtime }})
+                        </span>
+                      {% endif %}
+                    {% else %}
+                      <span class="badge bg-danger">missing</span>
+                      <span class="text-muted" style="font-size:12px;">
+                        — run <code>frw-login</code> in a terminal
+                      </span>
+                    {% endif %}
+                </div>
+
+                <div id="imageGenTestResult" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card-header">
                 <i class="bi bi-terminal me-2"></i>实时运行日志 (Logs)
             </div>
             <div class="card-body">
-                <div id="llmLogConsole" class="bg-dark text-light p-3 rounded" 
+                <div id="llmLogConsole" class="bg-dark text-light p-3 rounded"
                      style="font-family:monospace;font-size:12px;height:200px;overflow-y:scroll;white-space:pre-wrap;">
                     正在加载日志...
                 </div>
@@ -882,6 +965,43 @@
             });
         });
     })();
+
+    // ── AI Banner Image Gen Test Connection ─────────────────────
+    async function testImageGenConnection() {
+        const btn = document.getElementById('testImageGenBtn');
+        const result = document.getElementById('imageGenTestResult');
+        if (!btn || !result) return;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Testing…';
+        result.style.display = 'block';
+        result.innerHTML = '<div class="alert alert-info mb-0" style="font-size:13px;">Probing <code>&lt;base_url&gt;/models</code>…</div>';
+
+        try {
+            const resp = await fetch('/settings/test-image-gen', {method: 'POST'});
+            const data = await resp.json();
+            if (data.ok) {
+                const modelLine = (data.model_count !== undefined)
+                    ? `endpoint reachable; ${data.model_count} models advertised`
+                    : 'endpoint reachable';
+                result.innerHTML = `<div class="alert alert-success mb-0" style="font-size:13px;">
+                    <i class="bi bi-check-circle me-1"></i>${modelLine}
+                    ${data.configured_model ? `<br><small>Configured model: <code>${data.configured_model}</code></small>` : ''}
+                </div>`;
+            } else {
+                result.innerHTML = `<div class="alert alert-danger mb-0" style="font-size:13px;">
+                    <i class="bi bi-x-circle me-1"></i>${data.error || 'unknown error'}
+                </div>`;
+            }
+        } catch (e) {
+            result.innerHTML = `<div class="alert alert-danger mb-0" style="font-size:13px;">
+                <i class="bi bi-x-circle me-1"></i>fetch failed: ${e.message}
+            </div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-cloud-check me-1"></i>Test Connection';
+        }
+    }
     </script>
 
     <script src="/static/js/bind_channel.js" defer></script>

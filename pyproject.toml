@@ -38,6 +38,7 @@ bind-channel = "backlink_publisher.cli.bind_channel:main"
 velog-login = "backlink_publisher.cli.velog_login:main"
 medium-login = "backlink_publisher.cli.medium_login:main"
 plan-check = "backlink_publisher.cli.plan_check:main"
+frw-login = "backlink_publisher.cli.frw_login:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -51,4 +52,5 @@ env = ["PYTHONHASHSEED=0"]
 markers = [
     "real_ssrf_check: exercise the real _check_url_for_ssrf path instead of the default-bypass autouse fixture (tests/test_content_fetch.py)",
     "real_content_fetch: exercise the real content_fetch.verify_urls_batch / verify_url_has_content path instead of the default-pass autouse fixture (tests/test_content_fetch.py applies this module-wide)",
+    "real_image_gen: exercise the real FRW image-gen endpoint instead of mocking; opt-in operator-only, never runs in CI (Plan 2026-05-20-001 Unit 2)",
 ]

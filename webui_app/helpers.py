@@ -46,6 +46,48 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _TRUTHY_BYPASS = {"1", "true", "yes"}
 
 
+def _image_gen_status(cfg) -> dict:
+    """Snapshot of image-gen state for the Settings template.
+
+    Reads ``Config.image_gen`` (config.toml ``[image_gen]`` section) plus
+    the on-disk presence + mtime of ``frw-token.json``.  The api_key
+    itself is NEVER returned — even shape/length information leaks
+    timing-attack surface.
+    """
+    import datetime as _dt
+    cfg_dict: dict | None = None
+    if cfg.image_gen is not None:
+        cfg_dict = {
+            "base_url": cfg.image_gen.base_url,
+            "model": cfg.image_gen.model,
+            "banner_size": cfg.image_gen.banner_size,
+            "daily_cap": cfg.image_gen.daily_cap,
+            "per_run_cap": cfg.image_gen.per_run_cap,
+            "strict": cfg.image_gen.strict,
+            "use_image_gen": cfg.image_gen.use_image_gen,
+            "auto_disable_threshold": cfg.image_gen.auto_disable_threshold,
+        }
+
+    token_path = cfg.frw_token_path
+    token_present = token_path.exists()
+    token_mtime: str | None = None
+    if token_present:
+        try:
+            token_mtime = _dt.datetime.fromtimestamp(
+                token_path.stat().st_mtime, tz=_dt.timezone.utc
+            ).strftime("%Y-%m-%d %H:%M UTC")
+        except OSError:
+            token_mtime = None
+
+    return {
+        "configured": cfg_dict is not None,
+        "config": cfg_dict,
+        "token_path": str(token_path),
+        "token_present": token_present,
+        "token_mtime": token_mtime,
+    }
+
+
 def _load_llm_settings() -> dict:
     defaults = {
         'api_key': '', 
@@ -1006,6 +1048,7 @@ def _settings_context(flash=None):
         plans_list=[],
         schedule_settings=_load_schedule_settings(),
         llm_settings=_load_llm_settings(),
+        image_gen_status=_image_gen_status(cfg),
         all_targets=all_targets,
         target_anchor_keywords=cfg.target_anchor_keywords,
         binding_channels=sorted(CHANNELS),

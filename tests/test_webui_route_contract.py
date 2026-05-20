@@ -1008,6 +1008,16 @@ class TestLlmRoutes:
         assert resp.status_code == 200
         assert resp.is_json
 
+    def test_test_image_gen_returns_json(self, client):
+        # No [image_gen] section in this isolated fixture → expect
+        # ok=False but JSON shape (no 500). Full coverage in
+        # tests/test_webui_image_gen.py.
+        resp = client.post("/settings/test-image-gen")
+        assert resp.status_code == 200
+        assert resp.is_json
+        body = resp.get_json()
+        assert "ok" in body
+
 
 class TestPreviewRoutes:
     def test_ce_preview_returns_200(self, client):

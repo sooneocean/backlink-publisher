@@ -89,6 +89,55 @@ class LLMProviderConfig:
     use_article_gen: bool = False
     article_system_prompt: str | None = None
 
+    # ── Deprecated image-gen fields (Plan 2026-05-20-001 Unit 1) ──────────
+    #
+    # ``use_image_gen`` was originally added to gate the cover-image
+    # branch in ``plan_backlinks/core.py:531-547``.  That branch is
+    # being migrated to ``Config.image_gen`` (the new ``[image_gen]``
+    # section) in Unit 4; the field is retained here so the existing
+    # call site short-circuits cleanly on the default value while the
+    # migration is in flight.
+    #
+    # ``image_gen_api_key`` is fully deprecated — the key now lives
+    # in ``frw-token.json`` (0600) per SEC-3.  Reading the field
+    # raises ``DeprecationWarning`` at parse time; the field will be
+    # removed once Unit 4 lands and no call sites remain.
+    use_image_gen: bool = False
+    image_gen_api_key: str | None = None
+
+
+@dataclass(frozen=True)
+class ImageGenConfig:
+    """FRW image-gen (OpenAI-compatible ``/images/generations``) settings.
+
+    Populated from ``[image_gen]`` in config.toml.  ``None`` when the
+    section is absent — image-gen is opt-in.
+
+    The API key is NOT modeled here; it lives in
+    ``~/.config/backlink-publisher/frw-token.json`` (0600) per SEC-3
+    (see ``backlink_publisher._util.secrets``).  Operator writes it
+    via ``frw-login`` and never via ``save_config``.
+
+    ``banner_size`` is operator-tunable to handle endpoints that don't
+    support the OG ``1200x630`` aspect (some OpenAI-compatible
+    gateways only ship square sizes).  Format ``WIDTHxHEIGHT``,
+    validated at parse time.
+    """
+
+    base_url: str
+    model: str
+    banner_size: str = "1200x630"
+    daily_cap: int = 50
+    per_run_cap: int = 10
+    timeout_s: float = 30.0
+    max_retries: int = 3
+    strict: bool = False
+    auto_disable_threshold: int = 5
+    use_image_gen: bool = True
+    """Operator toggle. When ``False`` the adapter is wired but never
+    invoked — useful for staging endpoints where banner generation is
+    not yet authorized."""
+
 
 @dataclass(frozen=True)
 class GhpagesConfig:
@@ -316,6 +365,19 @@ class Config:
     Populated from ``[writeas]`` in config.toml. ``None`` when section is
     absent. The login-issued token lives in a separate 0600 file at
     ``~/.config/backlink-publisher/writeas-token.json`` (per SEC-3)."""
+
+    image_gen: ImageGenConfig | None = None
+    """AI banner image-gen settings (Plan 2026-05-20-001).
+
+    Populated from ``[image_gen]`` in config.toml. ``None`` when the
+    section is absent — image-gen is opt-in. The API key lives in a
+    separate 0600 file at ``~/.config/backlink-publisher/frw-token.json``
+    (per SEC-3); use ``frw-login`` to write it."""
+
+    @property
+    def frw_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+        return _cfg._config_dir() / "frw-token.json"
 
     @property
     def config_dir(self) -> Path:
