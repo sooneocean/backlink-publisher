@@ -17,7 +17,7 @@ def index():
     if validated:
         ready_to_publish = {
             'data': validated,
-            'platform': config.get('platform', 'medium'),
+            'platform': config.get('platform', 'blogger'),
         }
     tab = request.args.get('tab', '')
     flash_type = request.args.get('flash_type', '')

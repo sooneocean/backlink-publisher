@@ -45,8 +45,8 @@ def ce_batch():
     urls_text = request.form.get('batch_urls', '').strip()
     platform = request.form.get('platform', 'blogger')
     language = request.form.get('language', 'zh-CN')
-    url_mode = request.form.get('url_mode', 'A')
-    publish_mode = request.form.get('publish_mode', 'draft')
+    url_mode = request.form.get('url_mode', 'C')
+    publish_mode = request.form.get('publish_mode', 'publish')
 
     raw_urls = [u.strip() for u in urls_text.split('\n') if u.strip()]
     if not raw_urls:
@@ -146,7 +146,7 @@ def ce_batch():
 def ce_publish_real():
     """Real publish (mode=publish, not dry-run)."""
     validated = request.form.get('validated', '')
-    platform = request.form.get('platform', 'medium')
+    platform = request.form.get('platform', 'blogger')
     config = session.get('config', {})
 
     if platform == 'blogger':

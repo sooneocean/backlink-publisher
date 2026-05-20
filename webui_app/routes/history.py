@@ -16,7 +16,7 @@ def ce_history():
     config = session.get('config', {})
     validated = session.get('validated', '')
     ready_to_publish = (
-        {'data': validated, 'platform': config.get('platform', 'medium')}
+        {'data': validated, 'platform': config.get('platform', 'blogger')}
         if validated else None
     )
     return _render('index.html',

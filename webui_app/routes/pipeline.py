@@ -109,7 +109,7 @@ def ce_plan():
         'main_domain': get_main_domain(target_url),
         'platform': detect_platform(target_url),
         'url_mode': 'C',
-        'publish_mode': 'draft',
+        'publish_mode': 'publish',
         'target_language': target_language,
         'custom_title': '',
         'custom_tags': '',
@@ -141,10 +141,10 @@ def ce_generate():
     if not urls:
         return _render('index.html', error="没有有效的连结", config=stored_config)
 
-    platform = request.form.get('platform', stored_config.get('platform', 'medium'))
-    url_mode = request.form.get('url_mode', stored_config.get('url_mode', 'A'))
+    platform = request.form.get('platform', stored_config.get('platform', 'blogger'))
+    url_mode = request.form.get('url_mode', stored_config.get('url_mode', 'C'))
     publish_mode = request.form.get('publish_mode',
-                                    stored_config.get('publish_mode', 'draft'))
+                                    stored_config.get('publish_mode', 'publish'))
     target_language = request.form.get('target_language',
                                        stored_config.get('target_language', 'zh-CN'))
     custom_title = request.form.get('custom_title', '').strip()
@@ -240,8 +240,8 @@ def ce_publish():
     plans = session.get('plans', '') or request.form.get('plans', '')
     config = session.get('config', {})
 
-    platform = request.form.get('platform', config.get('platform', 'medium'))
-    publish_mode = request.form.get('publish_mode', config.get('publish_mode', 'draft'))
+    platform = request.form.get('platform', config.get('platform', 'blogger'))
+    publish_mode = request.form.get('publish_mode', config.get('publish_mode', 'publish'))
 
     try:
         cmd = ['publish-backlinks', '--platform', platform, '--mode', publish_mode]
@@ -292,10 +292,10 @@ def ce_preview():
     seed = {
         'target_url': urls[0],
         'main_domain': get_main_domain(urls[0]),
-        'platform': request.form.get('platform', 'medium'),
+        'platform': request.form.get('platform', 'blogger'),
         'language': request.form.get('target_language', 'zh-CN'),
-        'url_mode': request.form.get('url_mode', 'A'),
-        'publish_mode': 'draft',
+        'url_mode': request.form.get('url_mode', 'C'),
+        'publish_mode': request.form.get('publish_mode', 'publish'),
         'custom_title': request.form.get('custom_title', ''),
         'custom_tags': request.form.get('custom_tags', ''),
         'extra_urls': urls[1:],

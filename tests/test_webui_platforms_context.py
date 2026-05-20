@@ -112,22 +112,22 @@ def test_wordpress_option_removed_from_publish_form(client):
     assert ">WordPress<" not in html
 
 
-# ── detect_platform: wordpress branch removed, 'medium' fallback kept ───────
+# ── detect_platform: unknown-domain fallback now 'blogger' per operator preset ─
 
 
-def test_detect_platform_wordpress_domain_falls_back_to_medium():
-    """R10b SPLIT (scope-guardian F1 / adversarial F8): wordpress branch
-    removed but unknown-domain fallback stays at 'medium' (no behavior
-    regression for callers relying on the default route)."""
+def test_detect_platform_wordpress_domain_falls_back_to_blogger():
+    """Operator preset (2026-05-20): unknown-domain fallback flipped from
+    'medium' to 'blogger'. Explicit medium/blogger domain matches still
+    take precedence (see test_detect_platform_known_routes_unchanged)."""
     from webui_app.helpers import detect_platform
 
-    assert detect_platform("https://foo.wordpress.com/post") == "medium"
+    assert detect_platform("https://foo.wordpress.com/post") == "blogger"
 
 
-def test_detect_platform_unknown_domain_unchanged_default():
+def test_detect_platform_unknown_domain_falls_back_to_blogger():
     from webui_app.helpers import detect_platform
 
-    assert detect_platform("https://entirely-unknown.example/x") == "medium"
+    assert detect_platform("https://entirely-unknown.example/x") == "blogger"
 
 
 def test_detect_platform_known_routes_unchanged():

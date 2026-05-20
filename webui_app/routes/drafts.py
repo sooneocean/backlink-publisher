@@ -22,8 +22,8 @@ def ce_draft_save():
     if not plans_jsonl:
         return redirect('/?tab=draft&flash_type=danger&flash_msg=没有可保存的内容')
     config = session.get('config', {})
-    platform = request.form.get('platform', config.get('platform', 'medium'))
-    publish_mode = request.form.get('publish_mode', 'draft')
+    platform = request.form.get('platform', config.get('platform', 'blogger'))
+    publish_mode = request.form.get('publish_mode', 'publish')
     target_url = config.get('target_url', request.form.get('target_url', 'unknown'))
     language = config.get('target_language', 'zh-CN')
 

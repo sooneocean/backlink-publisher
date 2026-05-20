@@ -19,8 +19,8 @@ def profiles_save():
     profile_data = {
         'platform': request.form.get('platform', 'blogger'),
         'language': request.form.get('language', 'zh-CN'),
-        'url_mode': request.form.get('url_mode', 'A'),
-        'publish_mode': request.form.get('publish_mode', 'draft'),
+        'url_mode': request.form.get('url_mode', 'C'),
+        'publish_mode': request.form.get('publish_mode', 'publish'),
     }
 
     def _upsert(profiles):

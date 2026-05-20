@@ -249,7 +249,7 @@ def sites_run():
         "target_url": entry.main_url.rstrip("/"),
         "main_domain": entry.main_url,
         "language": "zh-CN", "platform": "blogger",
-        "url_mode": "A", "publish_mode": "draft",
+        "url_mode": "C", "publish_mode": "publish",
     }
     seed_jsonl = json.dumps(seed_row, ensure_ascii=False) + "\n"
 
