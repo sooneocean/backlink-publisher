@@ -394,6 +394,28 @@ class TestPipelineRoutes:
         resp = client.post("/ce:plan", data={"main_url": "http://insecure.example/"})
         assert resp.status_code == 200
 
+    def test_ce_plan_ignores_derive_source_extra_field(self, client):
+        """Plan 2026-05-20-002 R7 invariant: the nameless ``derive_source``
+        input is the new paste-to-derive entry on the homepage; browsers
+        never submit nameless inputs. If a malicious client smuggles it
+        anyway, the extras-loop (``key.startswith('url_')``) must NOT
+        capture it (``derive_source`` doesn't match ``url_*``). The
+        backend treats it as an unknown form key and ignores it; the
+        ``main_url`` happy path is unaffected.
+        """
+        resp = client.post(
+            "/ce:plan",
+            data={
+                "main_url": "https://example.com/",
+                "derive_source": "http://attacker.example/internal",
+            },
+        )
+        assert resp.status_code == 200
+        # The attacker URL must not appear in the rendered page (no leak
+        # into derived form state / config preview / extras list).
+        body = resp.get_data(as_text=True)
+        assert "attacker.example" not in body
+
     def test_ce_generate_with_empty_session_returns_200(self, client):
         """No urls in session/form → error re-render, still 200."""
         resp = client.post("/ce:generate", data={})
