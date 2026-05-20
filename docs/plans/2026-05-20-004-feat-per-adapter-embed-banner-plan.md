@@ -393,7 +393,7 @@ Unit 1 must land first (establishes contract + 3 of 5 dispatch branches via writ
 
 ---
 
-- [ ] **Unit 6: GHPages `embed_banner` via git commit**
+- [x] **Unit 6: GHPages `embed_banner` via Contents API commit** — shipped.
 
 **Goal:** Implement `GitHubPagesAPIAdapter.embed_banner` committing the banner file to the operator's Pages repo and returning the `raw.githubusercontent.com` URL.
 

@@ -28,15 +28,21 @@ Design choices:
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import requests
 
 from backlink_publisher.config import Config, load_ghpages_token
-from backlink_publisher._util.errors import DependencyError, ExternalServiceError
+from backlink_publisher._util.errors import (
+    BannerUploadError,
+    DependencyError,
+    ExternalServiceError,
+)
 from backlink_publisher._util.logger import opencli_logger as log
 from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
@@ -221,8 +227,186 @@ def _published_url(repo: str, path: str) -> str:
     return f"https://{owner}.github.io/{name}/{path}"
 
 
+def _banner_raw_url(repo: str, branch: str, target_path: str) -> str:
+    """Compose the public ``raw.githubusercontent.com`` URL for a committed
+    banner file.  Used by both the upload path and the idempotent-skip
+    branch so the two cases return byte-identical URLs."""
+    return f"https://raw.githubusercontent.com/{repo}/{branch}/{target_path}"
+
+
+def _put_binary_contents(
+    repo: str,
+    branch: str,
+    path: str,
+    data: bytes,
+    commit_message: str,
+    token: str,
+    sha: str | None = None,
+) -> dict[str, Any]:
+    """PUT raw bytes via the Contents API.
+
+    Distinct from :func:`_put_contents` (which is markdown-text-only and
+    re-encodes via ``markdown.encode("utf-8")``).  Banner uploads are
+    binary — PNG / WebP / JPEG — and must NOT be passed through
+    ``.encode("utf-8")``.  The Contents API itself is content-type
+    agnostic; what matters is that the ``content`` field carries a
+    pure base64 of the raw bytes.
+
+    422 surfaces as the same ``_ShaRequired`` sentinel as the text
+    path, but the banner caller does NOT retry with sha — the
+    content-addressed file path means a 422 is a sha collision under
+    different content, which is a genuine error worth surfacing.
+    """
+    body: dict[str, Any] = {
+        "message": commit_message,
+        "content": base64.b64encode(data).decode("ascii"),
+        "branch": branch,
+    }
+    if sha is not None:
+        body["sha"] = sha
+
+    resp = requests.put(
+        f"{GITHUB_API}/repos/{repo}/contents/{path}",
+        headers=_required_headers(token),
+        json=body,
+        timeout=_HTTP_TIMEOUT_S,
+    )
+    if resp.status_code in (200, 201):
+        return resp.json()
+    if resp.status_code == 422:
+        raise _ShaRequired(resp.text[:200])
+    raise BannerUploadError(
+        f"ghpages banner PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
+    )
+
+
 class GitHubPagesAPIAdapter(Publisher):
     """Publishes Markdown to a Pages-enabled repo via the Contents API."""
+
+    def embed_banner(self, artifact_path: Path, alt: str) -> str | None:
+        """Commit the banner bytes to the operator's Pages repo at
+        ``assets/banners/<sha>.<ext>`` and return the
+        ``raw.githubusercontent.com`` URL.
+
+        Plan 2026-05-20-004 Unit 6.  Reuses the existing GitHub
+        Contents API path that ghpages uses for post commits: same
+        auth dialect (``Bearer <pat>``), same API version header,
+        same idempotency model (probe via GET, skip PUT on 200).
+
+        Why ``raw.githubusercontent.com`` and NOT ``<owner>.github.io``:
+        Pages serves built artifacts (i.e., files that Jekyll renders),
+        but raw assets under ``assets/banners/`` are also served by
+        ``raw.githubusercontent.com`` without any build delay or
+        Jekyll permalink rewriting.  The raw URL is also cache-
+        invalidated by sha — every banner with a new content sha gets
+        a fresh URL, no CDN purge needed.
+
+        Content-addressed path: ``assets/banners/<sha16>.<ext>`` where
+        ``sha16`` is the first 16 hex chars of sha256(bytes).  16 chars
+        ≈ 2^64 entropy — far more than enough to distinguish banner
+        contents.  Same content → same path → idempotent probe.
+
+        Lazy config load: the dispatcher contract is
+        ``embed_banner(self, artifact_path, alt)`` — no ``config``
+        argument.  We call ``load_config()`` inside the method so the
+        adapter can resolve repo / branch / token.  This is the same
+        config the publish path uses; if the operator runs
+        ``embed_banner`` outside the publish loop (e.g., a future
+        CLI), it picks up the same configuration honoring
+        ``BACKLINK_PUBLISHER_CONFIG_DIR``.
+
+        Raises ``BannerUploadError`` on any failure (missing config,
+        missing token, file-read OSError, network error, HTTP 4xx/5xx,
+        sha collision under different content).  Channel-status
+        ``mark_expired`` must NOT fire on a banner-upload 401 — that's
+        the publish path's job — so we never raise ``AuthExpiredError``
+        from here.
+        """
+        del alt  # consumed by dispatcher's ![alt](url) prepend
+
+        # Lazy import keeps the registry init lean — banner work is opt-in.
+        from backlink_publisher.config.loader import load_config
+
+        try:
+            config = load_config()
+        except DependencyError as exc:
+            raise BannerUploadError(
+                f"ghpages banner: config load failed: {exc.message}"
+            ) from exc
+
+        gh_cfg = config.ghpages
+        if gh_cfg is None or not gh_cfg.repo:
+            # Dispatcher only invokes embed_banner when the adapter chain
+            # selected this adapter (so available() returned True), but a
+            # race between available() check and embed_banner call could
+            # in theory invalidate the config.  Defensive.
+            raise BannerUploadError(
+                "ghpages banner: [ghpages] config missing or empty repo"
+            )
+
+        try:
+            token = _load_token(config)
+        except DependencyError as exc:
+            raise BannerUploadError(
+                f"ghpages banner: token unavailable: {exc.message}"
+            ) from exc
+
+        try:
+            data = artifact_path.read_bytes()
+        except OSError as exc:
+            raise BannerUploadError(
+                f"ghpages banner read failed: {artifact_path}: {exc}"
+            ) from exc
+
+        sha16 = hashlib.sha256(data).hexdigest()[:16]
+        # Preserve the file extension so the raw URL has the right
+        # content-type when GitHub serves it.  Default to .png for
+        # extension-less files (matches the telegraph/blogger fallback).
+        ext = artifact_path.suffix or ".png"
+        target_path = f"assets/banners/{sha16}{ext}"
+
+        # Idempotent probe: if the file already exists at this exact
+        # content sha, skip the PUT entirely.  GitHub's GET contents
+        # endpoint returns the file's git sha (NOT our content sha16) —
+        # we only need to know "does this path exist".
+        try:
+            existing_sha = _get_existing_sha(
+                gh_cfg.repo, gh_cfg.branch, target_path, token
+            )
+        except ExternalServiceError as exc:
+            raise BannerUploadError(
+                f"ghpages banner probe failed: {exc.message}"
+            ) from exc
+        except requests.RequestException as exc:
+            raise BannerUploadError(
+                f"ghpages banner probe network: {exc}"
+            ) from exc
+
+        if existing_sha is not None:
+            # Same content sha → same bytes (sha256 is preimage-resistant).
+            # Skip the PUT to avoid an empty commit on GitHub's side.
+            return _banner_raw_url(gh_cfg.repo, gh_cfg.branch, target_path)
+
+        commit_message = f"backlink-publisher: add banner {sha16}{ext}"
+        try:
+            _put_binary_contents(
+                gh_cfg.repo, gh_cfg.branch, target_path, data,
+                commit_message, token,
+            )
+        except _ShaRequired:
+            # The probe said "no file" but PUT said "file exists" — must
+            # be an eventual-consistency window between the GET and PUT.
+            # Surface as a banner error; operator can retry the row.
+            raise BannerUploadError(
+                f"ghpages banner: 422 sha-required after probe found none "
+                f"at {target_path} — eventual-consistency race; retry the row"
+            )
+        except requests.RequestException as exc:
+            raise BannerUploadError(
+                f"ghpages banner network: {exc}"
+            ) from exc
+
+        return _banner_raw_url(gh_cfg.repo, gh_cfg.branch, target_path)
 
     @classmethod
     def available(cls, config: Config) -> bool:
