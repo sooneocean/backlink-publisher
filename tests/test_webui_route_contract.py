@@ -907,6 +907,16 @@ class TestTokenPasteRoutes:
         assert resp.status_code == 403
 
 
+class TestUrlVerifyRoutes:
+    """Plan v1.0 Unit 3 — /url-verify route smoke. Full lifecycle in
+    tests/test_webui_url_verify_routes.py; this satisfies the route-coverage
+    gate below."""
+
+    def test_post_url_verify_missing_csrf_returns_403(self, client):
+        resp = client.post("/url-verify")
+        assert resp.status_code == 403
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".
