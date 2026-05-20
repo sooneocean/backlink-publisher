@@ -83,6 +83,8 @@ pytest -m real_content_fetch     # exercise real verify_urls_batch (module-wide 
 
 Test fixtures: `fixtures/seed.jsonl` (E2E, at repo root), `tests/fixtures/sloc_canary.py` (radon), `tests/fixtures/footprint_attack/` (HTML samples).
 
+**YAML fixtures — quote SHA values always.** PyYAML int-coerces unquoted all-digit scalars (`1234567` parses as `int`, not `str`); roughly 5% of 7-char hex SHAs are all-digit and fail schema validation only on Python 3.11+ CI, not local 3.12. Use `f"    - '{sha[:7]}'\n"` when embedding short SHAs in test fixtures. Precedent: PR #98 commit `3444cb6`.
+
 ## CI (GitHub Actions)
 
 `backlink-publisher/.github/workflows/ci.yml` triggers on push to `main`/`develop`, PRs to `main`. Python 3.11+3.12, all steps blocking (no `|| true`). `PYTHONHASHSEED=0` at job level for footprint regression gate.
@@ -137,6 +139,8 @@ The project keeps lessons in two places:
 Next curation review: **2026-08-15**. Next `/ce:compound` run should scan recent `feedback_*.md` and promote what's worth keeping.
 
 ## Plan-doc claims contract
+
+> **Status (2026-05-20):** Cutoff is now in effect. Any plan-doc dated `2026-05-20` or later **must** include a `claims:` block (or explicit `claims: {}` opt-out) — otherwise `plan-check` exits 8 and the `plan-claims-gate` check fails. The gate is currently a non-required check during a 14-day soak; promotion to a required status check is scheduled for **2026-06-02** (see `docs/plans/2026-05-19-010-feat-plan-claims-gate-followups-plan.md`).
 
 Plans authored on or after **2026-05-20** must carry a `claims:` block in their YAML frontmatter declaring the repo paths and SHAs that must still be reachable from `origin/main` at merge time. The `plan-check` CLI validates the block locally; the `plan-claims-gate` and `plan-claims-radar` workflows enforce it in CI and overnight. Plans dated before 2026-05-20 are grandfathered and silently skipped.
 
