@@ -300,8 +300,14 @@ def save_config(
         arbitrary operator-added tables) are preserved verbatim when they
         carry key=value data.
     (e) **Pure-placeholder sections** (header + comments only, no data)
-        are intentionally not preserved — design choice locked by
-        ``test_save_config_inplace_preserves_sections_with_keyvalue_data``.
+        are not *emitted* by the writer from scratch — given an empty
+        ``Config``, ``save_config`` produces only ``[blogger]`` and
+        ``[medium]``. They are not actively *dropped* however: if a
+        placeholder section already exists on disk, the preservation pass
+        copies it verbatim under branch (c) or (d). The canonical witness
+        for this nuance is
+        ``tests/test_save_config_section_taxonomy_canary.py``
+        (``test_branch_e_writer_does_not_emit_placeholder_sections_from_scratch``).
 
     Operator note: ``merge_site_url_categories`` is a second writer that
     text-edits ``[sites."<main>".url_categories]`` blocks in place and

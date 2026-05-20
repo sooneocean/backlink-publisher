@@ -64,7 +64,7 @@ stdout = clean JSONL; stderr = diagnostics; exit code 0 on success. No human-rea
 - (b) **Emitted conditionally:** `[blogger.oauth]` only when at least one credential field is non-empty.
 - (c) **Depth-2 subsections under managed roots not emitted on this call** (`[medium.oauth]`, `[medium.browser]`, operator-added `[targets.X]` / `[blogger.X]` / `[medium.X]`, dormant `[blogger.oauth]`) — **preserved verbatim**.
 - (d) **Unmanaged top-level sections** (`[sites.*]`, `[anchor.*]`, `[anchor_alarm]`, `[llm.*]`, arbitrary operator-added tables) — preserved verbatim when carrying key=value data.
-- (e) **Pure-placeholder sections** (header + comments only, no data) — intentionally not preserved.
+- (e) **Pure-placeholder sections** (header + comments only, no data) — never *emitted* by the writer ab initio (a fresh `save_config` of an empty `Config` produces only `[blogger]` and `[medium]`). Placeholder sections that already exist on disk are preserved verbatim by the same pass as branches (c)/(d); branch (e) is about emission, not deletion. Canary: `tests/test_save_config_section_taxonomy_canary.py`.
 
 Note: `merge_site_url_categories` is a second writer that text-edits `[sites."<main>".url_categories]` blocks in place and does not interact with the preservation pass.
 
