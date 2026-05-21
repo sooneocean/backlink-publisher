@@ -124,10 +124,30 @@ class RealChromeBrowserRunner:
 
         on_login_detected()
 
+        # Plan 2026-05-20-016 Unit 0 Fix 1: apply recipe.cookie_host_filter
+        # to drop cookies whose host is outside the channel's expected set.
+        # Mirrors driver._apply_host_filter — same dict shape, same semantics.
+        # Fail CLOSED on missing filter: persist-all would silently re-leak
+        # the operator's entire real-Chrome cookie jar (banking, SSO, email)
+        # into <channel>-storage-state.json, which is exactly the security
+        # bug this fix addresses.  Recipe-registration test in
+        # tests/test_recipe_host_filter_registration.py guards against
+        # future recipes forgetting the field.
+        host_filter = getattr(recipe, "cookie_host_filter", None)
+        if host_filter is None:
+            cdp.close()
+            self._terminate_proc()
+            raise ChromeLaunchError("recipe_missing_host_filter")
+
         def _provider(*, path) -> None:
             try:
+                raw_cookies = cdp.all_cookies()
+                filtered = [
+                    c for c in raw_cookies
+                    if isinstance(c, dict) and host_filter(c.get("domain", ""))
+                ]
                 state = {
-                    "cookies": cdp.all_cookies(),
+                    "cookies": filtered,
                     "origins": [],
                 }
                 Path(path).write_text(json.dumps(state, ensure_ascii=False))

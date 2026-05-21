@@ -32,6 +32,13 @@ BIND_ERROR_MESSAGES: dict[str, str] = {
     "storage_path_traversal": "凭据路径校验失败（内部错误），请检查 BACKLINK_PUBLISHER_CONFIG_DIR 是否被异常覆盖",
     "persist_io_error": "无法写入凭据文件，请检查磁盘空间和权限",
     "stream_closed_no_terminal_event": "子进程意外退出，请查看 stderr 日志",
+    # Plan 2026-05-20-016 Unit 0 Fix 1. The bind recipe is missing
+    # cookie_host_filter — chrome backend refuses to persist cookies
+    # because the unfiltered cookie jar would include cross-domain
+    # entries from the operator's real Chrome profile (security
+    # blast-radius). Should never reach operators; if it does, the
+    # recipe needs a code fix.
+    "recipe_missing_host_filter": "配置错误：channel recipe 缺少 cookie_host_filter（开发者错误）。请联系开发者升级 backlink-publisher 版本。",
     # Plan 2026-05-19-003 Unit 1 + Unit 4. The predicate scraped a
     # @username different from the previously-bound account. The
     # Settings UI renders a confirmation card (keep vs replace) when
