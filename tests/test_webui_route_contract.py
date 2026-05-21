@@ -1088,6 +1088,31 @@ class TestSecretLeakRegression:
     """Guard against the P3 pattern reappearing — long-term credentials must
     never be re-rendered into HTML where DevTools can read them."""
 
+    def test_llm_settings_file_is_0o600(self, client):
+        """llm-settings.json holds the LLM api_key — must not be world-readable.
+
+        PR #139 hand-rolled the write path and shipped without chmod, leaving
+        the file 0644. The fix routes through ``atomic_write`` (chmods 0o600
+        on the tmp file before rename).
+        """
+        import stat as _stat
+        from webui_app.helpers import _llm_settings_file
+
+        resp = client.post("/settings/save-llm-config", data={
+            "endpoint": "https://api.example.com/v1",
+            "api_key": "sk-perms-canary",
+            "model": "gpt-4o",
+            "temperature": "0.7",
+        })
+        assert resp.status_code == 302
+        path = _llm_settings_file()
+        assert path.exists(), "settings file not created by save handler"
+        mode = _stat.S_IMODE(path.stat().st_mode)
+        assert mode == 0o600, (
+            f"llm-settings.json mode is {oct(mode)} — must be 0o600 (api_key "
+            "is a long-term secret; PR #139 originally shipped 0644)."
+        )
+
     def test_blogger_client_secret_not_rendered(self, client):
         from backlink_publisher.config import load_config, save_config
         canary = "GOCSPX-LEAK-CANARY-do-not-render"

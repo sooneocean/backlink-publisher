@@ -1,9 +1,10 @@
 """LLM settings route handlers."""
 import json
-import os
 from flask import Blueprint, jsonify, redirect, request
 from ..helpers import _llm_settings_file, _load_llm_settings
 import requests
+
+from backlink_publisher.persistence.safe_write import atomic_write
 
 bp = Blueprint("llm", __name__)
 
@@ -22,11 +23,12 @@ _LLM_DEFAULTS = {
 
 
 def _write_llm_settings(payload: dict) -> None:
+    # Delegates to the canonical credential-write helper so the file lands
+    # 0o600 (api_key is a long-term secret). PR #139 hand-rolled this write
+    # and forgot the chmod, leaving llm-settings.json world-readable.
     path = _llm_settings_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix('.json.tmp')
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding='utf-8')
-    os.replace(tmp, path)
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    atomic_write(path, text)
 
 
 @bp.route('/settings/save-llm-config', methods=['POST'])
