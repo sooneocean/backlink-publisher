@@ -153,14 +153,13 @@ class TestSettingsRenderWithCards:
         resp = client.get("/settings")
         assert b'dofollow' in resp.data
 
-    def test_settings_devto_card_exposed_after_unit4b(self, client):
-        # Plan 2026-05-21-001 Unit 4b un-rejects devto and ships it as a
-        # chrome-publish channel — the binding dashboard card must appear.
-        # mastodon still rejected until Unit 4c; wpcom permanently rejected;
-        # writeas retired to HIDDEN_FROM_UI — all three must stay absent.
+    def test_settings_chrome_publish_channels_exposed_after_unit4c(self, client):
+        # Units 4b/4c shipped devto + mastodon as chrome-publish channels —
+        # both must appear in the binding dashboard. wpcom permanently rejected;
+        # writeas retired to HIDDEN_FROM_UI — both must stay absent.
         resp = client.get("/settings")
         assert b'channel-devto' in resp.data
-        assert b'channel-mastodon' not in resp.data
+        assert b'channel-mastodon' in resp.data
         assert b'channel-wpcom' not in resp.data
         assert b'channel-writeas' not in resp.data
         assert b'token-paste-writeas' not in resp.data

@@ -126,16 +126,10 @@ _REGISTRY: dict[str, list[type[Publisher] | Publisher]] = {}
 # is implicit (this is a rejection map).
 _REJECTED_PLATFORMS: dict[str, str] = {
     # devto: re-registered as nofollow chrome-publish channel in
-    #   Plan 2026-05-21-001 Unit 4b. Operator surface notes the
-    #   nofollow status via the dashboard chip; backlinks still
-    #   provide referral traffic + topical relevance signals even
-    #   though they don't transfer PageRank.
-    "mastodon": (
-        "Mastodon hardcodes rel=\"nofollow noopener noreferrer\" on outbound "
-        "links across all instances; the attribute is federation-default and "
-        "cannot be disabled per-post or per-account. Outbound links provide "
-        "no SEO authority transfer. Reverted in PR #109."
-    ),
+    #   Plan 2026-05-21-001 Unit 4b (PR #157).
+    # mastodon: re-registered as nofollow chrome-publish channel in
+    #   Plan 2026-05-21-001 Unit 4c — Fediverse referral traffic +
+    #   topical signal value despite the hardcoded nofollow attribute.
     "wordpresscom": (
         "WordPress.com free tier applies rel=\"nofollow\" to outbound links; "
         "paid Business/Commerce tiers enable dofollow but require a paid "

@@ -184,6 +184,24 @@ class HashnodeConfig:
 
 
 @dataclass(frozen=True)
+class MastodonConfig:
+    """Mastodon adapter configuration — single Fediverse instance.
+
+    Mastodon is decentralized: there is no single canonical host like
+    ``hashnode.com``. The operator picks one instance (e.g.,
+    ``https://mastodon.social``) and posts go there. Multi-instance
+    support is a follow-up plan (each instance keeps its own bind state
+    + per-instance Chrome profile).
+
+    ``instance_url`` — fully qualified ``https://<host>`` of the
+    Mastodon instance. Trailing slash optional. The chrome publish
+    recipe appends ``/publish`` to drive the compose window.
+    """
+
+    instance_url: str = ""
+
+
+@dataclass(frozen=True)
 class WriteAsConfig:
     """Write.as adapter configuration.
 
@@ -367,6 +385,15 @@ class Config:
     Populated from ``[writeas]`` in config.toml. ``None`` when section is
     absent. The login-issued token lives in a separate 0600 file at
     ``~/.config/backlink-publisher/writeas-token.json`` (per SEC-3)."""
+
+    mastodon: "MastodonConfig | None" = None
+    """Mastodon adapter config (single Fediverse instance URL).
+
+    Populated from ``[mastodon]`` in config.toml. ``None`` when section
+    is absent — the chrome publish recipe raises ``DependencyError`` if
+    asked to compose without an ``instance_url``. Single-instance only
+    in Plan 2026-05-21-001 Unit 4c; multi-instance is a follow-up
+    (per-instance worktree with per-instance bind state)."""
 
     image_gen: ImageGenConfig | None = None
     """AI banner image-gen settings (Plan 2026-05-20-001).

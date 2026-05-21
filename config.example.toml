@@ -312,3 +312,17 @@ client_secret = "your-client-secret"
 # max_retries = 3
 # auto_disable_threshold = 5                  # consecutive 401/5xx before auto-disable for the rest of the run
 # strict = false                              # true: banner upload failure fails the publish; false: skip banner + publish body anyway
+
+# ─── Mastodon (Plan 2026-05-21-001 Unit 4c) ────────────────────────────────
+#
+# Single Fediverse instance for chrome-publish. Pick one instance where
+# you have a throwaway account dedicated to backlink publish; do NOT use
+# your personal Mastodon account (security policy — the publishing Chrome
+# profile must not house personal credentials).
+#
+# Trailing slash optional. Multi-instance support is a follow-up; for
+# now pick one instance per workspace and re-bind via Chrome attach for
+# each compose run.
+#
+# [mastodon]
+# instance_url = "https://mastodon.social"

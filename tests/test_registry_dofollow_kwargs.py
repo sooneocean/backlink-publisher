@@ -119,8 +119,13 @@ class TestRejectedPlatform:
             register("wordpresscom", FakeAdapter, dofollow=False, rationale=RATIONALE_PAD)
 
     def test_register_rejected_name_with_dofollow_true_still_raises(self) -> None:
+        # mastodon shipped as chrome-publish in Unit 4c so it's no
+        # longer rejected. wordpresscom is the only remaining entry —
+        # the assertion is structural (any rejected name → RegistryError
+        # regardless of dofollow=), so reusing the same key as the
+        # sibling test is fine.
         with pytest.raises(RegistryError, match="previously rejected"):
-            register("mastodon", FakeAdapter, dofollow=True)
+            register("wordpresscom", FakeAdapter, dofollow=True)
 
     def test_error_message_cites_prior_rationale_and_instructs_deletion(self) -> None:
         # R12: failure message must include both prior rationale + the

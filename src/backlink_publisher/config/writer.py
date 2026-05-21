@@ -15,6 +15,7 @@ from .types import (
     DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
     HashnodeConfig,
+    MastodonConfig,
     ThreeUrlConfig,
     WriteAsConfig,
 )
@@ -49,6 +50,7 @@ def save_config(
     ghpages_config: GhpagesConfig | None = None,
     hashnode_config: HashnodeConfig | None = None,
     writeas_config: WriteAsConfig | None = None,
+    mastodon_config: MastodonConfig | None = None,
 ) -> None:
     config_path = path or (_resolve_config_dir() / "config.toml")
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -91,6 +93,7 @@ def save_config(
     ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
     hashnode_cfg = hashnode_config if hashnode_config is not None else existing.hashnode
     writeas_cfg = writeas_config if writeas_config is not None else existing.writeas
+    mastodon_cfg = mastodon_config if mastodon_config is not None else existing.mastodon
 
     lines: list[str] = []
 
@@ -157,6 +160,11 @@ def save_config(
         lines.append("[writeas]")
         lines.append(f"collection_alias = {_toml_str(writeas_cfg.collection_alias)}")
         lines.append(f"api_base         = {_toml_str(writeas_cfg.api_base)}")
+        lines.append("")
+
+    if mastodon_cfg is not None:
+        lines.append("[mastodon]")
+        lines.append(f"instance_url = {_toml_str(mastodon_cfg.instance_url)}")
         lines.append("")
 
     known_subsections: set[tuple[str, str]] = set()

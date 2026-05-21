@@ -17,9 +17,8 @@ from backlink_publisher.publishing.registry import _REJECTED_PLATFORMS
 class TestRejectedPlatformsMap:
     def test_initial_entries_present(self) -> None:
         # PR #108 → #109 negative-knowledge corpus.
-        # devto removed from rejection map in Plan 2026-05-21-001 Unit 4b
-        # (shipped as chrome-publish channel).
-        assert "mastodon" in _REJECTED_PLATFORMS
+        # devto removed in Plan 2026-05-21-001 Unit 4b (chrome-publish channel).
+        # mastodon removed in Unit 4c (chrome-publish channel).
         assert "wordpresscom" in _REJECTED_PLATFORMS
 
     def test_every_rationale_meets_length_floor(self) -> None:

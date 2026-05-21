@@ -49,6 +49,7 @@ from ..browser_publish import BrowserPublishDispatcher
 from ..browser_publish.recipes import velog as _velog_recipe  # noqa: F401
 from ..browser_publish.recipes import hashnode as _hashnode_recipe  # noqa: F401
 from ..browser_publish.recipes import devto as _devto_recipe  # noqa: F401
+from ..browser_publish.recipes import mastodon as _mastodon_recipe  # noqa: F401
 
 
 # Register the fallback chain per platform. Adding a new platform = one
@@ -109,6 +110,21 @@ register(
         "and topical relevance signals even though they don't transfer "
         "PageRank. Operator dashboard chip surfaces the nofollow "
         "status (Unit 5)."
+    ),
+)
+register(
+    "mastodon",
+    BrowserPublishDispatcher.for_channel("mastodon"),
+    dofollow=False,
+    rationale=(
+        "Mastodon hardcodes rel=\"nofollow noopener noreferrer\" on "
+        "outbound links across all instances — federation-default and "
+        "not disableable per-post or per-account. Re-registered in "
+        "Plan 2026-05-21-001 Unit 4c as a chrome publish channel — "
+        "Fediverse referral traffic + topical signal value despite the "
+        "nofollow. Single instance per config.toml [mastodon] "
+        "instance_url; security policy: use a throwaway account only, "
+        "never a personal Mastodon identity."
     ),
 )
 

@@ -121,11 +121,14 @@ class TestDevtoChain:
         assert "devto" not in _REJECTED_PLATFORMS
 
     def test_other_rejections_intact(self):
-        """Removing devto must not perturb mastodon / wordpresscom entries."""
+        """Removing devto must not perturb the rest of the rejection map.
+
+        Mastodon was originally a sibling rejection but shipped as a
+        chrome-publish channel in Unit 4c (PR stacked on top of this
+        one); only wordpresscom remains as canonical-rejected.
+        """
         from backlink_publisher.publishing.registry import _REJECTED_PLATFORMS
 
-        # mastodon stays in this PR; Unit 4c will remove it.
-        assert "mastodon" in _REJECTED_PLATFORMS
         assert "wordpresscom" in _REJECTED_PLATFORMS
 
     def test_devto_in_registered_platforms(self):

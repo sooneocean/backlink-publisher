@@ -15,6 +15,7 @@ from .types import (
     ThreeUrlConfig,
     GhpagesConfig,
     HashnodeConfig,
+    MastodonConfig,
     VelogConfig,
     WriteAsConfig,
 )
@@ -197,6 +198,13 @@ def load_config(path: Path | None = None) -> Config:
             api_base=str(writeas_section.get("api_base", "https://write.as/api")),
         )
 
+    mastodon_section = data.get("mastodon")
+    mastodon: MastodonConfig | None = None
+    if mastodon_section is not None:
+        mastodon = MastodonConfig(
+            instance_url=str(mastodon_section.get("instance_url", "")),
+        )
+
     image_gen = _parse_image_gen(data.get("image_gen"))
 
     return Config(
@@ -216,6 +224,7 @@ def load_config(path: Path | None = None) -> Config:
         ghpages=ghpages,
         hashnode=hashnode,
         writeas=writeas,
+        mastodon=mastodon,
         image_gen=image_gen,
     )
 
