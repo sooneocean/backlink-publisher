@@ -47,6 +47,7 @@ from .writeas import WriteAsAPIAdapter
 # from API path propagates without fall-through, per registry contract).
 from ..browser_publish import BrowserPublishDispatcher
 from ..browser_publish.recipes import velog as _velog_recipe  # noqa: F401
+from ..browser_publish.recipes import hashnode as _hashnode_recipe  # noqa: F401
 
 
 # Register the fallback chain per platform. Adding a new platform = one
@@ -76,7 +77,23 @@ register(
     dofollow=True,
 )
 register("ghpages", GitHubPagesAPIAdapter, dofollow=True)
-register("hashnode", HashnodeAPIAdapter, dofollow=True)
+register(
+    "hashnode",
+    HashnodeAPIAdapter,
+    BrowserPublishDispatcher.for_channel("hashnode"),
+    dofollow=False,
+    rationale=(
+        "Hashnode GraphQL API moved behind a paid subscription on "
+        "2026-05-13 — HashnodeAPIAdapter therefore raises DependencyError "
+        "for free-tier operators and the chain falls through to "
+        "BrowserPublishDispatcher (Plan 2026-05-21-001 Unit 3), which "
+        "drives the Web editor at hashnode.com/new and bypasses the "
+        "paywall. dofollow stays False pending live link_attr_verifier "
+        "measurement — Hashnode injects rel=nofollow on outbound links "
+        "for unverified accounts. Pro-account operators retain the API "
+        "path without code changes."
+    ),
+)
 register("writeas", WriteAsAPIAdapter, dofollow=True)
 
 
