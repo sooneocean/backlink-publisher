@@ -1,7 +1,7 @@
 ---
 title: "feat: Chrome/CDP multi-channel publish via BrowserPublisher abstraction"
 type: feat
-status: active
+status: completed
 date: 2026-05-21
 deepened: 2026-05-21
 claims: {}
@@ -187,7 +187,7 @@ publish(payload, mode, config):
 
 ## Implementation Units
 
-- [ ] **Unit 0: Chrome lifecycle spike (pre-Unit-1 validation)**
+- [x] **Unit 0: Chrome lifecycle spike (pre-Unit-1 validation)**
 
 **Goal:** 在 commit Unit 1 設計前，落地驗證 4 項 Chrome lifecycle 假設（feasibility F1/F5 + security F1/F2/F3 五人標 high）。不寫 production code，產 `docs/refs/2026-05-2N-chrome-lifecycle-spike.md` report。
 
@@ -219,7 +219,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 1: BrowserPublishRecipe + ChromeAttachSession foundation**
+- [x] **Unit 1: BrowserPublishRecipe + ChromeAttachSession foundation**
 
 **Goal:** 抽 `BrowserPublishRecipe` dataclass + `ChromeAttachSession` context manager + 共用 chrome path helpers。為後續 unit 提供 plumbing。
 
@@ -270,7 +270,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 2: BrowserPublishDispatcher + classmethod factory**
+- [x] **Unit 2: BrowserPublishDispatcher + classmethod factory**
 
 **Goal:** 用單一 `BrowserPublishDispatcher`（Publisher subclass）+ `for_channel(channel)` classmethod factory 把 recipe 包成可註冊實例（per D6 — 不動態建類）。
 
@@ -319,7 +319,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 3: Hashnode chrome publish recipe + register**
+- [x] **Unit 3: Hashnode chrome publish recipe + register**
 
 **Goal:** 落地第一個 concrete recipe（hashnode），register 進 adapter chain，proving the abstraction。
 
@@ -368,7 +368,7 @@ publish(payload, mode, config):
 
 **Unit 4 split rationale**：原 Unit 4 把 velog + devto + mastodon 三個獨立 channel 工作壓在單一 unit / 單一 PR，被 adversarial-review F7 標 high — 每個 channel 都需 live DOM 探索、selectors、success heuristics、auth detection、test fixtures（mastodon 還需 config 路徑）— 是 Unit 3-sized 努力 × 3。改拆三個 sibling units，可獨立 land / 獨立 defer 若 selector discovery 觸雷。
 
-- [ ] **Unit 4a: Velog chrome publish recipe**
+- [x] **Unit 4a: Velog chrome publish recipe**
 
 **Goal:** Velog chrome publish recipe，append 到 `register("velog", ...)` chain 為 auth-missing fallback（不是 API outage fallback — 見 Velog fallthrough semantics 注解）。
 
@@ -399,7 +399,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 4b: Dev.to chrome publish recipe**
+- [x] **Unit 4b: Dev.to chrome publish recipe**
 
 **Goal:** Devto chrome publish recipe；nofollow 平台 UI 警示沿用 Unit 5 dofollow-warning macro。
 
@@ -429,7 +429,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 4c: Mastodon chrome publish recipe + config plumbing**
+- [x] **Unit 4c: Mastodon chrome publish recipe + config plumbing**
 
 **Goal:** Mastodon recipe + 新 config field `[mastodon] instance_url`（feasibility F10 指出本 plan 原文跳過 config 路徑 — 必補）。
 
@@ -468,7 +468,7 @@ publish(payload, mode, config):
 
 ---
 
-- [ ] **Unit 5: WebUI Settings publish-backend UI + dofollow guardrail + Chrome profile health**
+- [x] **Unit 5: WebUI Settings publish-backend UI + dofollow guardrail + Chrome profile health**
 
 **Goal:** Settings dashboard 每張 channel 卡片底部新增「Publish backend」pill（read-only this unit）；dofollow=False channel 紅字警示（dofollow 知識從 `status.dofollow` 取，不重複）；新增 `chrome_profile_health` 與 `chrome_publish_status` indicator 在 dashboard 顯示綁定狀態與 CDP port 活躍度 — 提供 D3 共用 profile contamination 的可視化偵測點。
 

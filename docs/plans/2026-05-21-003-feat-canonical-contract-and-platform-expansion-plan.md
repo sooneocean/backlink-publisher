@@ -171,7 +171,7 @@ publish() 進入後若 `available()` 已回 False，dispatcher 跳到下一個 a
 
 ### Phase 1 (PR-A): Canonical URL Contract Cross-Adapter Wiring
 
-- [ ] **Unit 1: Schema canonical_url URL validator + docstring (REVISED per doc-review P0-2)**
+- [x] **Unit 1: Schema canonical_url URL validator + docstring (REVISED per doc-review P0-2)**
 
 **Goal:** 為 `seo.canonical_url` 加 URL format validator（require `^https?://`，拒 control chars / quotes / angle-brackets），形成 layered defense 第一層；補 docstring 註明 opt-in 契約。**Unit 1 + Unit 2 共同 ship 為 PR-A 的第一個 commit**。
 
@@ -209,7 +209,7 @@ publish() 進入後若 `available()` 已回 False，dispatcher 跳到下一個 a
 
 ---
 
-- [ ] **Unit 2: Adapter canonical consumption — non-Medium dofollow platforms**
+- [x] **Unit 2: Adapter canonical consumption — non-Medium dofollow platforms**
 
 **Goal:** 把 `medium_api.py:136` 的 canonical pattern 推廣到**既有 dofollow adapter**：Hashnode / Blogger / GHPages / Writeas 四個 adapter；Telegraph + Velog 結構性跳過並 docstring 註明（兩者均不支援 canonical 欄位）；Notion / Dev.to 在 Unit 6/7 新 adapter 內直接含 canonical（不需 retrofit）。**Unit 1 已 fold into 此 Unit**（per doc-review SG-1）：本 Unit 第一個 commit 包含 schema docstring 註解 + 5 個 characterization 測試。
 
@@ -255,7 +255,7 @@ publish() 進入後若 `available()` 已回 False，dispatcher 跳到下一個 a
 
 ---
 
-- [ ] **Unit 3: Cross-adapter canonical regression suite**
+- [x] **Unit 3: Cross-adapter canonical regression suite**
 
 **Goal:** 建立**負向**回歸測試套件 — 確保沒有任何 adapter 在 `seo` 未提供時 default-on 注入 canonical（防未來 PR 不小心改 default）。
 
