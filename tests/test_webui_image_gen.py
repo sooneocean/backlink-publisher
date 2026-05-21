@@ -10,7 +10,9 @@ import pytest
 @pytest.fixture
 def app():
     from webui_app import create_app
-    return create_app(start_scheduler=False)
+    a = create_app(start_scheduler=False)
+    a.config['CSRF_ENABLED'] = False
+    return a
 
 
 @pytest.fixture

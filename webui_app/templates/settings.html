@@ -306,6 +306,7 @@
                     配置自定义 LLM 端口以获得更优质的文章生成效果。支持所有 OpenAI 兼容格式的 API。
                 </p>
                 <form method="POST" action="/settings/save-llm-config">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="action" id="llmFormAction" value="">
                     <div class="row g-3">
                         <div class="col-12">
@@ -656,10 +657,13 @@
             formData.append('endpoint', endpoint);
             formData.append('api_key', api_key);
             formData.append('model', model);
+            const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            formData.append('csrf_token', csrf);
 
             const resp = await fetch('/settings/test-llm-connection', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {'X-CSRFToken': csrf}
             });
             const data = await resp.json();
             if (data.status === 'ok') {
@@ -694,9 +698,12 @@
         try {
             const formData = new FormData();
             formData.append('test_title', title);
+            const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            formData.append('csrf_token', csrf);
             const resp = await fetch('/settings/test-llm-generation', {
                 method: 'POST',
-                body: formData
+                body: formData,
+                headers: {'X-CSRFToken': csrf}
             });
             const data = await resp.json();
             if (data.status === 'ok') {
@@ -854,7 +861,9 @@
         data.append('language', getVal('target_language'));
         data.append('url_mode', getVal('url_mode'));
         data.append('publish_mode', getVal('publish_mode'));
-        fetch('/profiles/save', { method: 'POST', body: data })
+        const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        data.append('csrf_token', csrf);
+        fetch('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
             .then(r => r.json())
             .then(d => {
                 if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓');
@@ -943,7 +952,8 @@
         result.innerHTML = '<div class="alert alert-info mb-0" style="font-size:13px;">Probing <code>&lt;base_url&gt;/models</code>…</div>';
 
         try {
-            const resp = await fetch('/settings/test-image-gen', {method: 'POST'});
+            const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            const resp = await fetch('/settings/test-image-gen', {method: 'POST', headers: {'X-CSRFToken': csrf}});
             const data = await resp.json();
             if (data.ok) {
                 const modelLine = (data.model_count !== undefined)

@@ -65,6 +65,7 @@
                 <!-- 步骤 2：填写凭据 -->
                 <form method="POST" action="/settings/blogger/oauth-start"
                       id="oauthCredForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <p style="font-size:13px;font-weight:600;margin-bottom:10px;color:#374151;">
                         Step 2 — 填入 OAuth 凭据
                     </p>
@@ -137,7 +138,9 @@
                     </p>
                 </form>
 
-                <form id="revokeForm" method="POST" action="/settings/revoke-blogger" style="display:none;"></form>
+                <form id="revokeForm" method="POST" action="/settings/revoke-blogger" style="display:none;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                </form>
 
                 <hr style="margin:20px 0;">
 
@@ -152,6 +155,7 @@
                     </p>
 
                     <form method="POST" action="/settings/save-blog-ids" id="blogIdForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <div id="blogIdRows">
                             {% for domain, blog_id in blog_ids.items() %}
                             <div class="blog-id-row">

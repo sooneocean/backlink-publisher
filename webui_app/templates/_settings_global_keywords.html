@@ -20,6 +20,7 @@
                 </p>
                 {% else %}
                 <form method="POST" action="/settings/save-target-keywords">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     {% for domain in all_targets %}
                     {% set kws = target_anchor_keywords.get(domain, []) %}
                     <details style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">

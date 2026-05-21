@@ -1084,6 +1084,23 @@ class TestLlmRoutes:
         assert resp.headers["Location"].startswith("/settings?")
 
 
+class TestCsrfGuard:
+    """Lock in that ``_global_csrf_guard`` rejects state-mutating verbs
+    without a valid token. The class above's ``client`` fixture disables
+    CSRF via TESTING/WTF_CSRF_ENABLED; this test builds its own app so
+    the production hook path is exercised."""
+
+    def test_post_without_csrf_token_returns_403(self):
+        from webui_app import create_app
+        a = create_app(start_scheduler=False)
+        with a.test_client() as c:
+            resp = c.post('/settings/save-llm-config', data={'endpoint': 'x'})
+            assert resp.status_code == 403, (
+                f"Expected 403 from global CSRF guard, got {resp.status_code}. "
+                "Regression of _global_csrf_guard in webui_app/__init__.py."
+            )
+
+
 class TestSecretLeakRegression:
     """Guard against the P3 pattern reappearing — long-term credentials must
     never be re-rendered into HTML where DevTools can read them."""

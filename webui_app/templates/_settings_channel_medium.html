@@ -28,12 +28,14 @@
                 {% if bs.state != 'not_installed' %}
                 <div class="d-flex gap-2 flex-wrap mb-3">
                     <form method="POST" action="/settings/medium/launch-browser-login" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="_csrf_token" value="{{ medium_csrf_token() }}">
                         <button type="submit" class="btn btn-primary btn-sm">
                             <i class="bi bi-browser-chrome me-1"></i>打开浏览器登录
                         </button>
                     </form>
                     <form method="POST" action="/settings/medium/probe-browser-login" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="_csrf_token" value="{{ medium_csrf_token() }}">
                         <button type="submit" class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-search me-1"></i>测试登录状态
@@ -42,6 +44,7 @@
                     {% if bs.profile_has_cookies %}
                     <form method="POST" action="/settings/medium/clear-browser-login" style="margin:0;"
                           onsubmit="return confirm('确认清除浏览器登录？下次发布前需重新登录。')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="_csrf_token" value="{{ medium_csrf_token() }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm">
                             <i class="bi bi-trash me-1"></i>清除浏览器登录
@@ -56,6 +59,7 @@
                 <div class="alert alert-success d-flex justify-content-between align-items-center mb-3 py-2" style="font-size:13px;">
                     <span><i class="bi bi-check-circle-fill me-2"></i>OAuth token 已存在，发布时自动使用</span>
                     <form method="POST" action="/settings/clear-medium-oauth" style="margin:0;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm">
                             <i class="bi bi-trash me-1"></i>清除
                         </button>
@@ -77,6 +81,7 @@
                             查看是否仍可生成。
                         </p>
                         <form method="POST" action="/settings/save-medium-token">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <div class="mb-3">
                                 <label class="form-label">Integration Token</label>
                                 <div class="input-group">
@@ -95,6 +100,7 @@
                                     <i class="bi bi-floppy me-1"></i>保存 Token
                                 </button>
                                 <form method="POST" action="/settings/clear-medium-token" style="margin:0;" {% if not medium_token_set %}hidden{% endif %}>
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <button type="submit" class="btn btn-outline-danger btn-sm">
                                         <i class="bi bi-trash me-1"></i>清除 Token
                                     </button>

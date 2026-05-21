@@ -8,6 +8,7 @@
                     控制草稿队列的发布节奏，避免短时间内大量上稿被平台识别。
                 </p>
                 <form method="POST" action="/settings/schedule">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">最小发布间隔（小时）</label>

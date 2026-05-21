@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>Backlink Publisher</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
@@ -750,6 +750,7 @@
             </a>
             {% if config %}
             <form method="POST" action="/ce:clear" style="margin:0;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.5);">
                     <i class="bi bi-arrow-counterclockwise me-1"></i>重置
                 </button>
@@ -767,12 +768,14 @@
             <strong>未完成的发布任务</strong>
             — {{ incomplete_run.started_at[:19] if incomplete_run.started_at else '' }}，共 {{ incomplete_run.pending_count }} 篇待处理。
             <form action="/checkpoint/resume" method="POST" class="d-inline ms-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
               <button type="submit" class="btn btn-warning btn-sm">
                 <i class="bi bi-play-fill me-1"></i>恢复发布
               </button>
             </form>
             <form action="/checkpoint/dismiss" method="POST" class="d-inline ms-1">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="run_id" value="{{ incomplete_run.run_id }}">
               <button type="submit" class="btn btn-outline-secondary btn-sm">忽略</button>
             </form>
@@ -858,6 +861,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="/ce:plan">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <!-- Plan 2026-05-20-002 Unit 5 — paste-to-derive input.
                          Nameless: browser never submits this field, so /ce:plan
                          handler's extras-loop (key.startswith('url_')) cannot
@@ -927,6 +931,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="/ce:generate" id="configForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="urls_json" value="{{ urls_json }}">
                     
                     <div class="row">
@@ -1113,12 +1118,14 @@
                 
                 <div class="btn-group-actions">
                     <form method="POST" action="/ce:validate" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="plans" value="{{ plans }}">
                         <button type="submit" class="btn btn-secondary">
                             <i class="bi bi-check2-square me-2"></i>验证内容
                         </button>
                     </form>
                     <form method="POST" action="/ce:publish" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <input type="hidden" name="plans" value="{{ plans }}">
                         <input type="hidden" name="platform" value="{{ config.platform }}">
                         <div class="input-group" style="display:inline-flex;gap:0;">
@@ -1146,6 +1153,7 @@
                     <i class="bi bi-check-circle me-2"></i>内容验证成功！
                 </div>
                 <form method="POST" action="/ce:publish">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="plans" value="{{ validated }}">
                     <input type="hidden" name="platform" value="{{ config.platform }}">
                     <div class="input-group" style="max-width:320px;">
@@ -1240,6 +1248,7 @@
                         {% if draft_queue %}
                         <!-- Plan 2026-05-19-006 Unit 6: bulk-action bar -->
                         <form id="draftBulkForm" method="POST" style="margin:0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <div class="bulk-action-bar">
                             <span class="form-check" style="margin:0;">
                                 <input class="form-check-input" type="checkbox" id="draftSelectAll">
@@ -1316,6 +1325,7 @@
                                 {% if s == 'pending' %}
                                 <!-- 排程表单 -->
                                 <form method="POST" action="/ce:draft/schedule" style="margin:0;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <div>
                                         <label style="font-size:11px;color:var(--secondary);display:block;margin-bottom:2px;">排程时间</label>
@@ -1330,6 +1340,7 @@
                                     </button>
                                 </form>
                                 <form method="POST" action="/ce:draft/publish-now" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-success"
                                             onclick="return confirm('立即发布此草稿？')">
@@ -1338,6 +1349,7 @@
                                 </form>
                                 {% elif s == 'scheduled' %}
                                 <form method="POST" action="/ce:draft/cancel" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-warning">
                                         <i class="bi bi-x-circle me-1"></i>取消排程
@@ -1347,6 +1359,7 @@
                                 <!-- 删除 -->
                                 <form method="POST" action="/ce:draft/delete" style="margin:0;"
                                       onsubmit="return confirm('确定删除此草稿？')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>
@@ -1395,6 +1408,7 @@
                         {% if history %}
                         <!-- Plan 2026-05-19-006 Unit 6: bulk-action bar for history -->
                         <form id="historyBulkForm" method="POST" style="margin:0;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         <div class="bulk-action-bar">
                             <span class="form-check" style="margin:0;">
                                 <input class="form-check-input" type="checkbox" id="historySelectAll">
@@ -1477,12 +1491,14 @@
                             {% endif %}
                             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                                 <form method="POST" action="/ce:history/reuse" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="target_url" value="{{ item.target_url }}">
                                     <button type="submit" class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-arrow-repeat me-1"></i>重新外链
                                     </button>
                                 </form>
                                 <form method="POST" action="/ce:history/recheck" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-warning"
                                             {% if not item.article_urls %}disabled title="此记录无文章 URL，无法核实"{% endif %}>
@@ -1490,6 +1506,7 @@
                                     </button>
                                 </form>
                                 <form method="POST" action="/ce:history/update-status" style="margin:0;display:flex;gap:4px;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <select name="status" class="form-select form-select-sm" style="width:100px;">
                                         <option value="drafted" {% if s == 'drafted' %}selected{% endif %}>草稿</option>
@@ -1500,6 +1517,7 @@
                                 </form>
                                 <form method="POST" action="/ce:history/delete" style="margin:0;"
                                       onsubmit="return confirm('确定删除此条记录？')">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
                                 </form>
@@ -1511,6 +1529,7 @@
                         <form id="historyPurgeForm" method="POST" action="/ce:history/purge-failed"
                               style="display:none;"
                               onsubmit="return confirm('一键清除所有 status=failed 记录？\n（不影响“未核实”，那些需要批量重新核实判定）');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         </form>
                         <div id="historyEmptyFiltered" style="display:none;">
                             <i class="bi bi-funnel" style="font-size:48px;"></i>
@@ -1547,6 +1566,7 @@
                         </div>
                         {% endif %}
                         <form method="POST" action="/ce:batch" id="batchForm">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <div class="mb-3">
                                 <label class="form-label">目标 URL 列表 <small class="text-muted">（每行一个）</small></label>
                                 <textarea name="batch_urls" class="form-control" rows="6"
@@ -1742,7 +1762,9 @@
         data.append('language', getVal('target_language'));
         data.append('url_mode', getVal('url_mode'));
         data.append('publish_mode', getVal('publish_mode'));
-        fetch('/profiles/save', { method: 'POST', body: data })
+        const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        data.append('csrf_token', csrf);
+        fetch('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
             .then(r => r.json())
             .then(d => { if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓'); });
     }

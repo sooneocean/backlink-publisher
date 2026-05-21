@@ -69,8 +69,46 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
     # _ensure_csrf_token() is idempotent within a request.
     @app.context_processor
     def inject_csrf_token():
+        # Return the STRING value so templates can use ``{{ csrf_token }}``
+        # uniformly. Previously this returned the function — templates
+        # were split between ``{{ csrf_token }}`` and ``{{ csrf_token() }}``
+        # and per-route ``_settings_context`` re-bound to a string, so
+        # ``{{ csrf_token() }}`` exploded under /settings. The try/except
+        # handles template-only renders that some unit tests do outside
+        # of a real request context (session is unavailable there).
         from .helpers import _ensure_csrf_token
-        return {"csrf_token": _ensure_csrf_token}
+        try:
+            return {"csrf_token": _ensure_csrf_token()}
+        except RuntimeError:
+            return {"csrf_token": ""}
+
+    # Global CSRF enforcement. SameSite=Lax + loopback already block most
+    # cross-site POST, but operators who flip BACKLINK_PUBLISHER_ALLOW_NETWORK
+    # to bind off-loopback lose Lax's effective protection. Defence-in-depth
+    # so every state-mutating verb checks a token rather than trusting that
+    # 12 of 16 blueprints remembered to call _check_csrf_or_abort inline.
+    #
+    # Tests can opt out via ``app.config['CSRF_ENABLED'] = False`` or the
+    # legacy ``WTF_CSRF_ENABLED = False`` (many existing tests already set
+    # that flag defensively — both are honored).
+    app.config.setdefault('CSRF_ENABLED', True)
+
+    @app.before_request
+    def _global_csrf_guard():
+        from flask import request as _req
+        if _req.method not in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return
+        if app.config.get('CSRF_ENABLED', True) is False:
+            return
+        if app.config.get('WTF_CSRF_ENABLED', True) is False:
+            return
+        # OAuth callbacks arrive via 302 from Google with their own HMAC-signed
+        # state param verified inside the handler; CSRF token can't survive
+        # the cross-origin redirect.
+        if _req.endpoint and _req.endpoint.endswith('oauth_callback'):
+            return
+        from .helpers import _check_csrf_or_abort
+        _check_csrf_or_abort()
 
     # Start scheduler unless under pytest (tests don't need background jobs)
     if start_scheduler is None:

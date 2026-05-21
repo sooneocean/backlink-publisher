@@ -84,7 +84,8 @@
 <script>
 function runVelogLogin(e) {
     e.preventDefault();
-    fetch('/api/velog/login', {method: 'POST'})
+    const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+    fetch('/api/velog/login', {method: 'POST', headers: {'X-CSRFToken': csrf}})
         .then(r => r.json())
         .then(d => {
             if (d.ok) {
