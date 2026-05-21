@@ -223,17 +223,29 @@ class _ShaRequired(Exception):
     """Internal sentinel — 422 from PUT contents means the file exists."""
 
 
-def _published_url(repo: str, path: str) -> str:
-    """Best-effort Jekyll-style public URL.
+_JEKYLL_POST_RE = __import__("re").compile(
+    r"^_posts/(\d{4})-(\d{2})-(\d{2})-(.+?)\.(?:md|markdown)$"
+)
 
-    Pages publishes ``_posts/YYYY-MM-DD-slug.md`` as ``/YYYY/MM/DD/slug/``,
-    but operators may use custom permalink templates. We surface the *raw*
-    Pages URL (sans permalink rewriting) which always works and matches
-    the file path; if the operator has a custom permalink scheme they'll
-    redirect to the canonical URL.
+
+def _published_url(repo: str, path: str) -> str:
+    """Public URL for the committed post.
+
+    ``_posts/YYYY-MM-DD-slug.md`` is processed by Jekyll and served at
+    ``/YYYY/MM/DD/slug.html`` (default permalink ``/:year/:month/:day/:title``).
+    Verified live: HTTP 200 at that shape; the raw ``_posts/`` path returns 404.
+
+    For non-``_posts`` paths (custom layout or ``.nojekyll`` repo) the raw
+    file path is used verbatim — Pages serves those at face value.
     """
     owner, _, name = repo.partition("/")
-    return f"https://{owner}.github.io/{name}/{path}"
+    m = _JEKYLL_POST_RE.match(path)
+    if m:
+        year, month, day, slug = m.group(1), m.group(2), m.group(3), m.group(4)
+        url_path = f"{year}/{month}/{day}/{slug}.html"
+    else:
+        url_path = path
+    return f"https://{owner}.github.io/{name}/{url_path}"
 
 
 def _banner_raw_url(repo: str, branch: str, target_path: str) -> str:

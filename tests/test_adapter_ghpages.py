@@ -172,6 +172,29 @@ class TestGhpagesHelpers:
         assert "\"seo\", \"backlinks\"" in body
         assert "# Backlinks" in body
 
+    def test_published_url_jekyll_post_md(self):
+        """_posts/YYYY-MM-DD-slug.md → Jekyll serves /YYYY/MM/DD/slug.html."""
+        from backlink_publisher.publishing.adapters.ghpages import _published_url
+        url = _published_url("owner/repo", "_posts/2026-05-21-hello-world.md")
+        assert url == "https://owner.github.io/repo/2026/05/21/hello-world.html"
+
+    def test_published_url_jekyll_post_markdown_ext(self):
+        from backlink_publisher.publishing.adapters.ghpages import _published_url
+        url = _published_url("owner/repo", "_posts/2026-01-03-my-post.markdown")
+        assert url == "https://owner.github.io/repo/2026/01/03/my-post.html"
+
+    def test_published_url_non_posts_path_unchanged(self):
+        """Custom layouts (pages/, docs/, etc.) are served at the raw path."""
+        from backlink_publisher.publishing.adapters.ghpages import _published_url
+        url = _published_url("owner/repo", "pages/about.md")
+        assert url == "https://owner.github.io/repo/pages/about.md"
+
+    def test_published_url_no_underscore_posts_prefix(self):
+        """Path without leading _posts/ is not rewritten even if date-slug named."""
+        from backlink_publisher.publishing.adapters.ghpages import _published_url
+        url = _published_url("owner/blog", "posts/2026-05-21-hello.md")
+        assert url == "https://owner.github.io/blog/posts/2026-05-21-hello.md"
+
 
 # ───────────────────────────────────────────────────────────────────────────────
 # publish() happy path
@@ -194,8 +217,11 @@ class TestGhpagesPublishHappy:
 
         assert result.status == "published"
         assert result.platform == "ghpages"
-        assert "github.io/blog/_posts/" in result.published_url
+        # Jekyll rewrites _posts/YYYY-MM-DD-slug.md → /YYYY/MM/DD/slug.html
+        assert "github.io/blog/" in result.published_url
+        assert "_posts/" not in result.published_url
         assert "hello" in result.published_url
+        assert result.published_url.endswith(".html")
 
         call = mock_put.call_args
         url = call.args[0]
