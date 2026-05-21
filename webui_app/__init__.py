@@ -136,4 +136,17 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
         except Exception as exc:  # noqa: BLE001 — startup must not crash
             _log.warning("bind_job.reap_orphans failed: %s", exc)
 
+        # Plan 2026-05-21-001 Unit 1: reap stale publish-launched Chrome.
+        # Verifies PID-file ownership via cmdline substring (chrome_bin +
+        # profile path) before signaling, defending against PID reuse.
+        try:
+            from backlink_publisher.publishing.browser_publish.chrome_session import (
+                reap_orphan_publish_chrome,
+            )
+            outcome = reap_orphan_publish_chrome()
+            if outcome.get("action") != "noop":
+                _log.info("chrome_session.reap_orphan_publish_chrome: %s", outcome)
+        except Exception as exc:  # noqa: BLE001 — startup must not crash
+            _log.warning("chrome_session.reap_orphan_publish_chrome failed: %s", exc)
+
     return app

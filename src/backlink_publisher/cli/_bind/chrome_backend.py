@@ -7,13 +7,19 @@ storage_state shape the existing bind driver persists.
 
 It is product code, not a dependency on Codex's Chrome extension. Tests mock
 the process, HTTP, and websocket surfaces; CI never launches Chrome.
+
+Path/binary helpers (``_chrome_binary``, ``_chrome_port``,
+``_chrome_profile_dir``, ``_websocket_available``) are re-exported from
+``publishing.browser_publish.chrome_session`` so bind and publish share a
+single source of truth (Plan 2026-05-21-001 Unit 1). ``_chrome_port`` and
+``_chrome_profile_dir`` keep raising ``ChromeLaunchError`` here (vs
+``ChromeSessionError`` upstream) to preserve the bind error contract.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -22,61 +28,40 @@ from urllib.parse import quote
 
 import requests
 
-from backlink_publisher.config.loader import _config_dir
+from backlink_publisher.publishing.browser_publish.chrome_session import (
+    ChromeSessionError as _ChromeSessionError,
+    _chrome_binary as _shared_chrome_binary,
+    _chrome_port as _shared_chrome_port,
+    _chrome_profile_dir as _shared_chrome_profile_dir,
+    _websocket_available as _shared_websocket_available,
+)
 from .driver import BIND_TIMEOUT_MS, ChromeLaunchError
 
 
-_DEFAULT_PORT = 9222
 _CONNECT_TIMEOUT_S = 10.0
 _POLL_INTERVAL_S = 0.25
 
 
 def _chrome_profile_dir() -> Path:
-    raw = os.environ.get("BACKLINK_PUBLISHER_REAL_CHROME_PROFILE_DIR")
-    if raw:
-        return Path(raw).expanduser()
-    return _config_dir() / "real-chrome-profile"
+    try:
+        return _shared_chrome_profile_dir()
+    except _ChromeSessionError as exc:
+        raise ChromeLaunchError(str(exc)) from exc
 
 
 def _chrome_port() -> int:
-    raw = os.environ.get("BACKLINK_PUBLISHER_REAL_CHROME_PORT")
-    if not raw:
-        return _DEFAULT_PORT
     try:
-        port = int(raw)
-    except ValueError as exc:
+        return _shared_chrome_port()
+    except _ChromeSessionError as exc:
         raise ChromeLaunchError("chrome_cdp_unavailable") from exc
-    if port < 1 or port > 65535:
-        raise ChromeLaunchError("chrome_cdp_unavailable")
-    return port
 
 
 def _chrome_binary() -> str | None:
-    raw = os.environ.get("BACKLINK_PUBLISHER_REAL_CHROME_BIN")
-    if raw:
-        path = Path(raw).expanduser()
-        return str(path) if path.exists() else None
-
-    candidates = [
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        "/Applications/Chromium.app/Contents/MacOS/Chromium",
-        shutil.which("google-chrome"),
-        shutil.which("google-chrome-stable"),
-        shutil.which("chromium"),
-        shutil.which("chromium-browser"),
-    ]
-    for candidate in candidates:
-        if candidate and Path(candidate).exists():
-            return str(candidate)
-    return None
+    return _shared_chrome_binary()
 
 
 def _websocket_available() -> bool:
-    try:
-        import websocket  # noqa: F401
-    except ImportError:
-        return False
-    return True
+    return _shared_websocket_available()
 
 
 class RealChromeBrowserRunner:
