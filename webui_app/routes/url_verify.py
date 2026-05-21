@@ -39,9 +39,9 @@ from backlink_publisher._util.logger import get_logger
 from ..helpers import (
     _LOOPBACK_HOSTS,
     _check_bind_origin_or_abort,
-    _is_fetch_verify_disabled,
     _refuse_when_allow_network,
 )
+from ..helpers.url_meta import _is_fetch_verify_disabled
 from ..services import url_verify_throttle as throttle
 
 

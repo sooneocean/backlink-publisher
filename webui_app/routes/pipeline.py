@@ -11,20 +11,22 @@ from backlink_publisher._util.logger import plan_logger
 from flask import Blueprint, request, session
 
 from ..helpers import (
-    _normalize_url,
     _parse_publish_results,
     _persist_three_tier_config,
     _push_history_per_row,
     _push_history_single_failure,
     _render,
     _get_velog_status,
+    run_pipe,
+)
+from ..helpers.url_meta import (
+    _normalize_url,
     _verify_urls_or_error,
     detect_language,
     detect_platform,
     fetch_full_tdk,
     fetch_url_metadata,
     get_main_domain,
-    run_pipe,
 )
 
 bp = Blueprint("pipeline", __name__)

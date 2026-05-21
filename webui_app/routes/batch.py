@@ -17,9 +17,9 @@ from ..helpers import (
     _push_history_single_failure,
     _render,
     _rewrite_cli_cmd,
-    get_main_domain,
     run_pipe,
 )
+from ..helpers.url_meta import get_main_domain
 
 bp = Blueprint("batch", __name__)
 
