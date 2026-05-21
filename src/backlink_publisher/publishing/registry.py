@@ -19,7 +19,10 @@ Fallback semantics (preserved from the legacy chain):
 - The registry stores an ordered list of adapter classes per platform.
 - ``dispatch`` walks the chain in order, instantiating each adapter and
   calling ``.publish(...)``.
-- ``DependencyError`` from one adapter → fall through to the next
+- ``AuthExpiredError`` (subclass of ``DependencyError``) → propagate
+  immediately; operator must re-bind (Plan 2026-05-20-016 Unit 0b).
+- ``DependencyError`` (base class) from one adapter → fall through to
+  the next
   (the legacy "no Medium token → try browser" path).
 - ``ExternalServiceError`` from any adapter → propagate up immediately
   (preserves the legacy "401 / 429 / network failure does NOT fall
@@ -46,6 +49,7 @@ from typing import Any, Callable, Literal
 
 from backlink_publisher.config import Config
 from backlink_publisher._util.errors import (
+    AuthExpiredError,
     DependencyError,
     ExternalServiceError,
     RegistryError,
@@ -226,9 +230,12 @@ def dispatch(
 ) -> AdapterResult:
     """Walk the registered fallback chain for ``payload["platform"]``.
 
-    Mirrors the legacy ``publish()`` behaviour byte-for-byte: dry-run
-    sentinel result, ``DependencyError`` falls through, ``ExternalServiceError``
-    propagates, unknown platform raises ``ExternalServiceError``.
+    Error semantics: dry-run returns a sentinel result;
+    ``AuthExpiredError`` (subclass of ``DependencyError``) propagates
+    immediately so operator UX can prompt re-bind (Plan
+    2026-05-20-016 Unit 0b); plain ``DependencyError`` from one
+    adapter falls through to the next; ``ExternalServiceError``
+    propagates; unknown platform raises ``ExternalServiceError``.
 
     Banner embed (Plan 2026-05-20-004 Unit 1): when ``banner_emit`` is
     supplied AND the payload carries a non-degraded ``banner`` field
@@ -282,6 +289,17 @@ def dispatch(
                 if new_body != payload.get("content_markdown"):
                     payload = {**payload, "content_markdown": new_body}
             return adapter.publish(payload, mode, config)
+        except AuthExpiredError:
+            # Plan 2026-05-20-016 Unit 0b: credentials were valid enough to
+            # reach the adapter but have expired — operator must re-bind.
+            # Falling through would silently try the next chain entry and
+            # hide the expiry; the correct semantics is to propagate so
+            # the webui can surface "请重新绑定 <channel>" UX.
+            # Order matters: AuthExpiredError IS-A DependencyError (per
+            # _util/errors.py), so this except MUST precede the
+            # DependencyError catch below — Python catches the first
+            # matching except clause.
+            raise
         except DependencyError as e:
             # Adapter declared itself missing a prerequisite → try next.
             last_dep_error = e
