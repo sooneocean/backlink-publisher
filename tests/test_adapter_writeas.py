@@ -229,7 +229,7 @@ class TestPublish:
         cfg = _config_with_writeas(tmp_path, collection_alias="mysite")
 
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=_ok_publish_response(slug="hi-world")) as mock:
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=_ok_publish_response(slug="hi-world")) as mock:
             result = adapter.publish(
                 {"title": "Hi", "content_markdown": "body"},
                 mode="publish",
@@ -255,7 +255,7 @@ class TestPublish:
 
         resp = _ok_publish_response(slug="x", url="https://write.as/mysite/custom-x")
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=resp):
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=resp):
             result = adapter.publish(
                 {"title": "X", "content_markdown": "b"},
                 mode="publish", config=cfg,
@@ -270,7 +270,7 @@ class TestPublish:
         cfg = _config_with_writeas(tmp_path, collection_alias="")
 
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=_ok_publish_response(slug="anon-z")) as mock:
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=_ok_publish_response(slug="anon-z")) as mock:
             result = adapter.publish(
                 {"content_markdown": "body"}, mode="publish", config=cfg,
             )
@@ -285,7 +285,7 @@ class TestPublish:
         cfg = _config_with_writeas(tmp_path, collection_alias="mysite")
 
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post") as mock:
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post") as mock:
             result = adapter.publish(
                 {"title": "Hi", "content_markdown": "body"},
                 mode="draft", config=cfg,
@@ -323,7 +323,7 @@ class TestPublish:
         cfg = _config_with_writeas(tmp_path)
 
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=_http_status_response(401)):
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=_http_status_response(401)):
             with pytest.raises(ExternalServiceError, match="401"):
                 adapter.publish({"content_markdown": "y"}, "publish", cfg)
 
@@ -337,7 +337,7 @@ class TestPublish:
 
         no_slug = _http_status_response(201, {"data": {"id": "p"}})
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=no_slug):
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=no_slug):
             with pytest.raises(ExternalServiceError, match="no slug"):
                 adapter.publish({"content_markdown": "y"}, "publish", cfg)
 
@@ -365,7 +365,7 @@ class TestPublish:
             },
         )
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=blocked):
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=blocked):
             with pytest.raises(ExternalServiceError) as excinfo:
                 adapter.publish({"content_markdown": "y"}, "publish", cfg)
         msg = str(excinfo.value)
@@ -390,7 +390,7 @@ class TestPublish:
             {"code": 201, "data": {"id": "contentisflagged", "slug": None}},
         )
         adapter = WriteAsAPIAdapter()
-        with patch.object(requests, "post", return_value=other):
+        with patch("backlink_publisher.publishing.adapters.writeas.http_post", return_value=other):
             with pytest.raises(ExternalServiceError, match="no slug"):
                 adapter.publish({"content_markdown": "y"}, "publish", cfg)
 
@@ -530,14 +530,14 @@ class TestLiveVerify:
     def test_unbound_returns_never_without_http(self, tmp_path, monkeypatch):
         monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
         cfg = Config(writeas=WriteAsConfig(collection_alias="x"))
-        with patch.object(requests, "get") as mock:
+        with patch("backlink_publisher.http.get") as mock:
             result = verify_adapter_setup("writeas", cfg, mode="live")
         mock.assert_not_called()
         assert result.last_verify_result == "never"
 
     def test_happy_path_returns_ok_with_username(self, tmp_path, monkeypatch):
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", return_value=_ok_me_response("opn")) as mock:
+        with patch("backlink_publisher.http.get", return_value=_ok_me_response("opn")) as mock:
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.ok is True
         assert result.identity == "opn"
@@ -550,26 +550,26 @@ class TestLiveVerify:
 
     def test_401_returns_token_expired(self, tmp_path, monkeypatch):
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", return_value=_http_status_response(401)):
+        with patch("backlink_publisher.http.get", return_value=_http_status_response(401)):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "token_expired"
 
     @pytest.mark.parametrize("status", [403, 404, 500, 502, 503])
     def test_non_200_returns_never_not_token_expired(self, tmp_path, monkeypatch, status):
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", return_value=_http_status_response(status)):
+        with patch("backlink_publisher.http.get", return_value=_http_status_response(status)):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "never"
 
     def test_timeout_returns_timeout(self, tmp_path, monkeypatch):
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", side_effect=requests.Timeout("slow")):
+        with patch("backlink_publisher.http.get", side_effect=requests.Timeout("slow")):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "timeout"
 
     def test_connection_error_returns_never(self, tmp_path, monkeypatch):
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", side_effect=requests.ConnectionError("dead")):
+        with patch("backlink_publisher.http.get", side_effect=requests.ConnectionError("dead")):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "never"
 
@@ -578,14 +578,14 @@ class TestLiveVerify:
         resp = MagicMock()
         resp.status_code = 200
         resp.json.side_effect = ValueError("nope")
-        with patch.object(requests, "get", return_value=resp):
+        with patch("backlink_publisher.http.get", return_value=resp):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "never"
 
     def test_empty_data_returns_never(self, tmp_path, monkeypatch):
         """Defensive: 200 + missing data shouldn't be reported as ok."""
         cfg = self._setup_bound(tmp_path, monkeypatch)
-        with patch.object(requests, "get", return_value=_http_status_response(200, {"data": None})):
+        with patch("backlink_publisher.http.get", return_value=_http_status_response(200, {"data": None})):
             result = verify_adapter_setup("writeas", cfg, mode="live")
         assert result.last_verify_result == "never"
 
@@ -603,7 +603,7 @@ class TestReadOnlyInvariant:
         monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
         path, mtime_before, content_before = self._snapshot_token(tmp_path)
         cfg = Config(writeas=WriteAsConfig(collection_alias="x"))
-        with patch.object(requests, "get", return_value=_ok_me_response()):
+        with patch("backlink_publisher.http.get", return_value=_ok_me_response()):
             verify_adapter_setup("writeas", cfg, mode="live")
         assert path.stat().st_mtime_ns == mtime_before
         assert path.read_text() == content_before
@@ -612,7 +612,7 @@ class TestReadOnlyInvariant:
         monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
         path, mtime_before, content_before = self._snapshot_token(tmp_path)
         cfg = Config(writeas=WriteAsConfig(collection_alias="x"))
-        with patch.object(requests, "get", return_value=_http_status_response(401)):
+        with patch("backlink_publisher.http.get", return_value=_http_status_response(401)):
             verify_adapter_setup("writeas", cfg, mode="live")
         assert path.stat().st_mtime_ns == mtime_before
         assert path.read_text() == content_before
