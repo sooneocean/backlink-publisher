@@ -103,11 +103,15 @@ class TestDofollowBadges:
         )
 
     def test_dofollow_legend_classes_in_css(self, client):
-        """All three dofollow badge styles are defined in the stylesheet."""
-        resp = client.get("/settings")
-        body = resp.get_data(as_text=True)
+        """All three dofollow badge styles are defined in the extracted CSS file (Plan B2 Unit 1)."""
+        from pathlib import Path
+        # CSS extracted to static/css/settings.css by Plan B2 Unit 1
+        css_src = (
+            Path(__file__).resolve().parents[1]
+            / "webui_app" / "static" / "css" / "settings.css"
+        ).read_text(encoding="utf-8")
         for css_class in ("badge-dofollow.good", "badge-dofollow.weak", "badge-dofollow.unknown"):
-            assert css_class in body, f"Missing CSS class {css_class}"
+            assert css_class in css_src, f"Missing CSS class {css_class} in settings.css"
 
 
 class TestDashboardDriftWithRegistry:

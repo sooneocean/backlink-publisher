@@ -1,0 +1,123 @@
+        <!-- ⑥ 进阶 LLM 整合 -->
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-cpu me-2"></i>进阶 LLM 整合 (可选)</span>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-secondary btn-xs dropdown-toggle" data-bs-toggle="dropdown" style="font-size:11px;padding:2px 8px;">
+                        快速填入预设
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" style="font-size:12px;">
+                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('openai')">OpenAI (gpt-4o)</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('deepseek')">DeepSeek (deepseek-chat)</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('openrouter')">OpenRouter (auto)</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('groq')">Groq (llama3-70b)</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('local')">Local (Ollama/LMStudio)</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="text-muted" style="font-size:13px;">
+                    配置自定义 LLM 端口以获得更优质的文章生成效果。支持所有 OpenAI 兼容格式的 API。
+                </p>
+                <form method="POST" action="/settings/save-llm-config">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="action" id="llmFormAction" value="">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">LLM Endpoint (Base URL)</label>
+                            <input type="text" class="form-control" name="endpoint" id="llmEndpointInput"
+                                   placeholder="https://api.openai.com/v1"
+                                   value="{{ llm_settings.endpoint }}">
+                            <div class="form-text">LLM 服务的基础 API 地址，末尾通常包含 <code>/v1</code></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">API Key</label>
+                            <div class="input-group">
+                                <input type="password" class="form-control" name="api_key"
+                                       id="llmApiKeyInput"
+                                       placeholder="{% if llm_settings.api_key %}已设置 (留空保留现值){% else %}sk-...{% endif %}"
+                                       value="">
+                                <button type="button" class="btn btn-outline-secondary"
+                                        onclick="toggleLlmSecret()">
+                                    <i class="bi bi-eye" id="llmSecretEye"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Model Name</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" name="model"
+                                       id="llmModelInput"
+                                       placeholder="gpt-4o"
+                                       value="{{ llm_settings.model }}">
+                                <button type="button" class="btn btn-outline-secondary d-none" 
+                                        id="modelSelectBtn" data-bs-toggle="dropdown">
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end" id="modelDropdownList" style="max-height:300px;overflow-y:auto;">
+                                    <!-- Populated via JS -->
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-flex justify-content-between">
+                                <span>Temperature (创造力)</span>
+                                <span id="tempValue" class="fw-bold text-primary">{{ llm_settings.temperature }}</span>
+                            </label>
+                            <input type="range" class="form-range" name="temperature" 
+                                   min="0" max="2" step="0.1" 
+                                   value="{{ llm_settings.temperature }}"
+                                   oninput="document.getElementById('tempValue').innerText = this.value">
+                            <div class="form-text">0 = 严谨稳定，2 = 极具创意。建议 0.7 左右。</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label d-flex justify-content-between">
+                                <span>Custom System Prompt (系统提示词)</span>
+                                <a href="#" class="btn-xs text-primary text-decoration-none" style="font-size:12px;" onclick="resetLlmPrompt()">
+                                    <i class="bi bi-arrow-counterclockwise"></i> 恢复默认
+                                </a>
+                            </label>
+                            <textarea class="form-control" name="system_prompt" id="llmPromptInput"
+                                      rows="4" style="font-size:13px;font-family:monospace;"
+                                      placeholder="留空则使用内置默认提示词...">{{ llm_settings.system_prompt }}</textarea>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" name="use_article_gen" id="useArticleGen" {% if llm_settings.use_article_gen %}checked{% endif %}>
+                                <label class="form-check-label" for="useArticleGen">启用 AI 全文生成</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">AI Cover Image Generation (FRW API)</label>
+                            <div class="input-group mb-2">
+                                <input type="password" class="form-control" name="image_gen_api_key"
+                                       placeholder="{% if llm_settings.image_gen_api_key %}已设置 (留空保留现值){% else %}输入 FRW API Key{% endif %}"
+                                       value="">
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="use_image_gen" id="useImageGen" {% if llm_settings.use_image_gen %}checked{% endif %}>
+                                <label class="form-check-label" for="useImageGen">启用 AI 封面生成</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 mt-3">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-floppy me-1"></i>保存 LLM 设定
+                        </button>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="testLlmConnection()">
+                            <i class="bi bi-broadcast me-1"></i>测试连接
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearLlmSettings()">
+                            <i class="bi bi-x-circle me-1"></i>清除配置
+                        </button>
+                        <span id="llmTestResult" class="ms-2" style="font-size:13px;align-self:center;"></span>
+                    </div>
+                    <div class="mt-3" style="font-size: 11px; color: #64748b;">
+                        <i class="bi bi-info-circle me-1"></i> 提示：
+                        获取 API Key: 
+                        <a href="https://platform.openai.com/api-keys" target="_blank" class="text-decoration-none me-2">OpenAI</a>
+                        <a href="https://platform.deepseek.com/api_keys" target="_blank" class="text-decoration-none me-2">DeepSeek</a>
+                        <a href="https://openrouter.ai/keys" target="_blank" class="text-decoration-none me-2">OpenRouter</a>
+                    </div>
+                </form>
+            </div>
+        </div>

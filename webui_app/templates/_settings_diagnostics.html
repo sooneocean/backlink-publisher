@@ -1,0 +1,21 @@
+        <!-- ⑦ 生成诊断控制台 -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-magic me-2"></i>生成预览沙盒 (Preview Sandbox)
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <input type="text" id="testTitle" class="form-control" placeholder="输入测试文章标题...">
+                    </div>
+                    <div class="col-md-6">
+                        <button class="btn btn-outline-primary w-100" onclick="previewGeneration()">
+                            <i class="bi bi-play-fill"></i> 执行预览生成
+                        </button>
+                    </div>
+                </div>
+                <div id="previewResult" class="bg-light border p-3 rounded mt-3" style="font-size:13px;min-height:100px;">
+                    预览结果将显示在此处...
+                </div>
+            </div>
+        </div>
