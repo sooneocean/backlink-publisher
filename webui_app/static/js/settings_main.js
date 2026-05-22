@@ -303,6 +303,55 @@
             });
     }
 
+    // ── F30 sticky section tab bar — click-pin + scroll sync ────
+    (function () {
+        const links = Array.from(document.querySelectorAll('.stab-link[data-section]'));
+        if (!links.length) return;
+
+        // Click: navigate AND force-pin active state for 800ms so the last
+        // section stays highlighted even when the page can't scroll further.
+        var _pinUntil = 0;
+        var _pinnedId = null;
+        links.forEach(function (a) {
+            a.addEventListener('click', function () {
+                _pinUntil = Date.now() + 800;
+                _pinnedId = a.dataset.section;
+                _setActive(_pinnedId);
+            });
+        });
+
+        function _setActive(id) {
+            links.forEach(function (a) {
+                a.classList.toggle('active', a.dataset.section === id);
+            });
+        }
+
+        // Scroll: IntersectionObserver tracks which section is in view.
+        var _visibleSections = new Set();
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) _visibleSections.add(e.target.id);
+                else _visibleSections.delete(e.target.id);
+            });
+            if (Date.now() < _pinUntil) return;  // click-pin active
+            // Activate the topmost visible section.
+            for (var i = 0; i < links.length; i++) {
+                if (_visibleSections.has(links[i].dataset.section)) {
+                    _setActive(links[i].dataset.section);
+                    return;
+                }
+            }
+        }, { rootMargin: '-10% 0px -60% 0px' });
+
+        links.forEach(function (a) {
+            var el = document.getElementById(a.dataset.section);
+            if (el) observer.observe(el);
+        });
+
+        // Initialise active state on load.
+        _setActive(links[0] && links[0].dataset.section);
+    })();
+
     // ── deep-link → 自动展开所在折叠面板 ───────────────────────
     function _openCollapseForHash() {
         const id = window.location.hash.slice(1);

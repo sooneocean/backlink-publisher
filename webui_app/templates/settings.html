@@ -27,6 +27,13 @@
         </div>
     </nav>
 
+    <nav class="settings-tab-bar" aria-label="页面导航">
+        <a class="stab-link" href="#section-dashboard" data-section="section-dashboard">綁定總覽</a>
+        <a class="stab-link" href="#section-channels" data-section="section-channels">发布渠道</a>
+        <a class="stab-link" href="#section-global" data-section="section-global">全局设置</a>
+        <a class="stab-link" href="#section-llm" data-section="section-llm">AI 引擎</a>
+    </nav>
+
     <div class="container-fluid" style="max-width:860px;">
 
         {% if flash %}
@@ -37,6 +44,7 @@
         {% endif %}
 
         {% from '_channel_card_macro.html' import dashboard_channel_card %}
+        <div id="section-dashboard"></div>
         {% if dashboard_channels %}
         <h2 class="section-heading">
             <i class="bi bi-broadcast"></i> 渠道綁定總覽
@@ -53,7 +61,7 @@
         </div>
         {% endif %}
 
-        <h2 class="section-heading">发布渠道</h2>
+        <h2 id="section-channels" class="section-heading">发布渠道</h2>
 
         <!-- Blogger 渠道折叠卡 -->
         <div class="card channel-card">
@@ -304,13 +312,13 @@
             </div>
         </div>
 
-        <h2 class="section-heading">全局设置</h2>
+        <h2 id="section-global" class="section-heading">全局设置</h2>
 
         {% include '_settings_global_keywords.html' %}
 
         {% include '_settings_global_schedule.html' %}
 
-        <h2 class="section-heading">AI 内容生成引擎 (PRO Mode)</h2>
+        <h2 id="section-llm" class="section-heading">AI 内容生成引擎 (PRO Mode)</h2>
 
         {% include '_settings_llm_integration.html' %}
 
