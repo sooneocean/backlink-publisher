@@ -386,6 +386,24 @@
         try { sessionStorage.removeItem('bind:lastChannel'); } catch (e) {}
     });
 
+    // ── 渠道綁定總覽 折叠状态持久化 ─────────────────────────────────
+    // Default: collapsed. localStorage key 'settings:overviewOpen' = '1' → expanded.
+    document.addEventListener('DOMContentLoaded', function() {
+        var panel = document.getElementById('overview-panel');
+        if (!panel) return;
+        var open = false;
+        try { open = localStorage.getItem('settings:overviewOpen') === '1'; } catch (e) {}
+        if (open) {
+            try { bootstrap.Collapse.getOrCreateInstance(panel).show(); } catch (e) {}
+        }
+        panel.addEventListener('show.bs.collapse', function() {
+            try { localStorage.setItem('settings:overviewOpen', '1'); } catch (e) {}
+        });
+        panel.addEventListener('hide.bs.collapse', function() {
+            try { localStorage.removeItem('settings:overviewOpen'); } catch (e) {}
+        });
+    });
+
     // ── Loading Overlay ──────────────────────────────────────────
     (function() {
         const MSGS = {

@@ -46,17 +46,27 @@
         {% from '_channel_card_macro.html' import dashboard_channel_card %}
         <div id="section-dashboard"></div>
         {% if dashboard_channels %}
-        <h2 class="section-heading">
-            <i class="bi bi-broadcast"></i> 渠道綁定總覽
-            <span style="font-weight:400; font-size:0.85rem; color:#64748b;">
-                · 點按鈕即時 verify / 綁定，不需開 terminal
+        <h2 class="section-heading overview-heading">
+            <span class="overview-heading-left">
+                <i class="bi bi-broadcast"></i> 渠道綁定總覽
+                <span style="font-weight:400; font-size:0.85rem; color:#64748b;">
+                    · 點按鈕即時 verify / 綁定，不需開 terminal
+                </span>
             </span>
+            <button type="button" class="overview-collapse-toggle"
+                    data-bs-toggle="collapse" data-bs-target="#overview-panel"
+                    aria-expanded="false" aria-controls="overview-panel"
+                    title="折叠/展开">
+                <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+            </button>
         </h2>
-        <div class="card mb-4">
-            <div class="card-body">
-                {% for name, status in dashboard_channels %}
-                    {{ dashboard_channel_card(name, status, bindable=(name in binding_channels)) }}
-                {% endfor %}
+        <div id="overview-panel" class="collapse">
+            <div class="card mb-4">
+                <div class="card-body">
+                    {% for name, status in dashboard_channels %}
+                        {{ dashboard_channel_card(name, status, bindable=(name in binding_channels)) }}
+                    {% endfor %}
+                </div>
             </div>
         </div>
         {% endif %}
