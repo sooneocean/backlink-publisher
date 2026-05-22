@@ -38,8 +38,8 @@ ceiling = 580
 rationale = "U4 read-side projector (SLOC 548 at seed): flush_for dispatch + 3 reducers (_project_checkpoint / _project_history / _project_drafts) + shared helpers (cursor I/O, dt normalisation, anchor filter, JSON read retry). Reducers share enough plumbing that splitting into a subpackage would re-import most of that surface; keep the unit whole until U5 inline-flush seam reveals a real boundary. Re-evaluate when U7 bp-events-rebuild bootstrap reuses the reducer entry points."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 750
-rationale = "Registry + re-export hub (SLOC 726 post Plan 2026-05-21-003 Phase 2): added Notion + DevtoAPIAdapter API-primary registrations with per-platform nofollow rationale blocks, growing from 676 to 726. Ceiling raised 700→750 to cover Plan 003 Phase 2 platform expansion (Units 6+7). Decomposition target: extract per-channel nofollow rationale strings to _rationales.py when the adapter count stabilises."
+ceiling = 720
+rationale = "Registry + re-export hub. Nofollow rationale strings extracted to _nofollow_rationales.py (2026-05-22), dropping from 726 to 691 SLOC. Ceiling lowered 750→720 = round_up_to_10(691+30). New nofollow adapters add a one-line _R['key'] reference here and a string entry in _nofollow_rationales.py; bump ceiling in the same PR."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 750

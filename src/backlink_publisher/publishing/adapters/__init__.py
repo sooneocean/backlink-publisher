@@ -52,6 +52,7 @@ from ..browser_publish.recipes import velog as _velog_recipe  # noqa: F401
 from ..browser_publish.recipes import hashnode as _hashnode_recipe  # noqa: F401
 from ..browser_publish.recipes import devto as _devto_recipe  # noqa: F401
 from ..browser_publish.recipes import mastodon as _mastodon_recipe  # noqa: F401
+from ._nofollow_rationales import NOFOLLOW_RATIONALES as _R
 
 
 # Register the fallback chain per platform. Adding a new platform = one
@@ -86,17 +87,7 @@ register(
     HashnodeAPIAdapter,
     BrowserPublishDispatcher.for_channel("hashnode"),
     dofollow=False,
-    rationale=(
-        "Hashnode GraphQL API moved behind a paid subscription on "
-        "2026-05-13 — HashnodeAPIAdapter therefore raises DependencyError "
-        "for free-tier operators and the chain falls through to "
-        "BrowserPublishDispatcher (Plan 2026-05-21-001 Unit 3), which "
-        "drives the Web editor at hashnode.com/new and bypasses the "
-        "paywall. dofollow stays False pending live link_attr_verifier "
-        "measurement — Hashnode injects rel=nofollow on outbound links "
-        "for unverified accounts. Pro-account operators retain the API "
-        "path without code changes."
-    ),
+    rationale=_R["hashnode"],
 )
 register("writeas", WriteAsAPIAdapter, dofollow=True)
 register(
@@ -104,45 +95,19 @@ register(
     DevtoAPIAdapter,
     BrowserPublishDispatcher.for_channel("devto"),
     dofollow=False,
-    rationale=(
-        "Dev.to applies rel=\"nofollow ugc\" to outbound links since "
-        "~2022 per platform policy; every external <a> is decorated "
-        "server-side regardless of account tier or post format. "
-        "DevtoAPIAdapter (Plan 2026-05-21-003 Phase 2 Unit 7) is the "
-        "preferred path for operators with an API key; "
-        "BrowserPublishDispatcher is the fallback for operators without "
-        "one (DependencyError → fall through per registry contract). "
-        "backlinks here still drive referral traffic and topical "
-        "relevance signals even though they don't transfer PageRank."
-    ),
+    rationale=_R["devto"],
 )
 register(
     "notion",
     NotionAPIAdapter,
     dofollow=False,
-    rationale=(
-        "Notion applies rel=nofollow to outbound hyperlinks on public "
-        "pages — all <a> elements in Notion-rendered content carry "
-        "nofollow regardless of account type or database visibility. "
-        "This adapter's value is entity signal (DA ~75+), content "
-        "syndication speed, and indexation acceleration. "
-        "Plan 2026-05-21-003 Phase 2 Unit 6."
-    ),
+    rationale=_R["notion"],
 )
 register(
     "mastodon",
     BrowserPublishDispatcher.for_channel("mastodon"),
     dofollow=False,
-    rationale=(
-        "Mastodon hardcodes rel=\"nofollow noopener noreferrer\" on "
-        "outbound links across all instances — federation-default and "
-        "not disableable per-post or per-account. Re-registered in "
-        "Plan 2026-05-21-001 Unit 4c as a chrome publish channel — "
-        "Fediverse referral traffic + topical signal value despite the "
-        "nofollow. Single instance per config.toml [mastodon] "
-        "instance_url; security policy: use a throwaway account only, "
-        "never a personal Mastodon identity."
-    ),
+    rationale=_R["mastodon"],
 )
 
 
