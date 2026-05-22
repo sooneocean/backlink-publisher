@@ -121,6 +121,26 @@ class BannerUploadError(DependencyError):
     exit_code = 3
 
 
+class ContentRejectedError(DependencyError):
+    """Server accepted the request but rejected the content — cookie is still valid.
+
+    Sibling (NOT subclass) of ``AuthExpiredError``.  ``mark_expired`` must
+    NOT fire on this exception: the credentials are fine, but the publish
+    was silently dropped for a non-auth reason (content validation, server-side
+    rate-limit, slug collision, or an undocumented velog restriction).
+
+    The operator should inspect the debug artifact cited in the log line and
+    fix the underlying content issue rather than re-binding the channel.
+    """
+
+    exit_code = 3
+
+    def __init__(self, *, channel: str, reason: str) -> None:
+        self.channel = channel
+        self.reason = reason
+        super().__init__(f"channel {channel!r} content rejected ({reason})")
+
+
 class InternalError(PipelineError):
     """Unexpected internal error."""
 

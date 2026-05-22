@@ -51,7 +51,12 @@ from typing import Any
 import requests
 
 from backlink_publisher.config import Config
-from backlink_publisher._util.errors import AuthExpiredError, DependencyError, ExternalServiceError
+from backlink_publisher._util.errors import (
+    AuthExpiredError,
+    ContentRejectedError,
+    DependencyError,
+    ExternalServiceError,
+)
 from backlink_publisher._util.logger import opencli_logger as log
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
@@ -105,8 +110,17 @@ _VELOG_JITTER_MIN_S: int = 60
 _VELOG_JITTER_MAX_S: int = 180
 
 _TIMEOUT: int = 30  # seconds per HTTP request
+_PROBE_TIMEOUT: int = 10  # seconds — lightweight liveness check
 _LOCK_POLL_INTERVAL: float = 0.5  # seconds
 _LOCK_TIMEOUT: float = 60.0  # seconds
+
+# Fields to mask in debug artifacts (never log token values)
+_TOKEN_FIELDS = frozenset({"access_token", "refresh_token", "token"})
+
+# Velog liveness probe — currentUser is the most common GraphQL field name.
+# If velog renames or removes it, fall back to verifying cookie via writePost
+# getting a non-null response on the next natural publish cycle.
+_PROBE_QUERY = "{ currentUser { id username } }"
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -123,6 +137,88 @@ def _slugify(text: str) -> str:
 
 def _json_log(**kwargs: Any) -> str:
     return json.dumps(kwargs)
+
+
+def _mask_cookies(cookies: dict[str, str]) -> dict[str, str]:
+    """Return a copy of *cookies* with token values replaced by '<masked>'."""
+    return {k: ("<masked>" if k in _TOKEN_FIELDS else v) for k, v in cookies.items()}
+
+
+def _save_null_artifact(
+    resp_json: dict[str, Any],
+    resp_headers: dict[str, str],
+    article_id: str,
+    config: Config,
+) -> str | None:
+    """Persist the full null-after-retry response to a debug artifact file.
+
+    Writes ``<config_dir>/debug/velog-null-<article_id>.json`` (0600).
+    Returns the artifact path on success, ``None`` if the write fails.
+    Never raises — I/O errors are swallowed so a debug write cannot break
+    the publish path.
+    """
+    try:
+        debug_dir = config.config_dir / "debug"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = debug_dir / f"velog-null-{article_id}.json"
+        payload = {
+            "adapter": "velog-graphql",
+            "article_id": article_id,
+            "response_body": resp_json,
+            "response_headers": dict(resp_headers),
+            "gql_errors": resp_json.get("errors") or [],
+        }
+        old_umask = os.umask(0o077)
+        try:
+            tmp = artifact_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload, indent=2))
+            os.chmod(tmp, 0o600)
+            os.replace(tmp, artifact_path)
+            os.chmod(artifact_path, 0o600)
+        finally:
+            os.umask(old_umask)
+        return str(artifact_path)
+    except Exception:
+        return None
+
+
+def _probe_session_alive(session: requests.Session) -> tuple[bool, str]:
+    """Check whether *session*'s cookies are still valid via currentUser probe.
+
+    Returns ``(True, username)`` when velog confirms the session is authenticated.
+    Returns ``(False, reason)`` on any failure — network error, HTTP error, or
+    a null/missing ``currentUser`` in the response.
+
+    Fail-safe: network errors return ``(False, "probe_unreachable")`` so that a
+    probe failure during a flaky network does not silently downgrade a real auth
+    expiry into a content-rejected classification.
+    """
+    probe_payload = {"query": _PROBE_QUERY}
+    try:
+        resp = session.post(
+            _VELOG_GRAPHQL_ENDPOINT,
+            json=probe_payload,
+            headers=_VELOG_REQUIRED_HEADERS,
+            verify=True,
+            timeout=_PROBE_TIMEOUT,
+        )
+    except requests.RequestException:
+        return False, "probe_unreachable"
+
+    if not resp.ok:
+        return False, f"probe_http_{resp.status_code}"
+
+    try:
+        data = resp.json()
+    except ValueError:
+        return False, "probe_invalid_json"
+
+    current_user = (data.get("data") or {}).get("currentUser")
+    if not current_user or not current_user.get("id"):
+        return False, "no_current_user"
+
+    username = current_user.get("username", "")
+    return True, username
 
 
 # ── Cookie loading ─────────────────────────────────────────────────────────────
@@ -521,15 +617,50 @@ class VelogGraphQLAdapter(Publisher):
 
                 write_post = (resp_json2.get("data") or {}).get("writePost")
                 if write_post is None:
+                    artifact_path = _save_null_artifact(
+                        resp_json2,
+                        dict(resp2.headers),
+                        article_id,
+                        config,
+                    )
+                    gql_errors = resp_json2.get("errors") or []
+                    gql_errors_summary = (
+                        f"{len(gql_errors)} error(s): "
+                        + "; ".join(str(e.get("message", "")) for e in gql_errors[:3])
+                        if gql_errors else "0"
+                    )
+                    alive, probe_reason = _probe_session_alive(session)
+                    if alive:
+                        log.error(_json_log(
+                            adapter="velog-graphql",
+                            phase="null-after-retry",
+                            verdict="content_rejected",
+                            id=article_id,
+                            gql_errors_summary=gql_errors_summary,
+                            probe=probe_reason,
+                            artifact=artifact_path,
+                        ))
+                        raise ContentRejectedError(
+                            channel="velog",
+                            reason=(
+                                f"writePost null after retry; cookie alive ({probe_reason}); "
+                                f"gql_errors={gql_errors_summary}"
+                            ),
+                        )
                     log.error(_json_log(
                         adapter="velog-graphql",
                         phase="null-after-retry",
+                        verdict="auth_expired",
                         id=article_id,
-                        resp=str(resp_json2)[:200],
+                        gql_errors_summary=gql_errors_summary,
+                        probe=probe_reason,
+                        artifact=artifact_path,
                     ))
                     raise AuthExpiredError(
                         channel="velog",
-                        reason="velog writePost returned null after retry",
+                        reason=(
+                            f"writePost null after retry; cookie dead ({probe_reason})"
+                        ),
                     )
 
             url_slug_returned = (write_post or {}).get("url_slug", "")

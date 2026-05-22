@@ -400,3 +400,20 @@ Alternative CLI path: `bind-channel --channel medium` (then complete login in th
 ### What about Velog?
 
 Velog is the **adapter** in plan-012 but its **credential lifecycle** lives here. plan-012 originally specified a standalone `velog-login` CLI and a `DependencyError("velog cookie expired")` raise on auth failure; plan 2026-05-19-001 unified that with the cross-channel surface. See the inline amendment in plan-012 (Unit 3 + Unit 4) for the exact contract changes.
+
+#### Velog null-after-retry diagnostics (plan 2026-05-22-004)
+
+When `writePost` returns `null` on both the initial attempt and the silent-drop
+retry, the adapter now runs a lightweight `currentUser` liveness probe before
+deciding the error class:
+
+- **Cookie dead** (`probe_reason=no_current_user|http_4xx|probe_unreachable`) →
+  `AuthExpiredError` → channel flips to expired → operator must re-bind.
+- **Cookie alive** (`probe_reason=<username>`) → `ContentRejectedError` →
+  row fails, batch continues, channel status unchanged. The WebUI history card
+  shows an amber "内容被拒（Cookie 有效）" hint. **Do not re-bind** — inspect
+  the `debug/velog-null-<article_id>.json` artifact in `config_dir` instead.
+
+The debug artifact (0600, written by `_save_null_artifact`) contains the full
+response body, response headers, and any GraphQL `errors[]` array — none of
+which appear in the 200-char-truncated log that was there before this fix.

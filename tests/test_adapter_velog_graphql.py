@@ -20,16 +20,25 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from backlink_publisher.config import Config
 from backlink_publisher.config.types import VelogConfig
-from backlink_publisher._util.errors import AuthExpiredError, DependencyError, ExternalServiceError
+from backlink_publisher._util.errors import (
+    AuthExpiredError,
+    ContentRejectedError,
+    DependencyError,
+    ExternalServiceError,
+)
 from backlink_publisher.publishing.adapters.velog_graphql import (
     UNLOCK_DATE_UTC,
     VelogGraphQLAdapter,
     _effective_cap,
     _load_cookies,
+    _mask_cookies,
+    _probe_session_alive,
     _read_count,
+    _save_null_artifact,
     _slugify,
     _write_count,
 )
@@ -358,8 +367,61 @@ class TestVelogGraphQLAdapterPublish:
         assert result.status == "published"
         assert sess.post.call_count == 2
 
-    def test_silent_drop_both_retries_raises(self, tmp_path):
-        """Both attempts return null → AuthExpiredError (rebind required)."""
+    def test_null_after_retry_probe_dead_raises_auth_expired(self, tmp_path):
+        """Both writePost calls return null; probe says cookie dead → AuthExpiredError."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        probe_resp = MagicMock()
+        probe_resp.ok = True
+        probe_resp.status_code = 200
+        probe_resp.json.return_value = {"data": {"currentUser": None}}
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    _mock_null_response(),  # first writePost
+                    _mock_null_response(),  # retry writePost
+                    probe_resp,             # liveness probe
+                ]
+
+                with pytest.raises(AuthExpiredError, match="cookie dead"):
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert sess.post.call_count == 3
+
+    def test_null_after_retry_probe_alive_raises_content_rejected(self, tmp_path):
+        """Both writePost calls return null; probe says cookie alive → ContentRejectedError."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        probe_resp = MagicMock()
+        probe_resp.ok = True
+        probe_resp.status_code = 200
+        probe_resp.json.return_value = {
+            "data": {"currentUser": {"id": "user-123", "username": "testuser"}}
+        }
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    _mock_null_response(),  # first writePost
+                    _mock_null_response(),  # retry writePost
+                    probe_resp,             # liveness probe
+                ]
+
+                with pytest.raises(ContentRejectedError) as exc_info:
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert "cookie alive" in str(exc_info.value)
+        assert exc_info.value.channel == "velog"
+
+    def test_null_after_retry_probe_unreachable_fails_safe_to_auth_expired(self, tmp_path):
+        """Probe network error → fail-safe: AuthExpiredError (not ContentRejectedError)."""
         config = _make_config(tmp_path)
         adapter = VelogGraphQLAdapter()
 
@@ -367,12 +429,43 @@ class TestVelogGraphQLAdapterPublish:
             with patch("requests.Session") as MockSession:
                 sess = MagicMock()
                 MockSession.return_value = sess
-                sess.post.return_value = _mock_null_response()
+                sess.post.side_effect = [
+                    _mock_null_response(),               # first writePost
+                    _mock_null_response(),               # retry writePost
+                    requests.ConnectionError("timeout"), # probe fails
+                ]
 
-                with pytest.raises(AuthExpiredError, match="velog"):
+                with pytest.raises(AuthExpiredError, match="cookie dead"):
                     adapter.publish(PAYLOAD, mode="publish", config=config)
 
-        assert sess.post.call_count >= 2
+    def test_null_after_retry_saves_artifact(self, tmp_path):
+        """null-after-retry writes a debug artifact JSON with full response body."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        probe_resp = MagicMock()
+        probe_resp.ok = True
+        probe_resp.status_code = 200
+        probe_resp.json.return_value = {"data": {"currentUser": None}}
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    _mock_null_response(),
+                    _mock_null_response(),
+                    probe_resp,
+                ]
+                with pytest.raises(AuthExpiredError):
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        artifacts = list((config.config_dir / "debug").glob("velog-null-*.json"))
+        assert len(artifacts) == 1
+        data = json.loads(artifacts[0].read_text())
+        assert data["adapter"] == "velog-graphql"
+        assert data["article_id"] == PAYLOAD["id"]
+        assert "response_body" in data
 
     def test_daily_cap_raises_dependency_error(self, tmp_path):
         """When count >= cap, DependencyError before any HTTP call."""
@@ -428,3 +521,155 @@ class TestVelogGraphQLAdapterPublish:
         assert slug_sent is not None
         assert slug_sent != ""
         assert "test" in slug_sent  # derived from "Test Velog Post"
+
+
+# ── _probe_session_alive ───────────────────────────────────────────────────────
+
+class TestProbeSessionAlive:
+    def _make_probe_session(self, json_body=None, status_code=200, raise_exc=None):
+        sess = MagicMock()
+        if raise_exc:
+            sess.post.side_effect = raise_exc
+        else:
+            resp = MagicMock()
+            resp.ok = (status_code < 400)
+            resp.status_code = status_code
+            resp.json.return_value = json_body
+            sess.post.return_value = resp
+        return sess
+
+    def test_alive_returns_true_with_username(self):
+        sess = self._make_probe_session(
+            json_body={"data": {"currentUser": {"id": "uid123", "username": "alice"}}}
+        )
+        alive, reason = _probe_session_alive(sess)
+        assert alive is True
+        assert reason == "alice"
+
+    def test_null_current_user_returns_false(self):
+        sess = self._make_probe_session(json_body={"data": {"currentUser": None}})
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+        assert "no_current_user" in reason
+
+    def test_missing_id_returns_false(self):
+        sess = self._make_probe_session(
+            json_body={"data": {"currentUser": {"username": "bob"}}}  # no id
+        )
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+
+    def test_http_401_returns_false(self):
+        sess = self._make_probe_session(json_body={}, status_code=401)
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+        assert "401" in reason
+
+    def test_connection_error_returns_false_probe_unreachable(self):
+        sess = self._make_probe_session(raise_exc=requests.ConnectionError("refused"))
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+        assert reason == "probe_unreachable"
+
+    def test_timeout_returns_false_probe_unreachable(self):
+        sess = self._make_probe_session(raise_exc=requests.Timeout())
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+        assert reason == "probe_unreachable"
+
+    def test_invalid_json_returns_false(self):
+        resp = MagicMock()
+        resp.ok = True
+        resp.status_code = 200
+        resp.json.side_effect = ValueError("bad json")
+        sess = MagicMock()
+        sess.post.return_value = resp
+        alive, reason = _probe_session_alive(sess)
+        assert alive is False
+        assert "invalid_json" in reason
+
+
+# ── _save_null_artifact ────────────────────────────────────────────────────────
+
+class TestSaveNullArtifact:
+    def test_writes_artifact_0600(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+        config = _make_config(tmp_path)
+        artifact = _save_null_artifact(
+            resp_json={"data": {"writePost": None}},
+            resp_headers={"content-type": "application/json"},
+            article_id="abc123",
+            config=config,
+        )
+        assert artifact is not None
+        p = Path(artifact)
+        assert p.exists()
+        assert oct(p.stat().st_mode & 0o777) == "0o600"
+        data = json.loads(p.read_text())
+        assert data["article_id"] == "abc123"
+        assert data["adapter"] == "velog-graphql"
+
+    def test_captures_gql_errors_array(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+        config = _make_config(tmp_path)
+        resp_body = {
+            "data": {"writePost": None},
+            "errors": [{"message": "forbidden"}],
+        }
+        artifact = _save_null_artifact(resp_body, {}, "x1", config)
+        data = json.loads(Path(artifact).read_text())
+        assert data["gql_errors"] == [{"message": "forbidden"}]
+
+    def test_returns_none_on_io_error(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+        config = _make_config(tmp_path)
+        with patch(
+            "backlink_publisher.publishing.adapters.velog_graphql.os.replace",
+            side_effect=OSError("disk full"),
+        ):
+            result = _save_null_artifact({}, {}, "z1", config)
+        # Should not raise — returns None on failure
+        assert result is None
+
+
+# ── _mask_cookies ──────────────────────────────────────────────────────────────
+
+class TestMaskCookies:
+    def test_masks_token_fields(self):
+        cookies = {
+            "access_token": "secret_at",
+            "refresh_token": "secret_rt",
+            "token": "secret_t",
+            "other_cookie": "visible",
+        }
+        masked = _mask_cookies(cookies)
+        assert masked["access_token"] == "<masked>"
+        assert masked["refresh_token"] == "<masked>"
+        assert masked["token"] == "<masked>"
+        assert masked["other_cookie"] == "visible"
+
+    def test_does_not_mutate_original(self):
+        cookies = {"access_token": "secret"}
+        masked = _mask_cookies(cookies)
+        assert cookies["access_token"] == "secret"
+        assert masked["access_token"] == "<masked>"
+
+
+# ── ContentRejectedError taxonomy ─────────────────────────────────────────────
+
+class TestContentRejectedErrorTaxonomy:
+    def test_is_dependency_error_subclass(self):
+        from backlink_publisher._util.errors import DependencyError
+        assert issubclass(ContentRejectedError, DependencyError)
+
+    def test_is_not_auth_expired_subclass(self):
+        assert not issubclass(ContentRejectedError, AuthExpiredError)
+
+    def test_exit_code_is_3(self):
+        exc = ContentRejectedError(channel="velog", reason="x")
+        assert exc.exit_code == 3
+
+    def test_message_contains_channel_and_reason(self):
+        exc = ContentRejectedError(channel="velog", reason="slug collision")
+        assert "velog" in str(exc)
+        assert "slug collision" in str(exc)

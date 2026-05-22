@@ -13,6 +13,7 @@ from backlink_publisher.config import load_config
 from backlink_publisher._util.errors import (
     AuthExpiredError,
     BannerUploadError,
+    ContentRejectedError,
     DependencyError,
     ExternalServiceError,
     emit_error,
@@ -355,6 +356,13 @@ def main(argv: list[str] | None = None) -> None:
             run_id = _record_publish_failure(
                 outputs, row, platform, ts, run_id, exc,
                 "banner_upload", f"banner upload failed: {exc}",
+            )
+            continue
+        except ContentRejectedError as exc:
+            fail_count += 1
+            run_id = _record_publish_failure(
+                outputs, row, platform, ts, run_id, exc,
+                "content_rejected", f"content rejected: {exc}",
             )
             continue
         except DependencyError as exc:

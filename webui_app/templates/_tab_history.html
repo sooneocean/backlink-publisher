@@ -71,6 +71,11 @@
                                 <i class="bi bi-exclamation-triangle me-1"></i>{{ item.error[:200] }}
                             </div>
                             {% endif %}
+                            {% if item.get('error_class') == 'content_rejected' %}
+                            <div style="margin-top:4px;font-size:11px;color:#92400e;background:#fef3c7;padding:4px 8px;border-radius:4px;" title="Cookie 仍有效 — 内容被平台拒绝，重绑定无效，请检查日志中的 debug artifact">
+                                <i class="bi bi-info-circle me-1"></i>内容被拒（Cookie 有效） — 无需重绑定
+                            </div>
+                            {% endif %}
 
                             {% if item.article_urls %}
                             <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
@@ -248,6 +253,11 @@
                             {% if item.error %}
                             <div style="margin-top:6px;font-size:12px;color:var(--danger);background:#fee2e2;padding:6px 10px;border-radius:6px;">
                                 <i class="bi bi-exclamation-triangle me-1"></i>{{ item.error[:200] }}
+                            </div>
+                            {% endif %}
+                            {% if item.get('error_class') == 'content_rejected' %}
+                            <div style="margin-top:4px;font-size:11px;color:#92400e;background:#fef3c7;padding:4px 8px;border-radius:4px;" title="Cookie 仍有效 — 内容被平台拒绝，重绑定无效，请检查日志中的 debug artifact">
+                                <i class="bi bi-info-circle me-1"></i>内容被拒（Cookie 有效） — 无需重绑定
                             </div>
                             {% endif %}
                             {% if item.verify_error %}
