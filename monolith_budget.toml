@@ -42,8 +42,8 @@ ceiling = 720
 rationale = "Registry + re-export hub. Nofollow rationale strings extracted to _nofollow_rationales.py (2026-05-22), dropping from 726 to 691 SLOC. Ceiling lowered 750→720 = round_up_to_10(691+30). New nofollow adapters add a one-line _R['key'] reference here and a string entry in _nofollow_rationales.py; bump ceiling in the same PR."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
-ceiling = 750
-rationale = "Phase 0 seal CLI (SLOC 720): 7 subcommands (init, show, verify, reseal, verify-seal-hooks, bootstrap, runbook), allowlist parsing, XDG-helper plumbing, worktree-policy lib call. Post-G1 refactor will split runbook and CI-helper into sub-modules; ceiling 750 holds 30-SLOC headroom until then."
+ceiling = 465
+rationale = "_handle_init (173 lines) + its exclusive helpers (_build_routine_verdict_ref, _build_manual_verdict_ref, _get_main_sha, _post_push_verify, _InitError, _NotesPushDidNotLand) extracted to _seal_init.py (2026-05-22). phase0_seal.py dropped from 720 to 449 SLOC — 7 subcommand dispatch layer + _handle_{show,verify,reseal,verify_hook} + shared helpers remain. Ceiling 465 = round_up_to_10(435+30)."
 
 [files."src/backlink_publisher/cli/plan_check.py"]
 ceiling = 620
