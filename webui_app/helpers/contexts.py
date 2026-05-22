@@ -349,6 +349,42 @@ def _draft_tab_extra() -> dict:
     }
 
 
+def _group_history(items: list[dict]) -> list[dict]:
+    """Group consecutive history items by ``run_id`` into run-groups.
+
+    Items sharing a ``run_id`` (from one ``_push_history_per_row`` call) fold
+    into one group so the UI renders them as a collapsible card instead of N
+    flat rows. Items without ``run_id`` each form a group of size 1.
+
+    Each group dict: run_id, rows, created_at, platform, language,
+    n_published, n_drafted, n_failed, n_unverified, n_total, is_multi.
+    """
+    groups: list[dict] = []
+    current: dict | None = None
+    for item in items:
+        rid = item.get("run_id")
+        if rid and current and current["run_id"] == rid:
+            current["rows"].append(item)
+        else:
+            current = {
+                "run_id": rid,
+                "rows": [item],
+                "created_at": item.get("created_at", ""),
+                "platform": item.get("platform", ""),
+                "language": item.get("language", ""),
+            }
+            groups.append(current)
+    for g in groups:
+        statuses = [i.get("status", "") for i in g["rows"]]
+        g["n_published"] = sum(1 for s in statuses if s in ("published", "success"))
+        g["n_drafted"] = sum(1 for s in statuses if s == "drafted")
+        g["n_failed"] = sum(1 for s in statuses if s == "failed")
+        g["n_unverified"] = sum(1 for s in statuses if "unverified" in s)
+        g["n_total"] = len(g["rows"])
+        g["is_multi"] = g["n_total"] > 1
+    return groups
+
+
 def _render(template_name: str, **kwargs):
     """Render a Jinja2 template, auto-injecting common context.
 
@@ -358,6 +394,8 @@ def _render(template_name: str, **kwargs):
     """
     if 'history' not in kwargs:
         kwargs['history'] = _g_cache('history', _history_store.load)
+    if 'grouped_history' not in kwargs:
+        kwargs['grouped_history'] = _group_history(kwargs['history'])
     if 'blogger_token_status' not in kwargs:
         kwargs['blogger_token_status'] = _get_blogger_token_status()
     if 'profiles' not in kwargs:

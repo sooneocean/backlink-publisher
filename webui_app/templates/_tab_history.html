@@ -208,7 +208,8 @@
                            was rebuilt on every history item (~7 platforms ×
                            N rows attribute walks). #}
                         {% set _platform_slugs = platforms | map(attribute='slug') | list %}
-                        {% for item in history %}
+                        {# Macro so item card body isn't duplicated for single vs grouped rows #}
+                        {% macro render_history_item(item) %}
                         {% set s = item.status %}
                         {% set norm_status =
                             'unverified' if s in ('published_unverified', 'drafted_unverified')
@@ -217,7 +218,8 @@
                         {% set norm_platform = item.platform if item.platform in _platform_slugs else 'other' %}
                         <div class="history-item {% if s in ('success','published') %}success{% elif s in ('published_unverified','drafted_unverified') %}unverified{% elif s == 'failed' %}failed{% else %}pending{% endif %}"
                              data-id="{{ item.id }}"
-                             data-status="{{ norm_status }}" data-platform="{{ norm_platform }}">
+                             data-status="{{ norm_status }}" data-platform="{{ norm_platform }}"
+                             {% if item.run_id %}data-run-id="{{ item.run_id }}"{% endif %}>
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                                 <input class="form-check-input bulk-select history-bulk-select"
                                        type="checkbox" name="ids" value="{{ item.id }}"
@@ -301,6 +303,32 @@
                                 </form>
                             </div>
                         </div>
+                        {% endmacro %}
+                        {# grouped_history: multi-row runs as collapsible <details>, single items flat #}
+                        {% for group in grouped_history %}
+                        {% if group.is_multi %}
+                        <details class="history-run-group" style="margin-bottom:8px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;"
+                                 {% if group.n_failed == 0 or group.n_published > 0 or group.n_drafted > 0 %}open{% endif %}>
+                            <summary style="padding:10px 14px;background:#f9fafb;cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;font-size:13px;user-select:none;">
+                                <i class="bi bi-layers" style="color:var(--secondary);"></i>
+                                <span style="font-weight:600;">{{ group.created_at }}</span>
+                                {% if group.platform %}<span style="color:var(--secondary);">· <i class="bi bi-broadcast"></i> {{ group.platform }}</span>{% endif %}
+                                {% if group.language %}<span style="color:var(--secondary);">· {{ group.language }}</span>{% endif %}
+                                <span style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+                                    <span style="font-size:11px;color:var(--secondary);">{{ group.n_total }} 行</span>
+                                    {% if group.n_published > 0 %}<span style="font-size:11px;color:#16a34a;background:#dcfce7;padding:1px 6px;border-radius:4px;">✓ {{ group.n_published }}</span>{% endif %}
+                                    {% if group.n_drafted > 0 %}<span style="font-size:11px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;">草稿 {{ group.n_drafted }}</span>{% endif %}
+                                    {% if group.n_failed > 0 %}<span style="font-size:11px;color:#dc2626;background:#fee2e2;padding:1px 6px;border-radius:4px;">✗ {{ group.n_failed }}</span>{% endif %}
+                                    {% if group.n_unverified > 0 %}<span style="font-size:11px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;">未核实 {{ group.n_unverified }}</span>{% endif %}
+                                </span>
+                            </summary>
+                            {% for item in group.rows %}
+                            {{ render_history_item(item) }}
+                            {% endfor %}
+                        </details>
+                        {% else %}
+                        {{ render_history_item(group.rows[0]) }}
+                        {% endif %}
                         {% endfor %}
                         </form>
                         <!-- Out-of-band form for the purge-failed button (cannot nest in historyBulkForm) -->

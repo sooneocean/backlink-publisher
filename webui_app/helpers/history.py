@@ -63,6 +63,9 @@ def _push_history_per_row(
     if not rows:
         return _history_store.load()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    # Rows from one publish call share a run_id so the UI can group them
+    # under one collapsible card instead of N separate entries.
+    run_id = str(uuid.uuid4())[:8]
     new_items: list[dict] = []
     for row in rows:
         published_url = (row.get("published_url") or "").strip()
@@ -79,6 +82,7 @@ def _push_history_per_row(
             status = "failed" if raw_error else "published"
         item = {
             "id": str(uuid.uuid4())[:8],
+            "run_id": run_id,
             "target_url": row.get("target_url") or target_url_fallback,
             "platform": row.get("platform") or platform_fallback,
             "language": row.get("language") or language_fallback,
