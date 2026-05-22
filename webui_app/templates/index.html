@@ -121,16 +121,15 @@
     <script>window.__indexBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([]), 'platform_slugs': platforms | default([]) | map(attribute='slug') | list} | tojson }};</script>
     <script src="{{ url_for('static', filename='js/index_main.js') }}"></script>
 
-    <!-- Loading Overlay -->
-    <div id="_loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,15,0.55);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
-        <div style="background:white;border-radius:20px;padding:40px 48px;text-align:center;max-width:320px;box-shadow:0 24px 64px rgba(0,0,0,0.25);">
-            <div class="spinner-border mb-4" style="width:3rem;height:3rem;color:var(--primary);" role="status">
+    <!-- Loading component — to be injected in specific panels as needed -->
+    <template id="_loadingTemplate">
+        <div class="loading-spinner-container" style="display:flex;flex-direction:column;align-items:center;padding:20px;">
+            <div class="spinner-border text-primary mb-2" role="status">
                 <span class="visually-hidden">Loading…</span>
             </div>
-            <div id="_loadingText" style="font-size:1.1rem;font-weight:700;color:#1f2937;margin-bottom:8px;">处理中…</div>
-            <div id="_loadingSubtext" style="font-size:0.85rem;color:#6b7280;line-height:1.5;">请稍候</div>
+            <div class="loading-text" style="font-size:0.9rem;font-weight:600;color:#374151;">处理中…</div>
         </div>
-    </div>
+    </template>
 
     <!-- Plan 2026-05-20-002 Unit 4/5 — URL auto-derive: paste a URL into
          #derive_source above to auto-fill main/category/work + verify. -->
