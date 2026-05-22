@@ -11,7 +11,7 @@
    Pages) — current existing channels (blogger OAuth / medium 3-mode /
    telegraph auto-bootstrap) all have their own bind flow in their partial. #}
 
-{% macro dashboard_channel_card(name, status) -%}
+{% macro dashboard_channel_card(name, status, bindable=False) -%}
 <div class="dashboard-channel-card" data-channel="{{ name }}">
   <div class="dch-header">
     <strong class="dch-name">{{ name }}</strong>
@@ -63,9 +63,11 @@
     <button type="button" class="btn btn-sm btn-outline-primary dch-btn-verify" data-channel="{{ name }}">
       <i class="bi bi-shield-check"></i> Verify Token
     </button>
-    <button type="button" class="btn btn-sm btn-outline-secondary dch-btn-dryrun" data-channel="{{ name }}">
-      <i class="bi bi-play-circle"></i> Dry-Run
+    {%- if bindable %}
+    <button type="button" class="btn btn-sm btn-outline-success dch-btn-bind" data-channel="{{ name }}">
+      <i class="bi bi-plug"></i> 綁定
     </button>
+    {%- endif %}
     <a href="#channel-{{ name }}" class="btn btn-sm btn-link">Configure ↓</a>
   </div>
   <div class="dch-result" data-field="result" style="display:none;"></div>

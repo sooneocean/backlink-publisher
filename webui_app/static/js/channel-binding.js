@@ -1,13 +1,13 @@
 // Plan 2026-05-19-006 Unit 5 — channel binding dashboard JS.
 //
-// Wires the Verify Token + Dry-Run buttons rendered by the
+// Wires the Verify Token + Bind buttons rendered by the
 // dashboard_channel_card macro. Uses AbortController for timeout,
 // X-CSRFToken header (Unit 4 extension), and a 1s per-(channel,action)
 // debounce to prevent double-submit (solution lesson:
 // webui-blocking-subprocess-and-missing-progress-feedback).
 //
 // Companion: webui_app/templates/_channel_card_macro.html
-// Endpoints: /api/<channel>/{verify,dry-run} (Unit 4)
+// Endpoints: /api/<channel>/verify (Unit 4); bind delegates to existing channel UI
 (function () {
   'use strict';
 
@@ -15,7 +15,6 @@
   const CSRF_TOKEN = META_CSRF ? META_CSRF.content : '';
 
   const VERIFY_TIMEOUT_MS = 6000;  // server hard cap is 5s + 1s slack
-  const DRYRUN_TIMEOUT_MS = 32000; // server hard cap is 30s + 2s slack
   const DEBOUNCE_MS = 1000;
 
   // Tracks last-click-time per `${channel}:${action}` for debounce.
@@ -40,6 +39,10 @@
       }
       if (resp.status === 403) {
         return { _http_status: 403, _error: 'CSRF / auth rejected' };
+      }
+      const ct = resp.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        return { _http_status: resp.status, _error: 'unexpected content-type: ' + ct.split(';')[0] };
       }
       return await resp.json();
     } catch (e) {
@@ -118,16 +121,48 @@
     }
   }
 
+  function _triggerChannelBind(channel, btn, card) {
+    if (channel === 'velog') {
+      // Velog uses its own login flow defined in _settings_channel_velog.html.
+      if (typeof runVelogLogin === 'function') {
+        runVelogLogin({ preventDefault: function () {} });
+      } else {
+        renderResult(card, { _error: 'runVelogLogin not available' });
+      }
+      return;
+    }
+    // medium / blogger — open the channel collapse section, then click bind btn.
+    const panel = document.getElementById('channel-' + channel);
+    if (!panel) {
+      renderResult(card, { _error: 'channel panel not found: ' + channel });
+      return;
+    }
+    function _clickBind() {
+      var bindBtn = panel.querySelector('.bind-channel-btn');
+      if (!bindBtn) {
+        renderResult(card, { _error: '綁定按鈕不可用（可能因身份不符）' });
+        return;
+      }
+      bindBtn.click();
+    }
+    if (panel.classList.contains('show')) {
+      _clickBind();
+    } else {
+      panel.addEventListener('shown.bs.collapse', _clickBind, { once: true });
+      bootstrap.Collapse.getOrCreateInstance(panel).show();
+    }
+  }
+
   document.addEventListener('click', async function (e) {
     const verifyBtn = e.target.closest('.dch-btn-verify');
-    const dryRunBtn = e.target.closest('.dch-btn-dryrun');
-    if (!verifyBtn && !dryRunBtn) return;
+    const bindBtn = e.target.closest('.dch-btn-bind');
+    if (!verifyBtn && !bindBtn) return;
 
     e.preventDefault();
-    const btn = verifyBtn || dryRunBtn;
+    const btn = verifyBtn || bindBtn;
     const card = btn.closest('.dashboard-channel-card');
     const channel = btn.dataset.channel;
-    const action = verifyBtn ? 'verify' : 'dry-run';
+    const action = verifyBtn ? 'verify' : 'bind';
     const debounceKey = channel + ':' + action;
 
     // Per-(channel, action) 1s debounce to absorb double-clicks.
@@ -136,15 +171,15 @@
     if (now - prev < DEBOUNCE_MS) return;
     lastClickAt.set(debounceKey, now);
 
+    if (action === 'bind') {
+      _triggerChannelBind(channel, btn, card);
+      return;
+    }
+
     setBusy(btn, true);
     try {
-      const url = '/api/' + encodeURIComponent(channel) + '/' + action;
-      // Minimal payload for dry-run — Phase 3 adapters tighten this per-channel.
-      const body = action === 'dry-run'
-        ? { id: 'dashboard-dryrun', title: '(dry-run preview)', content_markdown: '(dashboard test)' }
-        : null;
-      const timeoutMs = action === 'verify' ? VERIFY_TIMEOUT_MS : DRYRUN_TIMEOUT_MS;
-      const result = await callJson(url, body, timeoutMs);
+      const url = '/api/' + encodeURIComponent(channel) + '/verify';
+      const result = await callJson(url, null, VERIFY_TIMEOUT_MS);
       renderResult(card, result);
     } finally {
       setBusy(btn, false);

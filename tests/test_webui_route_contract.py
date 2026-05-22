@@ -1128,10 +1128,6 @@ class TestChannelBindingAPIRoutes:
         resp = csrf_client.post("/api/blogger/verify")
         assert resp.status_code == 403
 
-    def test_post_channel_dry_run_missing_csrf_returns_403(self, csrf_client):
-        resp = csrf_client.post("/api/blogger/dry-run")
-        assert resp.status_code == 403
-
 
 class TestTokenPasteRoutes:
     """Plan 006 follow-up (2026-05-20) — token-paste binding for ghpages.

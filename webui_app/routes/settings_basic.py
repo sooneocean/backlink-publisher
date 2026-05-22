@@ -71,16 +71,6 @@ def api_channel_verify(channel: str):
     return jsonify(_verify_result_to_json(result))
 
 
-@bp.route('/api/<channel>/dry-run', methods=['POST'])
-def api_channel_dry_run(channel: str):
-    """Dry-run — builds payload but ZERO real HTTP (defense-in-depth via
-    Session.send monkey-patch in publishing._verify.dry_run_intercept)."""
-    _require_known_channel(channel)
-    config = load_config()
-    payload = request.get_json(silent=True) or {}
-    result = verify_adapter_setup(channel, config, mode='dry-run', payload=payload)
-    return jsonify(_verify_result_to_json(result))
-
 
 @bp.route('/settings/save-target-keywords', methods=['POST'])
 def settings_save_target_keywords():

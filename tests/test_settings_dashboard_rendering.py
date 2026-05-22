@@ -78,14 +78,34 @@ class TestPerChannelCards:
                 body,
             ), f"No Verify button for {channel!r}"
 
-    def test_each_card_has_dryrun_button(self, client):
+    def test_bindable_channels_have_bind_button(self, client):
+        from backlink_publisher.cli._bind.channels import CHANNELS
+        resp = client.get("/settings")
+        body = resp.get_data(as_text=True)
+        from webui_app.binding_status import HIDDEN_FROM_UI
+        bindable = CHANNELS - HIDDEN_FROM_UI
+        for channel in sorted(bindable):
+            assert re.search(
+                rf'class="[^"]*dch-btn-bind[^"]*"[^>]*data-channel="{channel}"',
+                body,
+            ), f"No Bind button for bindable channel {channel!r}"
+
+    def test_non_bindable_channels_have_no_bind_button(self, client):
+        from backlink_publisher.cli._bind.channels import CHANNELS
+        from webui_app.binding_status import HIDDEN_FROM_UI
         resp = client.get("/settings")
         body = resp.get_data(as_text=True)
         for channel in self._visible_channels():
-            assert re.search(
-                rf'class="[^"]*dch-btn-dryrun[^"]*"[^>]*data-channel="{channel}"',
-                body,
-            ), f"No Dry-Run button for {channel!r}"
+            if channel not in CHANNELS:
+                assert not re.search(
+                    rf'class="[^"]*dch-btn-bind[^"]*"[^>]*data-channel="{channel}"',
+                    body,
+                ), f"Unexpected Bind button for non-bindable channel {channel!r}"
+
+    def test_no_channel_has_dryrun_button(self, client):
+        resp = client.get("/settings")
+        body = resp.get_data(as_text=True)
+        assert "dch-btn-dryrun" not in body, "Stale Dry-Run button found in dashboard"
 
 
 class TestDofollowBadges:

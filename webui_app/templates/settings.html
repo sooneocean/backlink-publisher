@@ -41,13 +41,13 @@
         <h2 class="section-heading">
             <i class="bi bi-broadcast"></i> 渠道綁定總覽
             <span style="font-weight:400; font-size:0.85rem; color:#64748b;">
-                · 點按鈕即時 verify / dry-run，不需開 terminal
+                · 點按鈕即時 verify / 綁定，不需開 terminal
             </span>
         </h2>
         <div class="card mb-4">
             <div class="card-body">
                 {% for name, status in dashboard_channels %}
-                    {{ dashboard_channel_card(name, status) }}
+                    {{ dashboard_channel_card(name, status, bindable=(name in binding_channels)) }}
                 {% endfor %}
             </div>
         </div>

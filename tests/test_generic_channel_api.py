@@ -1,9 +1,8 @@
-"""Unit 4 — generic /api/<channel>/{status,verify,dry-run} routes.
+"""Unit 4 — generic /api/<channel>/{status,verify} routes.
 
-Three contracts:
+Two contracts:
   - ``GET  /api/<channel>/status``   → JSON status (offline check, cheap)
   - ``POST /api/<channel>/verify``   → JSON VerifyResult (live API ping)
-  - ``POST /api/<channel>/dry-run``  → JSON VerifyResult (payload build, ZERO HTTP)
 
 The dispatcher routes by channel name and 404s on unregistered platforms.
 Drift between registry and dashboard is enforced by ``test_dashboard_drift.py``.
@@ -17,7 +16,6 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-import requests
 
 from webui_app import create_app
 
@@ -98,49 +96,6 @@ class TestVerifyEndpoint:
         )
         assert resp.status_code == 404
 
-
-# ── POST /api/<channel>/dry-run ───────────────────────────────────────────────
-
-
-class TestDryRunEndpoint:
-    """Dry-run — builds payload but emits ZERO real HTTP."""
-
-    def test_dry_run_requires_csrf(self, client):
-        resp = client.post("/api/telegraph/dry-run")
-        assert resp.status_code == 403
-
-    def test_dry_run_emits_zero_real_http(self, client):
-        """Defense-in-depth: even if adapter forgets, Session.send is patched.
-
-        We assert no real Session.send happens (autouse socket fixture already
-        blocks real network — this is the explicit assertion).
-        """
-        with client.session_transaction() as sess:
-            sess["csrf_token"] = "t"
-
-        with patch.object(
-            requests.Session, "send", side_effect=AssertionError("real HTTP escaped")
-        ) as mock_send:
-            resp = client.post(
-                "/api/telegraph/dry-run",
-                headers={"X-CSRFToken": "t"},
-                json={"id": "x", "title": "T", "content_markdown": "body"},
-            )
-            assert resp.status_code == 200
-            assert mock_send.call_count == 0
-
-    def test_dry_run_returns_verify_result_shape(self, client):
-        with client.session_transaction() as sess:
-            sess["csrf_token"] = "t"
-        resp = client.post(
-            "/api/telegraph/dry-run",
-            headers={"X-CSRFToken": "t"},
-            json={"id": "x", "title": "T", "content_markdown": "b"},
-        )
-        body = resp.get_json()
-        assert "ok" in body
-        assert "last_verify_result" in body
-        assert "blockers" in body
 
 
 # ── CSRF header extension (Unit 4 sub-deliverable) ────────────────────────────
