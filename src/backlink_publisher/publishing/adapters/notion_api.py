@@ -37,6 +37,7 @@ import time
 from typing import Any
 
 import requests
+from backlink_publisher.http import post as http_post
 
 from backlink_publisher.config import Config, load_notion_token
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
@@ -227,7 +228,7 @@ class NotionAPIAdapter(Publisher):
             )
 
         def execute():
-            resp = requests.post(
+            resp = http_post(
                 NOTION_PAGES_API,
                 headers=_required_headers(integration_token),
                 json=page_payload,

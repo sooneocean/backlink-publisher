@@ -256,11 +256,6 @@ def test_round_trip_is_idempotent_for_all_three_channels(tmp_path: Path) -> None
         'branch = "main"\n'
         'path_template = "_posts/{date}-{slug}.md"\n'
         '\n'
-        '[hashnode]\n'
-        'publication_id = "pub-xyz"\n'
-        'host = ""\n'
-        '\n'
-        '[writeas]\n'
         'collection_alias = "feed"\n'
         'api_base = "https://write.as/api"\n',
         encoding="utf-8",
