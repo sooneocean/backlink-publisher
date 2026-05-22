@@ -112,8 +112,10 @@ def _dispatch_row(
         return
 
     payload: dict[str, Any] | None = None
-    if row["language"] == "zh-CN" and _scheduler_enabled_for(
-        config, row["main_domain"]
+    if (
+        row["language"] == "zh-CN"
+        and row.get("target_language", "zh-CN") == "zh-CN"
+        and _scheduler_enabled_for(config, row["main_domain"])
     ):
         from backlink_publisher.cli.plan_backlinks import _plan_zh_short_row
         payload = _plan_zh_short_row(row, config, llm_provider, rng=rng)
