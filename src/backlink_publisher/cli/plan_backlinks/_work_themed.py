@@ -39,6 +39,8 @@ def _further_reading_paragraph(
     )
     if language == "zh-CN":
         return f"\n\n延伸阅读：{anchors_md}。"
+    if language == "ko":
+        return f"\n\n추가 읽기: {anchors_md}."
     if language == "ru":
         return f"\n\nДополнительные материалы: {anchors_md}."
     return f"\n\nFurther reading: {anchors_md}."

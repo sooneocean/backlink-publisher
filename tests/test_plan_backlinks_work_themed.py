@@ -501,3 +501,88 @@ class TestDispatchReconInstrumentation:
         assert captured[0]["branch"] == "long_form"
         assert captured[0]["count"] == len(payloads[0]["links"])
         assert 6 <= captured[0]["count"] <= 8  # schema gate
+
+
+# ---------------------------------------------------------------------------
+# Korean language prose branches
+# ---------------------------------------------------------------------------
+
+
+from backlink_publisher.cli.plan_backlinks._work_themed import _further_reading_paragraph  # noqa: E402
+from backlink_publisher.cli.plan_backlinks._links import _build_link_density_paragraph  # noqa: E402
+
+
+class TestKoreanProseBranches:
+    """Korean (ko) branches in _further_reading_paragraph and _build_link_density_paragraph."""
+
+    def test_further_reading_ko_contains_hangul(self):
+        supporting = [
+            {"anchor": "관련 링크", "url": "https://example.com/rel"},
+        ]
+        result = _further_reading_paragraph(supporting, language="ko")
+        assert result
+        assert any("가" <= c <= "힣" for c in result), "Expected Hangul in ko further reading"
+
+    def test_further_reading_ko_contains_anchor(self):
+        supporting = [{"anchor": "추가자료", "url": "https://example.com/more"}]
+        result = _further_reading_paragraph(supporting, language="ko")
+        assert "추가자료" in result
+        assert "https://example.com/more" in result
+
+    def test_further_reading_en_unchanged(self):
+        supporting = [{"anchor": "Related", "url": "https://example.com/rel"}]
+        assert _further_reading_paragraph(supporting, language="en").startswith("\n\nFurther reading")
+
+    def test_further_reading_ru_unchanged(self):
+        supporting = [{"anchor": "Ресурс", "url": "https://example.com/ru"}]
+        assert _further_reading_paragraph(supporting, language="ru").startswith("\n\nДополнительные")
+
+    def test_link_density_ko_same_url_contains_hangul(self):
+        result = _build_link_density_paragraph(
+            domain="example.com",
+            main_domain="https://example.com",
+            target_url="https://example.com",
+            language="ko",
+            url_mode="A",
+            extra_url_count=0,
+            anchors=["앵커A", "앵커B"],
+        )
+        assert any("가" <= c <= "힣" for c in result)
+        assert "https://example.com" in result
+
+    def test_link_density_ko_different_url_contains_main_domain(self):
+        result = _build_link_density_paragraph(
+            domain="example.com",
+            main_domain="https://example.com",
+            target_url="https://example.com/article",
+            language="ko",
+            url_mode="A",
+            extra_url_count=0,
+            anchors=["앵커A", "앵커B"],
+        )
+        assert "https://example.com" in result
+        assert any("가" <= c <= "힣" for c in result)
+
+    def test_link_density_en_unchanged(self):
+        result = _build_link_density_paragraph(
+            domain="example.com",
+            main_domain="https://example.com",
+            target_url="https://example.com",
+            language="en",
+            url_mode="A",
+            extra_url_count=0,
+            anchors=["AnchorA", "AnchorB"],
+        )
+        assert "For more resources" in result
+
+    def test_link_density_ru_unchanged(self):
+        result = _build_link_density_paragraph(
+            domain="example.com",
+            main_domain="https://example.com",
+            target_url="https://example.com",
+            language="ru",
+            url_mode="A",
+            extra_url_count=0,
+            anchors=["АнкорА", "АнкорБ"],
+        )
+        assert "Больше материалов" in result

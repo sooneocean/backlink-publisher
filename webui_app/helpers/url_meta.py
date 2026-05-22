@@ -136,6 +136,8 @@ def detect_language(url):
         return 'zh-TW'
     if '.jp' in domain or 'jp' in path or 'ja' in path:
         return 'ja'
+    if '.kr' in domain:
+        return 'ko'
     if '.ru' in domain or 'ru' in path:
         return 'ru'
     if '.es' in domain or 'es' in path:

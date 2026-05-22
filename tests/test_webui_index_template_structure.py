@@ -78,3 +78,17 @@ def test_index_html_includes_all_three_partials():
     assert "{% include '_tab_new.html' %}" in src
     assert "{% include '_tab_history.html' %}" in src
     assert "{% include '_tab_batch.html' %}" in src
+
+
+def test_korean_language_option_in_rendered_page(client):
+    """GET / must include value="ko" in the target_language select."""
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert b'value="ko"' in resp.data
+
+
+def test_korean_language_option_label(client):
+    """The Korean option must be labelled 한국어 (韩文)."""
+    resp = client.get("/")
+    body = resp.data.decode("utf-8")
+    assert "한국어 (韩文)" in body

@@ -201,6 +201,7 @@ def _generate_payload(
         anchors=anchors,
         site_url_categories=config.site_url_categories if config else None,
         fetch_verify_enabled=fetch_verify_enabled,
+        language=language,
     )
 
     density_para = _build_link_density_paragraph(

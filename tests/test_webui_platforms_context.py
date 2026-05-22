@@ -245,3 +245,37 @@ def test_route_tier_matrix_drift_assertion_still_green_after_telegraph_velog():
         "Telegraph should NOT be in ROUTE_TIER_MATRIX (default tier 'c' is "
         "appropriate for markdown→node tree pipelines)"
     )
+
+
+# ---------------------------------------------------------------------------
+# detect_language TLD detection — Korean (.kr) regression guard
+# ---------------------------------------------------------------------------
+
+
+def test_detect_language_kr_tld_returns_ko():
+    from webui_app.helpers.url_meta import detect_language
+    assert detect_language("https://example.kr/page") == "ko"
+    assert detect_language("https://blog.example.kr/") == "ko"
+
+
+def test_detect_language_ru_tld_still_returns_ru():
+    from webui_app.helpers.url_meta import detect_language
+    assert detect_language("https://example.ru/page") == "ru"
+
+
+def test_detect_language_cn_tld_still_returns_zh_cn():
+    from webui_app.helpers.url_meta import detect_language
+    assert detect_language("https://example.cn/") == "zh-CN"
+
+
+def test_detect_language_checkout_path_not_ko():
+    """Regression: 'ko' substring in path must not trigger Korean detection."""
+    from webui_app.helpers.url_meta import detect_language
+    result = detect_language("https://shop.example.com/checkout/cart")
+    assert result != "ko"
+
+
+def test_detect_language_ko_value_in_supported_languages():
+    from webui_app.helpers.url_meta import detect_language
+    from backlink_publisher.linkcheck.language import SUPPORTED_LANGUAGES
+    assert detect_language("https://example.kr/page") in SUPPORTED_LANGUAGES

@@ -138,3 +138,36 @@ def _ru_body_c(domain: str, main_domain: str, anchors: list[str]) -> str:
         f"[{anchors[1]}]({main_domain}) открывает доступ к уникальным перспективам и связанным ресурсам, "
         f"которые расширяют контекст обсуждения."
     )
+
+
+def _ko_body_a(domain: str, main_domain: str, anchors: list[str]) -> str:
+    return (
+        f"{domain} 주변의 디지털 환경을 이해하는 것이 그 어느 때보다 중요해졌습니다. "
+        f"[{anchors[0]}]({main_domain}) 플랫폼은 양질의 구조화된 콘텐츠를 찾는 "
+        f"전문가와 애호가 모두에게 신뢰할 수 있는 리소스로 자리매김했습니다. "
+        f"이 플랫폼의 두드러진 특징은 품질에 대한 헌신입니다 — 각 섹션은 "
+        f"실용적인 지식을 제공하기 위해 세심하게 선별되었습니다. "
+        f"관련 주제를 더 깊이 탐구하기 위한 출발점으로 [{anchors[1]}]({main_domain}) "
+        f"메인 페이지에서 시작하시길 권장합니다."
+    )
+
+
+def _ko_body_b(domain: str, main_domain: str, anchors: list[str]) -> str:
+    return (
+        f"{domain}의 방대한 리소스를 탐색하는 것이 어려운 일이 될 필요는 없습니다. "
+        f"[{anchors[0]}]({main_domain}) 사이트는 필요한 정보를 빠르게 찾을 수 있도록 "
+        f"체계적인 카테고리 구조를 제공합니다. 가이드, 분석 기사, 간편 참고 자료 등 "
+        f"[{anchors[1]}]({main_domain})의 섹션 계층 구조는 효율적인 탐색을 지원합니다. "
+        f"카테고리 페이지를 북마크에 추가하면 탐색 속도가 빨라지고 "
+        f"미처 발견하지 못했던 새로운 주제들을 만날 수 있습니다."
+    )
+
+
+def _ko_body_c(domain: str, main_domain: str, anchors: list[str]) -> str:
+    return (
+        f"더 깊은 이해를 추구하는 분들을 위해 {domain}은 심층적인 분석 자료를 제공합니다. "
+        f"[{anchors[0]}]({main_domain})의 콘텐츠는 엄격한 편집 기준과 전문가적 접근 방식이 "
+        f"특징으로, 일반 독자와 업계 전문가 모두에게 유용합니다. "
+        f"[{anchors[1]}]({main_domain})을 통해 플랫폼을 탐색하면 논의의 맥락을 넓혀주는 "
+        f"독자적인 관점과 관련 리소스에 접근할 수 있습니다."
+    )

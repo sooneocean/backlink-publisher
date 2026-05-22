@@ -33,6 +33,10 @@
                 {% if config is defined and config.target_language == 'ru' %}selected{% endif %}>
                 Русский (俄文)
             </option>
+            <option value="ko"
+                {% if config is defined and config.target_language == 'ko' %}selected{% endif %}>
+                한국어 (韩文)
+            </option>
         </select>
     </div>
     <div class="col-md-3 mb-3">

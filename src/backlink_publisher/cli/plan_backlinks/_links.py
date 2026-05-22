@@ -78,6 +78,7 @@ def _build_links(
     anchors: list[str] | None = None,
     site_url_categories: dict[str, dict[str, str]] | None = None,
     fetch_verify_enabled: bool = True,
+    language: str = "en",
 ) -> tuple[list[dict[str, Any]], set[str]]:
     candidates: list[dict[str, Any]] = []
 
@@ -104,14 +105,24 @@ def _build_links(
         for ex_url in extra_urls[:2]:
             parsed = urlparse(ex_url)
             path = parsed.path
-            if "/page/" in path or "?page=" in ex_url:
-                anchor = "分页"
-            elif "/category/" in path or "/tag/" in path:
-                anchor = "分类"
-            elif "/archive/" in path:
-                anchor = "归档"
+            if language == "ko":
+                if "/page/" in path or "?page=" in ex_url:
+                    anchor = "페이지"
+                elif "/category/" in path or "/tag/" in path:
+                    anchor = "카테고리"
+                elif "/archive/" in path:
+                    anchor = "아카이브"
+                else:
+                    anchor = "관련"
             else:
-                anchor = "相关"
+                if "/page/" in path or "?page=" in ex_url:
+                    anchor = "分页"
+                elif "/category/" in path or "/tag/" in path:
+                    anchor = "分类"
+                elif "/archive/" in path:
+                    anchor = "归档"
+                else:
+                    anchor = "相关"
             candidates.append({
                 "url": ex_url.rstrip("/"),
                 "anchor": anchor,
@@ -124,9 +135,10 @@ def _build_links(
     if url_mode in ("B", "C"):
         cat_url = cats.get("category")
         if cat_url:
+            cat_anchor = "카테고리" if language == "ko" else "Categories"
             candidates.append({
                 "url": cat_url.rstrip("/"),
-                "anchor": "Categories",
+                "anchor": cat_anchor,
                 "kind": "category",
                 "required": True,
             })
@@ -140,9 +152,10 @@ def _build_links(
     if url_mode == "C":
         detail_url = cats.get("detail")
         if detail_url:
+            detail_anchor = "상세 페이지" if language == "ko" else "详情页"
             candidates.append({
                 "url": detail_url.rstrip("/"),
-                "anchor": "详情页",
+                "anchor": detail_anchor,
                 "kind": "detail",
                 "required": True,
             })
@@ -242,6 +255,17 @@ def _build_link_density_paragraph(
         return (
             f"\n\n阅读更多请访问[{a1}]({target_url})，"
             f"并前往[{a0}]({main_domain})获取完整内容。"
+        )
+
+    if language == "ko":
+        if same_url:
+            return (
+                f"\n\n더 많은 리소스는 [{a0}]({main_domain})에서 확인하세요 — "
+                f"[{a1}]({main_domain})을 방문하면 전체 컬렉션을 살펴볼 수 있습니다."
+            )
+        return (
+            f"\n\n자세한 내용은 [{a1}]({target_url})에서 확인하고 "
+            f"전체 컬렉션은 [{a0}]({main_domain})에서 찾아보세요."
         )
 
     if language == "ru":

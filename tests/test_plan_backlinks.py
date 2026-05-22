@@ -485,10 +485,10 @@ def test_main_domain_gate_failure_aborts_row(monkeypatch):
 
 def test_plan_all_languages():
     """All supported languages must produce valid output."""
-    for lang in ("en", "zh-CN", "ru"):
+    for lang in ("en", "zh-CN", "ru", "ko"):
         seed = {
-            "target_url": f"https://{lang}.example.com/article",
-            "main_domain": f"https://{lang}.example.com",
+            "target_url": f"https://example.com/article",
+            "main_domain": f"https://example.com",
             "language": lang,
             "platform": "medium",
             "url_mode": "A",
@@ -500,6 +500,10 @@ def test_plan_all_languages():
         assert payload["language"] == lang
         assert len(payload["title"]) > 0
         assert len(payload["content_markdown"]) > 20
+        if lang == "ko":
+            assert any("가" <= c <= "힣" for c in payload["content_markdown"]), (
+                "Korean content_markdown must contain Hangul characters"
+            )
 
 
 def test_plan_stable_deterministic_id():
@@ -545,6 +549,7 @@ def test_plan_main_domain_natural_placement():
     ("en", "A"), ("en", "B"), ("en", "C"),
     ("zh-CN", "A"), ("zh-CN", "B"), ("zh-CN", "C"),
     ("ru", "A"), ("ru", "B"), ("ru", "C"),
+    ("ko", "A"), ("ko", "B"), ("ko", "C"),
 ])
 def test_all_main_domain_occurrences_are_hyperlinked(language, url_mode):
     """Every main_domain URL in content_markdown must be wrapped as [anchor](url), not bare text."""
@@ -600,6 +605,8 @@ def test_plan_no_stderr_on_success():
     ("zh-CN", "A", False),
     ("ru",    "A", True),
     ("ru",    "A", False),
+    ("ko",    "A", True),
+    ("ko",    "A", False),
     ("zh-CN", "B", False),
     ("zh-CN", "C", False),
 ])
@@ -761,7 +768,7 @@ def test_anchor_keywords_single_keyword_repeats():
 
 
 @pytest.mark.parametrize("language,url_mode", [
-    (lang, mode) for lang in ("en", "zh-CN", "ru") for mode in ("A", "B", "C")
+    (lang, mode) for lang in ("en", "zh-CN", "ru", "ko") for mode in ("A", "B", "C")
 ])
 def test_anchor_keywords_all_languages_and_modes(language, url_mode):
     """Body templates for every language+mode combination must wire keywords through."""

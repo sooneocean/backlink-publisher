@@ -9,6 +9,9 @@ from backlink_publisher._util.markdown import (
     _en_body_a,
     _en_body_b,
     _en_body_c,
+    _ko_body_a,
+    _ko_body_b,
+    _ko_body_c,
     _ru_body_a,
     _ru_body_b,
     _ru_body_c,
@@ -19,6 +22,7 @@ from backlink_publisher._util.markdown import (
 
 _TDK_TITLE_TMPL: dict[str, str] = {
     "zh-CN": "深入了解{tdk}: {domain} 完整指南",
+    "ko": "{tdk}에 대한 완벽한 가이드: {domain} 심층 분석",
     "ru": "Подробнее о {tdk}: полный гид по {domain}",
     "en": "Deep Dive into {tdk}: The Complete {domain} Guide",
 }
@@ -78,6 +82,31 @@ _TEMPLATES: dict[str, dict[str, object]] = {
             "A": _zh_body_a,
             "B": _zh_body_b,
             "C": _zh_body_c,
+        },
+    },
+    "ko": {
+        "title": {
+            "A": "{domain} 탐구: 종합 가이드",
+            "B": "{domain} 탐색 — 카테고리 및 리소스",
+            "C": "{domain} 심층 분석: {topic}",
+        },
+        "excerpt": {
+            "A": "이 글은 [{anchor}]({main_domain})이 제공하는 리소스와 가치를 탐구하며 "
+                  "독자를 위한 맥락과 선별된 링크를 제공합니다.",
+            "B": "[{anchor}]({main_domain})의 섹션과 주요 페이지를 선별하여 "
+                  "사이트를 효과적으로 탐색할 수 있도록 돕습니다.",
+            "C": "[{anchor}]({main_domain})에서 다루는 {topic}에 대한 상세한 분석과 "
+                  "추가 참고 자료를 제공합니다.",
+        },
+        "seo_title": "{title} | 백링크 기사",
+        "seo_desc": "{main_domain}을 참조하고 선별된 외부 링크와 리소스를 제공하는 "
+                    "잘 정리된 백링크 기사입니다.",
+        "topic_fallback": "최신 리소스 및 인사이트",
+        "tags": ["백링크", "참고자료", "웹 리소스", "{domain_label}", "콘텐츠 큐레이션"],
+        "body_paragraphs": {
+            "A": _ko_body_a,
+            "B": _ko_body_b,
+            "C": _ko_body_c,
         },
     },
     "ru": {
