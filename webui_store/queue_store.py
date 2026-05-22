@@ -23,3 +23,14 @@ class QueueStore(JsonStore):
             return tasks
 
         self.update(_apply)
+
+    def get_runnable(self) -> list[dict]:
+        """Return tasks that are pending or failed and past their retry time."""
+        from datetime import datetime
+        tasks = self.load()
+        now = datetime.now()
+        return [
+            t for t in tasks 
+            if t.get("status") in ("pending", "failed") 
+            and (not t.get("next_retry_at") or datetime.fromisoformat(t["next_retry_at"]) <= now)
+        ]

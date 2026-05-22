@@ -1,33 +1,9 @@
-"""Channel binding status singleton — Plan 2026-05-19-001 Unit 1.
+"""Channel binding status store — Plan 2026-05-19-001 Unit 1.
 
 Tracks each browser-binding channel's lifecycle in
-``<config_dir>/channel-status.json``:
-
-  {
-    "velog":   {"status": "bound",   "bound_at": "ISO", "storage_state_path": "...", "last_verified_at": null},
-    "medium":  {"status": "expired", "bound_at": "ISO", "storage_state_path": "...", "last_verified_at": "ISO"},
-    "blogger": {"status": "unbound", "bound_at": null,  "storage_state_path": null,  "last_verified_at": null}
-  }
-
-Public API:
-  - ``mark_bound(channel, storage_state_path)`` — record successful bind
-  - ``mark_expired(channel)`` — flip bound → expired (preserves bound_at)
-  - ``mark_verified(channel)`` — set last_verified_at = now (Plan 003 Unit 0)
-  - ``mark_identity_mismatch(channel, old_account, new_account)`` —
-        record account-mismatch state needing operator confirmation (Plan
-        003 Unit 0). Reconcile leaves identity_mismatch records alone.
-  - ``get_status(channel)`` — read API; unknown channel returns unbound
-  - ``list_all()`` — read API; entire store as dict
-  - ``reconcile_on_load()`` — called by webui_app.create_app at startup:
-        for each bound record, stat the storage_state_path; demote
-        missing-file records to expired while preserving bound_at.
-        identity_mismatch records are NOT demoted (operator must resolve).
-
-Channel whitelist enforced on every WRITE site against
-``cli._bind.channels.CHANNELS``; ``UsageError`` raised on injection.
-storage_state_path also validated to be inside ``_config_dir()`` to
-prevent supply-chain adapters from writing arbitrary paths into the
-store (defense in depth — Unit 2 CLI's ``--output`` is the first line).
+``<config_dir>/channel-status.json``.  Singleton is a ``_LazyStore``
+proxy (Plan 2026-05-22 P7 C1) so the backing-file path is only resolved
+on first access.
 """
 
 from __future__ import annotations
@@ -40,7 +16,7 @@ from typing import Any
 from backlink_publisher._util.errors import UsageError
 from backlink_publisher.cli._bind.channels import CHANNELS
 from backlink_publisher.config.loader import _config_dir
-from webui_store.base import JsonStore, Store
+from webui_store.base import JsonStore, _LazyStore
 
 
 _UNBOUND_DEFAULT: dict[str, Any] = {
@@ -51,18 +27,12 @@ _UNBOUND_DEFAULT: dict[str, Any] = {
 }
 
 
-def _make_store() -> Store:
-    """Construct the singleton with a path that honors
-    BACKLINK_PUBLISHER_CONFIG_DIR. Resolved at import time; tests that
-    set the env var earlier (conftest's session-scope fixture does this)
-    get an isolated path."""
-    return JsonStore(
+channel_status_store: _LazyStore = _LazyStore(
+    lambda: JsonStore(
         _config_dir() / "channel-status.json",
         default_factory=dict,
     )
-
-
-channel_status_store: Store = _make_store()
+)
 
 
 def _now_iso() -> str:

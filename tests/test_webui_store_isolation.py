@@ -1,17 +1,11 @@
-"""Regression tests: webui_store singletons honour BACKLINK_PUBLISHER_CONFIG_DIR.
+"""Regression tests: webui_store stores honour BACKLINK_PUBLISHER_CONFIG_DIR.
 
 History: 2026-05-19 PR #87 verification + parallel `bp-cbu5-ui/` pytest run
-both wiped the operator's real `~/.config/backlink-publisher/publish-history.json`
-+ `draft-queue.json`. Root cause: `webui_store/__init__.py` captured paths from
-`Path.home() / ".config" / "backlink-publisher"` at import time, ignoring the
-session-autouse fixture's env override.
+both wiped the operator's real config files.  Root cause: module-level
+singletons captured paths at import time.
 
-Fix: `_store_path()` delegates to canonical `_config_dir()` + `_refresh_paths()`
-rebinds singletons after env changes. Conftest's `_isolate_user_dirs` fixture
-calls `_refresh_paths()`.
-
-These tests lock in the isolation contract so future refactors can't reintroduce
-the env-blind regression.
+Plan 2026-05-22 P7 C1: all module-level stores are now ``_LazyStore`` proxies
+that defer path resolution to first access.  ``_refresh_paths()`` is a no-op.
 """
 
 from __future__ import annotations
@@ -20,6 +14,9 @@ import os
 from pathlib import Path
 
 import pytest
+
+from webui_store.base import JsonStore, _LazyStore
+from webui_store import _store_path
 
 
 def test_singleton_paths_resolve_to_isolated_dir():
@@ -43,6 +40,11 @@ def test_singleton_paths_resolve_to_isolated_dir():
 
     isolated = Path(cfg_env).resolve()
     real_prod = (Path.home() / ".config" / "backlink-publisher").resolve()
+
+    from backlink_publisher.config.loader import _config_dir
+    assert str(_config_dir()).startswith(str(isolated)), (
+        f"_config_dir() returned {_config_dir()}, expected under {isolated}"
+    )
 
     for store_name in (
         "history_store",
@@ -101,20 +103,22 @@ def test_writes_land_in_isolated_dir_not_prod():
     assert any(r.get("id") == "iso-draft" for r in drafts_store.load())
 
 
-def test_refresh_paths_picks_up_env_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """After mutating env mid-session + calling _refresh_paths(), singletons
-    re-bind to the new config dir. Locks in the contract that test fixtures
-    can re-isolate dynamically."""
-    from webui_store import _refresh_paths, history_store
+def test_lazy_store_picks_up_env_on_first_access(tmp_path, monkeypatch):
+    """A ``_LazyStore`` resolves its path from the env var at the moment
+    of first access.  Mid-session env changes do NOT rebind — the path
+    is fixed once the real store is created."""
+    fresh_store = _LazyStore(
+        lambda: JsonStore(
+            _store_path("publish-history.json"), default_factory=list,
+        )
+    )
 
     new_dir = tmp_path / "fresh-config"
     new_dir.mkdir()
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(new_dir))
 
-    _refresh_paths()
-
     expected = (new_dir / "publish-history.json").resolve()
-    assert Path(history_store.path).resolve() == expected
+    assert Path(fresh_store.path).resolve() == expected
 
-    history_store.update(lambda lst: lst + [{"id": "refresh-test"}])
+    fresh_store.update(lambda lst: lst + [{"id": "lazy-test"}])
     assert expected.exists()

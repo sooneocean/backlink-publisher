@@ -39,18 +39,10 @@ def _isolate_user_dirs(tmp_path_factory: pytest.TempPathFactory):
     os.environ["BACKLINK_PUBLISHER_CONFIG_DIR"] = str(config_dir)
     os.environ["BACKLINK_PUBLISHER_CACHE_DIR"] = str(cache_dir)
 
-    # Module-level singletons in ``webui_store/__init__.py`` capture
-    # their path at import time (which may be ``Path.home() / ...`` if
-    # this fixture runs after test-module import). Rebind to the
-    # isolated tmp dir to prevent prod-file pollution. See PR #87
-    # verification fallout (2026-05-19) for the full incident report
-    # and ``feedback_webui_store_config_dir_frozen.md``.
-    try:
-        from webui_store import _refresh_paths
-        _refresh_paths()
-    except ImportError:
-        # ``webui_store`` not on path (e.g. CLI-only test runs) — fine.
-        pass
+    # Note: ``webui_store`` singletons are now ``_LazyStore`` proxies so
+    # they resolve their path from ``BACKLINK_PUBLISHER_CONFIG_DIR`` on
+    # first access.  No ``_refresh_paths()`` call is needed.
+    # (Plan C — webui-store-lazy-init)
 
     yield
     if previous_config is None:

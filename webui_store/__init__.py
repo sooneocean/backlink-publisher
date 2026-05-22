@@ -1,31 +1,23 @@
 """WebUI state persistence — Plan 2026-05-18-001 Unit 2.
 
-Four module-level singletons replace the legacy ``_load_*`` / ``_save_*``
-helpers that were inlined in ``webui.py``:
+Six ``_LazyStore`` wrappers replace the eager module-level singletons.
+Each store resolves its backing-file path from ``_config_dir()`` on
+first access rather than at import time.
 
-  - ``history_store``       — publish history list
-  - ``profiles_store``      — campaign profile list
-  - ``drafts_store``        — draft queue list (specialized with
-                              ``get_item`` / ``update_item`` / ``delete_item``)
-  - ``schedule_store``      — schedule settings dict
-
-Each store has identical load/save semantics:
-  - File missing → returns ``default_factory()``
-  - File present + valid JSON → returns parsed value
-  - ``save(value)`` atomically writes via temp-file rename
-  - ``update(fn)`` runs ``load → fn → save`` under a per-store lock
-
-This package will move to ``webui/store/`` in Unit 3 when ``webui.py`` is
-split into a ``webui/`` package. Path-only rename; no API change planned.
+Plan 2026-05-22 P7 C1: ``_refresh_paths()`` is now a no-op (stores are
+lazy) and is retained only for backward compatibility. New code should
+access stores through ``current_app.extensions['webui_stores']`` (see
+``registry.py``) or just import the module-level names below — they
+work identically.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from backlink_publisher.config.loader import _config_dir
+from backlink_publisher.config.loader import _resolve_config_dir
 
-from .base import JsonStore, Store
+from .base import JsonStore, Store, _LazyStore
 from .channel_status import channel_status_store
 from .drafts import DraftsStore
 from .history import HistoryStore
@@ -33,58 +25,52 @@ from .queue_store import QueueStore
 
 
 def _store_path(filename: str) -> Path:
-    """Resolve a store file path under the current config dir.
-
-    Delegates to ``backlink_publisher.config.loader._config_dir()`` so
-    ``BACKLINK_PUBLISHER_CONFIG_DIR`` is honoured. Use ``_refresh_paths()``
-    below if the env changes after this module is imported (e.g. test
-    fixtures setting an isolated tmp dir).
-    """
-    return _config_dir() / filename
+    """Resolve a store file path under the current config dir."""
+    return _resolve_config_dir() / filename
 
 
-# Singleton bindings declared as the ``Store`` protocol (not the concrete
-# ``JsonStore``) so a future SQLite implementation can drop in here
-# without rippling type annotations across the route + service layers.
-# Plan 2026-05-18-001 Unit 8 — see ``base.py`` for the protocol contract
-# and a worked SqliteStore swap example.
-history_store: HistoryStore = HistoryStore(_store_path("publish-history.json"))
-profiles_store: Store = JsonStore(
-    _store_path("campaign-profiles.json"), default_factory=list,
+# Singleton bindings — lazily resolved on first access so test fixtures
+# that set BACKLINK_PUBLISHER_CONFIG_DIR before accessing these don't
+# need _refresh_paths().
+history_store = _LazyStore(
+    lambda: HistoryStore(_store_path("publish-history.json"))
 )
-drafts_store: DraftsStore = DraftsStore(_store_path("draft-queue.json"))
-schedule_store: Store = JsonStore(
-    _store_path("schedule-settings.json"), default_factory=dict,
+profiles_store = _LazyStore(
+    lambda: JsonStore(
+        _store_path("campaign-profiles.json"), default_factory=list,
+    )
 )
-queue_store: QueueStore = QueueStore(
-    _store_path("publish-queue.json"), default_factory=list,
+drafts_store = _LazyStore(
+    lambda: DraftsStore(_store_path("draft-queue.json"))
+)
+schedule_store = _LazyStore(
+    lambda: JsonStore(
+        _store_path("schedule-settings.json"), default_factory=dict,
+    )
+)
+queue_store = _LazyStore(
+    lambda: QueueStore(_store_path("publish-queue.json"), default_factory=list)
 )
 
 
 def _refresh_paths() -> None:
-    """Rebind every singleton's ``path`` from the current ``_config_dir()``.
+    """Rebind every lazy store so the next access resolves a fresh path.
 
-    Module-level singletons capture their path at import time. Test fixtures
-    that set ``BACKLINK_PUBLISHER_CONFIG_DIR`` after import (the common case
-    for session-scope autouse fixtures) must call this to redirect writes
-    away from the operator's real ``~/.config/backlink-publisher/``.
-
-    History note: 2026-05-19 verification of PR #87 exposed this by wiping
-    the operator's real ``publish-history.json`` + ``draft-queue.json`` —
-    the autouse fixture sets env but the import-time singletons did not
-    re-read it. See ``feedback_webui_store_config_dir_frozen.md``.
+    Test fixtures that mutate ``BACKLINK_PUBLISHER_CONFIG_DIR``
+    mid-session (e.g. ``test_config_dir_falls_back_when_env_var_unset``)
+    must call this to discard previously-cached store instances and
+    have them re-resolve from the updated env var.
     """
-    history_store.path = _store_path("publish-history.json")
-    profiles_store.path = _store_path("campaign-profiles.json")
-    drafts_store.path = _store_path("draft-queue.json")
-    schedule_store.path = _store_path("schedule-settings.json")
-    queue_store.path = _store_path("publish-queue.json")
-    channel_status_store.path = _store_path("channel-status.json")
+    for store in (history_store, profiles_store, drafts_store,
+                  schedule_store, queue_store, channel_status_store):
+        store.reset()
 
 
 __all__ = [
     "Store",
     "JsonStore",
+    "_LazyStore",
+    "_store_path",
     "DraftsStore",
     "HistoryStore",
     "QueueStore",

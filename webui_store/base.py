@@ -1,47 +1,12 @@
 """JSON-backed single-process store with atomic writes.
 
 Plan 2026-05-18-001 Unit 8 formalised the store contract as the ``Store``
-``typing.Protocol`` below. ``JsonStore`` is the current implementation;
-adding a SQLite (or any other) backend is a matter of writing a class
-that satisfies the same three-method contract and swapping the
-singletons in ``webui_store/__init__.py``. The dispatcher, route layer,
-service layer, and tests all depend only on the protocol, so the swap
-needs no code changes outside this package.
+``typing.Protocol`` below. ``JsonStore`` is the current implementation.
 
-Adding a new backend (worked example for SQLite)
-------------------------------------------------
-
-  # webui_store/sqlite.py
-  import sqlite3
-  from typing import Any, Callable
-  from .base import Store  # for documentation only — Protocol is structural
-
-  class SqliteStore:
-      \"\"\"SQLite-backed Store implementation.\"\"\"
-
-      def __init__(self, path, *, default_factory):
-          self._conn = sqlite3.connect(path, isolation_level=None)
-          self._default = default_factory
-          self._conn.execute(
-              \"CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v BLOB)\"
-          )
-
-      def load(self) -> Any: ...
-      def save(self, value: Any) -> None: ...
-      def update(self, fn: Callable[[Any], Any]) -> Any: ...
-
-  # webui_store/__init__.py
-  -from .base import JsonStore
-  +from .sqlite import SqliteStore
-  -history_store = JsonStore(_CONFIG_DIR / \"publish-history.json\", default_factory=list)
-  +history_store = SqliteStore(_CONFIG_DIR / \"publish-history.sqlite\", default_factory=list)
-
-Nothing else in ``webui_app/`` changes. The route layer's
-``history_store.update(...)`` calls don't care whether they're writing
-JSON or SQL — that's the whole point of the protocol.
-
-Plan Scope Boundaries reminder: the SQLite implementation itself is
-explicitly OUT of scope for this plan. We only declare the seam.
+The ``_LazyStore`` proxy (Plan 2026-05-22 P7 C1) wraps a store factory to
+defer path resolution to first access. This eliminates the need for
+``_refresh_paths()`` — tests set the env var in an autouse fixture and
+the real store (with resolved path) is created lazily when first accessed.
 """
 
 from __future__ import annotations
@@ -147,3 +112,77 @@ class JsonStore:
             new_value = fn(current)
             self.save(new_value)
             return new_value
+
+
+class _LazyStore:
+    """Transparent lazy-loading proxy for a ``Store``.
+
+    Defers the actual store construction (including path resolution)
+    from import time to first attribute access.  Every ``Store`` method
+    (``load``, ``save``, ``update``) plus ``path`` and any subclass-
+    specific method (``get_item``, ``bulk_delete``, …) is forwarded to
+    the real instance transparently.
+
+    Usage::
+
+        # Before (eager — path resolved at import time)
+        history_store = HistoryStore(_store_path("publish-history.json"))
+
+        # After (lazy — path resolved when first method is called)
+        history_store = _LazyStore(
+            lambda: HistoryStore(_store_path("publish-history.json"))
+        )
+
+    Tests that set ``BACKLINK_PUBLISHER_CONFIG_DIR`` in an autouse fixture
+    no longer need ``_refresh_paths()`` — the env var is already set by
+    the time any test code accesses the store.
+    """
+
+    def __init__(self, factory: Callable[[], Any]) -> None:
+        self._factory = factory
+        self._instance: Any = None
+
+    def _real(self) -> Any:
+        if self._instance is None:
+            self._instance = self._factory()
+        return self._instance
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in ("_factory", "_instance"):
+            super().__setattr__(name, value)
+        elif name in ("_path",):
+            setattr(self._real(), name, value)
+        elif name == "path":
+            self._real().path = value
+        else:
+            super().__setattr__(name, value)
+
+    # ── Core Store protocol methods ───────────────────────────────────
+
+    def load(self) -> Any:
+        return self._real().load()
+
+    def save(self, value: Any) -> None:
+        self._real().save(value)
+
+    def update(self, fn: Callable[[Any], Any]) -> Any:
+        return self._real().update(fn)
+
+    # ── Path property (read/write) ────────────────────────────────────
+
+    @property
+    def path(self):
+        return self._real().path
+
+    @path.setter
+    def path(self, value) -> None:
+        self._real().path = value
+
+    # ── Fallback for subclass-specific methods (get_item, bulk_delete, …)
+
+    def __getattr__(self, name: str):
+        return getattr(self._real(), name)
+
+    def reset(self) -> None:
+        """Discard the cached real store so the next access creates a new one."""
+        self._instance = None

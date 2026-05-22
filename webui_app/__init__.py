@@ -57,6 +57,11 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
             stacklevel=2,
         )
 
+    # Plan 2026-05-22 P7 C1: register app-context stores so WebUI routes
+    # can access them via ``current_app.extensions['webui_stores']``.
+    from webui_store.registry import WebUIStores
+    WebUIStores().init_app(app)
+
     # Share the publish-path markdown→HTML renderer with Jinja so preview
     # visual matches the published article (Plan 2026-05-19-007 Unit 2).
     from backlink_publisher._util.markdown import render_to_html
