@@ -51,7 +51,7 @@ class TestEmbedBannerHappyPath:
     def test_returns_full_telegraph_url(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, [{"src": "/file/abc123.png"}])
             url = TelegraphAPIAdapter().embed_banner(path, "Test Title")
@@ -73,7 +73,7 @@ class TestEmbedBannerHappyPath:
     def test_preserves_webp_extension(self, tmp_path):
         path = _write_png(tmp_path, "banner.webp", b"RIFFwebp")
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, [{"src": "/file/xyz.webp"}])
             url = TelegraphAPIAdapter().embed_banner(path, "alt")
@@ -88,7 +88,7 @@ class TestEmbedBannerHappyPath:
         # fall back to image/png so Telegraph's content sniffing decides.
         path = _write_png(tmp_path, "abcdef0123", b"\x89PNG")
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, [{"src": "/file/q.png"}])
             TelegraphAPIAdapter().embed_banner(path, "alt")
@@ -102,7 +102,7 @@ class TestEmbedBannerHappyPath:
         # BannerUploadError (covered in TestEmbedBannerErrorPaths).
         path = _write_png(tmp_path, "empty.png", b"")
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, [{"src": "/file/e.png"}])
             url = TelegraphAPIAdapter().embed_banner(path, "alt")
@@ -118,7 +118,7 @@ class TestEmbedBannerErrorPaths:
     def test_http_413_raises_banner_upload_error(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(413, json_body=None)
             with pytest.raises(BannerUploadError, match="413"):
@@ -127,7 +127,7 @@ class TestEmbedBannerErrorPaths:
     def test_http_500_raises_banner_upload_error(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(500, json_body=None)
             with pytest.raises(BannerUploadError, match="500"):
@@ -136,7 +136,7 @@ class TestEmbedBannerErrorPaths:
     def test_network_timeout_raises_banner_upload_error(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.side_effect = requests.Timeout("timed out")
             with pytest.raises(BannerUploadError, match="network"):
@@ -145,7 +145,7 @@ class TestEmbedBannerErrorPaths:
     def test_connection_error_raises_banner_upload_error(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.side_effect = requests.ConnectionError("dns")
             with pytest.raises(BannerUploadError, match="network"):
@@ -154,7 +154,7 @@ class TestEmbedBannerErrorPaths:
     def test_malformed_non_json_body_raises(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, raises_json=ValueError("not json"))
             with pytest.raises(BannerUploadError, match="not JSON"):
@@ -164,7 +164,7 @@ class TestEmbedBannerErrorPaths:
         # Telegraph's documented error shape for /upload.
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(
                 200, json_body={"error": "FILE_TYPE_INVALID"}
@@ -175,7 +175,7 @@ class TestEmbedBannerErrorPaths:
     def test_empty_array_raises(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, json_body=[])
             with pytest.raises(BannerUploadError, match="malformed body shape"):
@@ -184,7 +184,7 @@ class TestEmbedBannerErrorPaths:
     def test_missing_src_field_raises(self, tmp_path):
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(200, json_body=[{"other": "key"}])
             with pytest.raises(BannerUploadError, match="empty src"):
@@ -212,7 +212,7 @@ class TestEmbedBannerDoesNotFlipChannelStatus:
         from backlink_publisher._util.errors import AuthExpiredError
 
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(401, json_body=None)
             with pytest.raises(BannerUploadError) as exc_info:
@@ -233,7 +233,7 @@ class TestEmbedBannerThroughDispatcher:
         emitted: list[tuple[str, dict]] = []
 
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(
                 200, [{"src": "/file/sha7777.png"}]
@@ -264,7 +264,7 @@ class TestEmbedBannerThroughDispatcher:
 
         path = _write_png(tmp_path)
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(500, json_body=None)
             with pytest.raises(BannerUploadError):
@@ -289,7 +289,7 @@ class TestEmbedBannerThroughDispatcher:
         emitted: list[tuple[str, dict]] = []
 
         with patch(
-            "backlink_publisher.publishing.adapters.telegraph_api.requests.post"
+            "backlink_publisher.publishing.adapters.telegraph_api.http_post"
         ) as mock_post:
             mock_post.return_value = _resp(500, json_body=None)
             body = banner_dispatcher.apply(
