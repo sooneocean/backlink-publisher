@@ -9,12 +9,16 @@
     <div class="col-md-3 mb-3">
         <label class="form-label">目标平台</label>
         <select class="form-select" name="platform">
-            {# Reverse-driven from publisher registry; Plan 2026-05-19-002 U2. #}
-            {% for p in platforms %}
+            {# Reverse-driven from publisher registry; Plan 2026-05-19-002 U2.
+             # Filtered to bound channels only — unbound platforms are hidden
+             # from the publish form via `bound_platforms` in inject_platforms(). #}
+            {% for p in bound_platforms %}
             <option value="{{ p.slug }}"
                 {% if config is defined and config.platform == p.slug %}selected{% endif %}>
                 {{ p.display_name }}
             </option>
+            {% else %}
+            <option value="" disabled selected>尚无已绑定的平台 — 请先到「设置」绑定</option>
             {% endfor %}
         </select>
     </div>

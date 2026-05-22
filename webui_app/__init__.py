@@ -85,12 +85,32 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
         import backlink_publisher.publishing.adapters  # noqa: F401
         from backlink_publisher.publishing.registry import registered_platforms
 
-        return {
-            "platforms": [
+        all_slugs = list(registered_platforms())
+        platforms = [
+            {"slug": s, "display_name": s.title()} for s in all_slugs
+        ]
+
+        # `bound_platforms` is the publish-form filter: only channels whose
+        # offline binding check passes (and that aren't UI-hidden) are shown
+        # in the platform <select>. History filter chips still consume the
+        # full `platforms` list so already-published unbound channels remain
+        # filterable. Falls back to the full list on any load failure so the
+        # form never breaks mid-render.
+        try:
+            from backlink_publisher.config import load_config
+            from .binding_status import get_channel_status, HIDDEN_FROM_UI
+            from .helpers._request_cache import _g_cache
+            cfg = _g_cache('config', load_config)
+            bound_platforms = [
                 {"slug": s, "display_name": s.title()}
-                for s in registered_platforms()
+                for s in all_slugs
+                if s not in HIDDEN_FROM_UI
+                and get_channel_status(s, cfg).get("bound")
             ]
-        }
+        except Exception:
+            bound_platforms = platforms
+
+        return {"platforms": platforms, "bound_platforms": bound_platforms}
 
     # Plan 2026-05-20-002 Unit 5 — register csrf_token() Jinja global so
     # the homepage <meta name="csrf-token"> tag can read the per-session
