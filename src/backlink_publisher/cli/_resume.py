@@ -156,6 +156,23 @@ def _run_resume(args: Any) -> None:
         checkpoint.mark_complete(run_id)
         raise SystemExit(0)
 
+    # Re-fetch after processing
+    updated_ckpt = checkpoint.load_checkpoint(run_id)
+    
+    # Count failed items that were actually processed in this resume run
+    # (or that remain failed from before).
+    # Logic: If item is failed, count it as a failure unless it was marked
+    # failed in the original checkpoint AND wasn't retried.
+    new_failures = [
+        i for i in updated_ckpt["items"] 
+        if i["status"] == "failed" 
+        and i not in [orig for orig in ckpt["items"] if orig["status"] == "failed"]
+    ]
+    
+    if new_failures:
+        raise SystemExit(4)
+    checkpoint.mark_complete(run_id)
+
     throttle_min, throttle_max = _load_throttle_config()
     resume_elapsed_skip_throttle = False
     for item in ckpt["items"]:

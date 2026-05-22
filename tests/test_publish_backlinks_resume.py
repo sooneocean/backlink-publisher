@@ -22,7 +22,7 @@ from backlink_publisher.linkcheck.verify import VerificationResult
 def _mock_verify_pass(mocker):
     """Default: verification always passes so tests stay fast and network-free."""
     mocker.patch(
-        "backlink_publisher.cli._publish_helpers.verify_published",
+        "backlink_publisher.linkcheck.verify.verify_published",
         return_value=VerificationResult(ok=True, reason=""),
     )
 
@@ -200,7 +200,7 @@ def test_resume_all_done_no_adapter_calls(mock_pub, mock_verify, mock_cache, tmp
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_skips_done_processes_failed_pending(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -223,7 +223,7 @@ def test_resume_skips_done_processes_failed_pending(mock_pub, mock_verify, mock_
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_partial_still_failing_exits_4(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -254,7 +254,7 @@ def test_resume_nonexistent_exits_2(mock_cache, tmp_path):
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_empty_stdin_ok(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -282,7 +282,7 @@ def test_resume_verify_fails_exits_3(mock_verify, mock_cache, tmp_path):
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_http_5xx_warning_in_stderr(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -301,7 +301,7 @@ def test_resume_http_5xx_warning_in_stderr(mock_pub, mock_verify, mock_sleep, mo
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_union_preserves_original_order(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -327,7 +327,7 @@ def test_resume_union_preserves_original_order(mock_pub, mock_verify, mock_sleep
 # ── R8 throttle on resume ──────────────────────────────────────────────────────
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_throttle_applied_when_elapsed_under_300(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -361,7 +361,7 @@ def test_resume_throttle_applied_when_elapsed_under_300(mock_pub, mock_verify, m
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_throttle_skipped_when_elapsed_over_300(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -388,7 +388,7 @@ def test_resume_throttle_skipped_when_elapsed_over_300(mock_pub, mock_verify, mo
 
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli._resume.verify_adapter_setup")
 @patch("backlink_publisher.cli._resume.adapter_publish")
 def test_resume_full_throttle_no_prior_medium(mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path):
@@ -437,17 +437,15 @@ def test_item_to_publish_output_has_all_fields():
 # ── integration: Unit 2 → Unit 3 ──────────────────────────────────────────────
 
 @patch("backlink_publisher.checkpoint._cache_dir")
-@patch("backlink_publisher.cli._publish_helpers.time.sleep")
-@patch("backlink_publisher.cli._resume.verify_adapter_setup")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
 @patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
-@patch("backlink_publisher.cli._resume.adapter_publish")
 @patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
-def test_fresh_run_then_resume_full_flow(mock_pub_main, mock_pub_resume, mock_verify_main, mock_verify_resume, mock_sleep, mock_cache, tmp_path):
-    # Synchronize both mocks so fresh-run + resume share the same side_effect
-    import unittest.mock
-    mock_pub_main.side_effect = lambda *a, **kw: mock_pub_resume(*a, **kw)
-    mock_verify_main.side_effect = lambda *a, **kw: mock_verify_resume(*a, **kw)
-    mock_pub = mock_pub_resume
+@patch("backlink_publisher.cli._resume.verify_adapter_setup")
+@patch("backlink_publisher.cli._resume.adapter_publish")
+def test_fresh_run_then_resume_full_flow(
+    mock_resume_pub, mock_resume_verify,
+    mock_pub, mock_verify, mock_sleep, mock_cache, tmp_path,
+):
     """Simulate fresh run that fails on item 3, then resume processes item 3."""
     mock_cache.return_value = tmp_path / "cache"
     rows = [_make_payload(platform="blogger", item_id=f"r{i}") for i in range(3)]
@@ -466,14 +464,13 @@ def test_fresh_run_then_resume_full_flow(mock_pub_main, mock_pub_resume, mock_ve
     run_id = stderr.split("run_id=")[1].split()[0].strip()
 
     # Resume: r2 now succeeds
-    mock_pub.reset_mock()
-    mock_pub.side_effect = None
-    mock_pub.return_value = _blogger_result("r2")
+    mock_resume_pub.side_effect = None
+    mock_resume_pub.return_value = _blogger_result("r2")
 
     stdout, stderr, code = _run_publish(argv=["--resume", run_id])
 
     assert code == 0
-    assert mock_pub.call_count == 1  # only r2
+    assert mock_resume_pub.call_count == 1  # only r2
     lines = [l for l in stdout.strip().split("\n") if l]
     assert len(lines) == 3  # r0 + r1 + r2
 

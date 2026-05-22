@@ -47,7 +47,7 @@ def parse_sitemap(url: str) -> list[str]:
     Handles both regular sitemaps and sitemap index files (recursively fetches
     up to one level of nested sitemaps). Returns a deduplicated list of URLs.
     """
-    import requests
+    from backlink_publisher.http import get as http_get
 
     seen: set[str] = set()
     result: list[str] = []
@@ -56,7 +56,7 @@ def parse_sitemap(url: str) -> list[str]:
         if depth > 1:
             return
         try:
-            resp = requests.get(sitemap_url, timeout=15, headers={"User-Agent": "backlink-publisher/1.0"})
+            resp = http_get(sitemap_url, headers={"User-Agent": "backlink-publisher/1.0"})
             resp.raise_for_status()
         except Exception as exc:
             raise RuntimeError(f"Failed to fetch sitemap {sitemap_url}: {exc}") from exc
