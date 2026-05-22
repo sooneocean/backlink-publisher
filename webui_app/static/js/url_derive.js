@@ -86,7 +86,7 @@
     'body_too_small': { glyph: '⚠', text: '内容过短', aria: '页面内容过短，可能是 SPA 加载占位' },
     'soft_404_title': { glyph: '⚠', text: '疑似 404', aria: '页面标题疑似 404' },
     'network_error': { glyph: '⚠', text: '网络错误', aria: '网络错误' },
-    'ssrf_blocked': { glyph: '⛔', text: '拒绝（私有地址）', aria: '拒绝私有地址' },
+    'ssrf_blocked': { glyph: '⛔', text: '拒绝（私有地址 ）', aria: '拒绝私有地址' },
     'blocked_scheme': { glyph: '⛔', text: '协议不支持', aria: '仅支持 http/https' },
     'invalid_url': { glyph: '⛔', text: 'URL 格式无效', aria: 'URL 格式无效' },
     'rate_limited': { glyph: '⏳', text: '排队中', aria: '请求频率受限，稍候重试' },
@@ -117,8 +117,8 @@
     if (state === 'ok') {
       const title = (opts.title || '').slice(0, 24);
       spanEl.classList.add('text-success');
-      spanEl.textContent = title ? '✓ ' + title : '✓ 已验证（无标题）';
-      spanEl.setAttribute('aria-label', title ? '已验证：' + opts.title : '已验证，无标题');
+      spanEl.textContent = title ? '✓ ' + title : '✓ 已 验证（无标题）';
+      spanEl.setAttribute('aria-label', title ? '已验证 ：' + opts.title : '已验证，无标题');
       if (opts.title) spanEl.title = opts.title;
       return;
     }
@@ -252,32 +252,33 @@
 
     let lastTriggerAt = 0;
     let inflightCtrl = null;
+    let debounceTimer = null;
 
     async function trigger(rawValue) {
-      const now = Date.now();
-      if (now - lastTriggerAt < PASTE_DEDUP_MS) return;
-      lastTriggerAt = now;
+      // Debounce trigger
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(async function() {
+        const tiers = derivePathTiers(rawValue);
+        if (!tiers.main) {
+          // Invalid URL — leave inputs alone, set all statuses idle.
+          setStatus(statusEls.main, 'idle');
+          setStatus(statusEls.category, 'idle');
+          setStatus(statusEls.work, 'idle');
+          return;
+        }
 
-      const tiers = derivePathTiers(rawValue);
-      if (!tiers.main) {
-        // Invalid URL — leave inputs alone, set all statuses idle.
-        setStatus(statusEls.main, 'idle');
-        setStatus(statusEls.category, 'idle');
-        setStatus(statusEls.work, 'idle');
-        return;
-      }
+        // Write derived values (v1.0: overwrite always — no lock state).
+        if (targets.main) targets.main.value = tiers.main;
+        if (targets.category) targets.category.value = tiers.category || '';
+        if (targets.work) targets.work.value = tiers.work || '';
 
-      // Write derived values (v1.0: overwrite always — no lock state).
-      if (targets.main) targets.main.value = tiers.main;
-      if (targets.category) targets.category.value = tiers.category || '';
-      if (targets.work) targets.work.value = tiers.work || '';
-
-      // Cancel any in-flight verify and start a new one.
-      if (inflightCtrl) inflightCtrl.abort();
-      inflightCtrl = new AbortController();
-      try {
-        await verifyAll(tiers, statusEls, inflightCtrl.signal);
-      } catch (_) { /* aborted */ }
+        // Cancel any in-flight verify and start a new one.
+        if (inflightCtrl) inflightCtrl.abort();
+        inflightCtrl = new AbortController();
+        try {
+          await verifyAll(tiers, statusEls, inflightCtrl.signal);
+        } catch (_) { /* aborted */ }
+      }, 300); // 300ms debounce
     }
 
     pasteEl.addEventListener('paste', function (e) {
