@@ -39,10 +39,21 @@ def _isolate_user_dirs(tmp_path_factory: pytest.TempPathFactory):
     os.environ["BACKLINK_PUBLISHER_CONFIG_DIR"] = str(config_dir)
     os.environ["BACKLINK_PUBLISHER_CACHE_DIR"] = str(cache_dir)
 
-    # Note: ``webui_store`` singletons are now ``_LazyStore`` proxies so
-    # they resolve their path from ``BACKLINK_PUBLISHER_CONFIG_DIR`` on
-    # first access.  No ``_refresh_paths()`` call is needed.
-    # (Plan C — webui-store-lazy-init)
+    # ``webui_store`` singletons are ``_LazyStore`` proxies that resolve
+    # their backing path on first access. We *also* force a reset here
+    # because pytest collection (which imports test modules before this
+    # fixture runs) could touch a store via an import-time side effect
+    # and cache it against the operator's real ``~/.config/`` path.
+    # Belt-and-suspenders against the channel-status.json contamination
+    # incident on 2026-05-22 — see project_test_isolation_leak_2026_05_22.
+    try:
+        from webui_store import _refresh_paths as _bp_refresh_paths
+        _bp_refresh_paths()
+    except Exception:
+        # _refresh_paths may not exist on older branches; that's fine —
+        # the lazy-resolve-on-first-access path still works on the
+        # happy path.
+        pass
 
     yield
     if previous_config is None:

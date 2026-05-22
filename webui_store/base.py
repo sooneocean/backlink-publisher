@@ -141,14 +141,27 @@ class _LazyStore:
     def __init__(self, factory: Callable[[], Any]) -> None:
         self._factory = factory
         self._instance: Any = None
+        self._env_at_creation: str | None = None
 
     def _real(self) -> Any:
+        # Defensive cache invalidation: if BACKLINK_PUBLISHER_CONFIG_DIR
+        # changed since the instance was first created, drop the cached
+        # store so the factory re-resolves the path. Without this, a test
+        # that runs after the operator's real WebUI cached the store
+        # against ``~/.config/`` would inherit that path and silently
+        # corrupt the operator's real channel-status.json / publish-history.
+        # (See 2026-05-22 channel-status pytest pollution incident.)
+        import os
+        current_env = os.environ.get("BACKLINK_PUBLISHER_CONFIG_DIR")
+        if self._instance is not None and current_env != self._env_at_creation:
+            self._instance = None
         if self._instance is None:
+            self._env_at_creation = current_env
             self._instance = self._factory()
         return self._instance
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in ("_factory", "_instance"):
+        if name in ("_factory", "_instance", "_env_at_creation"):
             super().__setattr__(name, value)
         elif name in ("_path",):
             setattr(self._real(), name, value)
