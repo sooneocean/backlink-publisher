@@ -51,6 +51,26 @@ class ExternalServiceError(PipelineError):
     exit_code = 4
 
 
+class AntiBotChallengeError(ExternalServiceError):
+    """Anti-bot interstitial (Cloudflare JS challenge, CAPTCHA wall) blocked
+    a well-formed publish request.
+
+    Subclass of ``ExternalServiceError`` (exit code 4), NOT ``DependencyError``.
+    Rationale (Plan 2026-05-25-001 Unit 4): credential-less form-POST adapters
+    are a *single-entry* chain — there is no CDP fallback after them. If a
+    challenge surfaced as ``DependencyError`` it would be re-raised verbatim by
+    the registry dispatch loop and become indistinguishable from "platform not
+    configured". Propagating it as a service-rejection (semantics mirror
+    ``instant_web``'s ``content_is_blocked``) keeps "the site blocked us" cleanly
+    separate from "the operator never set this up".
+
+    Never carries the POST body or response HTML in its message — see the log
+    scrubber contract in ``_util.logger``.
+    """
+
+    exit_code = 4
+
+
 class RegistryError(PipelineError):
     """Adapter registry violation — programmer bug, not user input.
 
