@@ -18,12 +18,40 @@ from backlink_publisher._util.markdown import (
     slugify,
 )
 from backlink_publisher.content.fetch import verify_url_has_content
+from backlink_publisher.publishing import registry
 from backlink_publisher.publishing.adapters.llm_anchor_provider import OpenAICompatibleProvider
 
 from ._links import _build_link_density_paragraph, _build_links
 from ._templates import _TEMPLATES, _TDK_TITLE_TMPL, _domain_label_of
 
 ARTICLE_LENGTH_WORDS = (100, 200)
+
+
+def dofollow_tier_metadata(platform: str) -> dict[str, Any]:
+    """Map a platform to its dofollow-tier observability metadata.
+
+    Reads the registry (single source of truth — never stores a second
+    copy) and returns the marking fields injected into each payload's
+    ``metadata`` by the plan-backlinks enrichment loop. Observability
+    only (Plan 2026-05-25-001 R2 Phase 1): this does NOT change platform
+    allocation or row count.
+
+    Tier vocabulary: ``"dofollow"`` for dofollow platforms, otherwise
+    ``"nofollow-signal"`` (covering both ``False`` and ``"uncertain"``).
+    ``"uncertain"`` additionally carries ``tier_pending=True`` to flag a
+    platform whose live dofollow status has not yet been measured (R4).
+    ``referral_value`` ("high"/"low"/None) is surfaced as the
+    nofollow-signal sub-grade.
+    """
+    status = registry.dofollow_status(platform)
+    tier = "dofollow" if status is True else "nofollow-signal"
+    meta: dict[str, Any] = {
+        "dofollow_tier": tier,
+        "referral_value": registry.referral_value(platform),
+    }
+    if status == "uncertain":
+        meta["tier_pending"] = True
+    return meta
 
 
 def _resolve_article_anchors(

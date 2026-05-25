@@ -78,6 +78,7 @@ from ._payload import (                            # noqa: F401
     ARTICLE_LENGTH_WORDS,
     _generate_payload,
     _resolve_article_anchors,
+    dofollow_tier_metadata,
 )
 
 
@@ -339,6 +340,7 @@ def main(argv: list[str] | None = None) -> None:
                 metadata = dict(payload.get("metadata") or {})
                 metadata["branded_pool"] = list(branded_pool)
                 metadata["config_sha"] = config_sha
+                metadata.update(dofollow_tier_metadata(payload["platform"]))
                 payload["metadata"] = metadata
 
                 if image_gen_runtime is not None:
