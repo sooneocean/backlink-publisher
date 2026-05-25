@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 from ..phase0 import validation as V
-from ..phase0.worktree import discover_worktree_heads
+from ..phase0.worktree import WorktreeEntry, discover_worktree_heads
 from ._seal_init import (
     _handle_init,
     _InitError,
