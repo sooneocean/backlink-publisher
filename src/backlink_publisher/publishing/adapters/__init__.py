@@ -27,7 +27,7 @@ from typing import Any, Literal, Optional
 from backlink_publisher.config import Config
 from backlink_publisher._util.errors import DependencyError
 from ..registry import dispatch, register, registered_platforms
-from .._manifest_types import BindDescriptor, Policy, UiMeta
+from .._manifests import BLOGGER_MANIFEST, TELEGRAPH_MANIFEST, VELOG_MANIFEST
 from .._verify import DryRunInterceptError, VerifyResult, dry_run_intercept
 from .base import AdapterResult
 from .blogger_api import BloggerAPIAdapter
@@ -65,7 +65,12 @@ from ._nofollow_rationales import NOFOLLOW_RATIONALES as _R
 # module is callable from regression tests on this branch, but it is
 # NOT added to the dispatch chain yet — that wiring ships with Plan 001
 # (PR #141 chrome-cdp-multi-channel-publish) which is still open.
-register("blogger", BloggerAPIAdapter, dofollow=True)
+# Manifest declarations for migrated channels live in
+# ``publishing/_manifests.py`` (Plan 2026-05-25-002 Phase 2). Adding a
+# channel = new ``<SLUG>_MANIFEST`` dict in that file + new
+# ``**<SLUG>_MANIFEST`` splat here. The dispatcher module stays focused
+# on register() wiring and adapter imports.
+register("blogger", BloggerAPIAdapter, dofollow=True, **BLOGGER_MANIFEST)
 register(
     "medium",
     MediumAPIAdapter,
@@ -73,100 +78,13 @@ register(
     MediumBrowserAdapter,
     dofollow=True,
 )
-# Plan 2026-05-25-002 Phase 2 — Telegraph manifest migration.
-#
-# Telegraph is the second channel (after the velog pilot) to declare a
-# complete manifest. Unlike velog, telegraph requires NO user-side
-# binding: the adapter calls ``/createAccount`` on first publish and
-# persists the returned token under ``<config_dir>/telegraph-token.json``
-# via the credential-rotation pattern (lock + atomic write + orphan
-# archive). That is why ``bind=[]`` — there is no settings card, no
-# login endpoint, no storage-state path to manage from the UI. The
-# token file IS the binding artifact, but its lifecycle is fully
-# automatic. See ``telegraph_api._token_path`` /
-# ``_archive_orphan_token`` for the rotation mechanics.
-#
-# ``policy.throttle_band=None`` because telegraph has no documented
-# rate limit (the only ``sleep`` in the adapter is a 50-150ms lock-retry
-# jitter, which is not a thundering-herd throttle). ``env_keys`` is
-# empty for the same reason — there are no ``TELEGRAPH_*`` env knobs.
-# ``language_whitelist=()`` because telegraph accepts any UTF-8 text.
-register(
-    "telegraph",
-    TelegraphAPIAdapter,
-    dofollow=True,
-    ui=UiMeta(
-        display_name="Telegraph",
-        domain="telegra.ph",
-        category="instant-publish",
-        icon="bi-lightning-charge",
-    ),
-    bind=[],
-    policy=Policy(
-        throttle_band=None,
-        env_keys={},
-        retry_id="default",
-        liveness_probe_sec=None,
-        language_whitelist=(),
-    ),
-    visibility="active",
-)
-# Plan 2026-05-25-002 Unit 3 — Velog pilot. First channel to declare a
-# complete manifest (ui + bind + policy + visibility). The 5 special
-# velog files (velog_graphql, browser_publish/recipes/velog,
-# browser_publish/recipes/_velog_selectors, cli/_bind/recipes/velog,
-# cli/velog_login) are NOT relocated — only their paths are declared
-# in the bind descriptor's ``extras`` so downstream consumers
-# (Unit 4 WebUI wiring) can reverse-lookup them.
-#
-# Throttle band reflects the hardcoded ``_VELOG_JITTER_MIN/MAX_S`` in
-# velog_graphql.py (60-180s). ``env_keys`` is intentionally empty —
-# velog does not currently support env overrides; if that changes a
-# future PR adds ``VELOG_THROTTLE_MIN/MAX`` and updates this manifest.
+register("telegraph", TelegraphAPIAdapter, dofollow=True, **TELEGRAPH_MANIFEST)
 register(
     "velog",
     VelogGraphQLAdapter,
     BrowserPublishDispatcher.for_channel("velog"),
     dofollow=True,
-    ui=UiMeta(
-        display_name="Velog",
-        domain="velog.io",
-        category="dev-blog",
-        icon="bi-journal-code",
-    ),
-    bind=[
-        BindDescriptor(
-            backend="cookie",
-            # Default cookies path when config.velog.cookies_path is unset
-            # — same default the dispatcher resolves at runtime
-            # (see this module, lines ~213-217). Stored as the *shape*
-            # (template), not an absolute path — runtime interpolation
-            # happens at the bind backend.
-            storage_state_path="<config_dir>/velog-cookies.json",
-            login_endpoint="/api/velog/login",
-            card_template="_settings_channel_velog.html",
-            extras={
-                "browser_recipe": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes.velog"
-                ),
-                "bind_recipe": "backlink_publisher.cli._bind.recipes.velog",
-                "login_module": "backlink_publisher.cli.velog_login",
-                "selectors_module": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes._velog_selectors"
-                ),
-            },
-        ),
-    ],
-    policy=Policy(
-        throttle_band=(60, 180),
-        env_keys={},
-        retry_id="default",
-        liveness_probe_sec=900,
-        language_whitelist=("ko", "en"),
-    ),
-    # visibility defaults to "active" — explicit kwarg omitted.
+    **VELOG_MANIFEST,
 )
 register("ghpages", GitHubPagesAPIAdapter, dofollow=True)
 register(

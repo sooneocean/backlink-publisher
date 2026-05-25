@@ -38,8 +38,8 @@ ceiling = 560
 rationale = "U4 read-side projector (SLOC 548 at seed): flush_for dispatch + 3 reducers (_project_checkpoint / _project_history / _project_drafts) + shared helpers (cursor I/O, dt normalisation, anchor filter, JSON read retry). Reducers share enough plumbing that splitting into a subpackage would re-import most of that surface; keep the unit whole until U5 inline-flush seam reveals a real boundary. Re-evaluate when U7 bp-events-rebuild bootstrap reuses the reducer entry points. Ceiling tightened 580→560 on 2026-05-22: branch trimmed SLOC from 548→528 while ceiling was inherited unchanged from main; ceiling = round_up_to_10(528+30) = 560."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 600
-rationale = "Registry + re-export hub. Plan 2026-05-25-002 Unit 3 — Velog pilot manifest declaration: the single-line register() call becomes a ~50-line declarative block (ui + bind + policy kwargs) plus inline comments documenting the 5 special files the BindDescriptor.extras dict references. SLOC 498 → 561. Ceiling 600 = round_up_to_10(561+30) — deliberately leaves headroom for the Unit 4 webui wiring touch (no SLOC impact expected) and for the 7 remaining Phase-2 channel migrations, each adding a similar ~30-50 SLOC block. If Phase 2 pushes past 600 the right move is to extract the manifest declarations into a sibling module (platforms/manifests.py) rather than raise the ceiling further."
+ceiling = 560
+rationale = "Registry + re-export hub. Plan 2026-05-25-002 Phase 2 ratchet-down: the second migration PR (telegraph + blogger) hit the prior 600 ceiling and triggered the extract-to-sibling escape hatch the Unit 3 rationale called out. Per-channel manifest data (UiMeta / BindDescriptor / Policy) now lives in publishing/_manifests.py as <SLUG>_MANIFEST dicts splatted into thin one-line register() calls. SLOC dropped 580 → 523 with three channels migrated (velog + telegraph + blogger), and adding the remaining 6 Phase-2 channels = ~1 register line each, well within the new ceiling. round_up_to_10(523+30) = 560."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465
