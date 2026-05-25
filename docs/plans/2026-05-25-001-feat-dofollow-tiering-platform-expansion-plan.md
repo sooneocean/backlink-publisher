@@ -132,7 +132,7 @@ graph TB
 
 ### Phase 1：Dofollow 分層架構（cross-cutting，先做；不依賴 Phase 0）
 
-- [ ] **Unit 1: registry 加 `referral_value` capability**
+- [x] **Unit 1: registry 加 `referral_value` capability**
 
 **Goal:** 在 registry 鏡像 dofollow 先例加 `referral_value`（high/low）平行 dict + accessor + `register()` optional kwarg，作為三層軸的真相源。
 
@@ -173,7 +173,7 @@ graph TB
 
 ---
 
-- [ ] **Unit 2: plan-backlinks 輸出標記層級（observability）**
+- [x] **Unit 2: plan-backlinks 輸出標記層級（observability）**
 
 **Goal:** 每個 payload row 帶 `metadata["dofollow_tier"]`（dofollow / nofollow-signal）+ `metadata["referral_value"]`，不改變分配（R2 Phase 1）。
 
@@ -204,7 +204,7 @@ graph TB
 
 ---
 
-- [ ] **Unit 3: report-anchors JSONL path 按層分段**
+- [x] **Unit 3: report-anchors JSONL path 按層分段**
 
 **Goal:** `report-anchors` 的 JSONL path 輸出按 dofollow/nofollow-signal 分段，nofollow-signal 桶內再按 referral high/low 細分。
 
