@@ -1,8 +1,9 @@
 ---
 title: "feat: Telegraph 适配器(REST + Markdown→Node 转换器,含 Phase 0 索引前置门)"
 type: feat
-status: active
+status: completed
 date: 2026-05-15
+completed: 2026-05-15
 origin: docs/brainstorms/2026-05-15-telegraph-adapter-requirements.md
 ---
 

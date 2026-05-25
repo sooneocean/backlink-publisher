@@ -1,8 +1,9 @@
 ---
 title: "refactor: Telegraph Phase 0 等待期阻塞打通（21 天并行产出最大化）"
 type: refactor
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/plans/2026-05-15-004-feat-telegraph-adapter-plan.md
 related_phase0_report: docs/phase0/2026-05-15-telegraph-indexation-report.md
 ---

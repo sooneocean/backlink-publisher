@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
-import hashlib
 import json
 import re
 import subprocess
@@ -30,19 +29,11 @@ from ..phase0.worktree import WorktreeEntry, discover_worktree_heads
 from ._seal_init import (
     _handle_init,
     _InitError,
-    _NotesPushDidNotLand,
-    _build_routine_verdict_ref,
-    _build_manual_verdict_ref,
     _get_main_sha,
-    _post_push_verify,
     _parse_comment_url,
     _NOTES_REF,
-    _NOTES_VERIFY_REF,
     EXIT_OK,
     EXIT_MISUSE,
-    EXIT_WORKTREE,
-    EXIT_VERDICT,
-    EXIT_NOT_IMPLEMENTED,
 )
 
 

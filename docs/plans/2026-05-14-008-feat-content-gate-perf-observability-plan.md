@@ -1,8 +1,9 @@
 ---
 title: Content-fetch gate — performance + observability optimisation
 type: feat
-status: active
+status: completed
 date: 2026-05-14
+completed: 2026-05-14
 ---
 
 # Content-fetch gate — performance + observability optimisation

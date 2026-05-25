@@ -1,8 +1,9 @@
 ---
 title: "feat: Medium browser-bind recipe hardening + adapter convergence on Plan 001 framework"
 type: feat
-status: active
+status: completed
 date: 2026-05-19
+completed: 2026-05-19
 deepened: 2026-05-19
 origin: docs/brainstorms/2026-05-19-medium-browser-bind-flow-requirements.md
 depends_on: docs/plans/2026-05-19-001-feat-settings-browser-binding-plan.md

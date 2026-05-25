@@ -1,8 +1,9 @@
 ---
 title: /sites 表单极简化 — 只输入 main_url，其余服务端派生
 type: feat
-status: active
+status: completed
 date: 2026-05-14
+completed: 2026-05-14
 ---
 
 # /sites 表单极简化 — 只输入 main_url，其余服务端派生

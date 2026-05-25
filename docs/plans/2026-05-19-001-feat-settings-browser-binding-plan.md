@@ -1,8 +1,9 @@
 ---
 title: "feat: Browser-driven channel binding — Settings UI + bind-channel CLI + AuthExpiredError adapter wiring"
 type: feat
-status: active
+status: completed
 date: 2026-05-19
+completed: 2026-05-19
 ---
 
 # feat: Browser-driven channel binding — Settings UI + bind-channel CLI + AuthExpiredError adapter wiring

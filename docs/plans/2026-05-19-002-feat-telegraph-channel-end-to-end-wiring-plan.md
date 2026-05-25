@@ -1,8 +1,9 @@
 ---
 title: "feat: Telegraph channel end-to-end wiring (API adapter + registry-driven WebUI)"
 type: feat
-status: active
+status: completed
 date: 2026-05-19
+completed: 2026-05-19
 origin: docs/brainstorms/2026-05-19-telegraph-channel-end-to-end-wiring-requirements.md
 ---
 

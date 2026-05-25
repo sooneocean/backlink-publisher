@@ -1,8 +1,9 @@
 ---
 title: "feat: Config Safety Net — preserve unknown sections + atomic write + snapshot history"
 type: feat
-status: active
+status: completed
 date: 2026-05-14
+completed: 2026-05-14
 origin: docs/ideation/2026-05-14-round3-fresh-pass-ideation.md (idea #1)
 ---
 

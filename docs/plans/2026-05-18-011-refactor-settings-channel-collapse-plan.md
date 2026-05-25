@@ -1,8 +1,9 @@
 ---
 title: Settings 页面渠道分组与折叠重构
 type: refactor
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/brainstorms/2026-05-18-settings-channel-collapse-requirements.md
 deepened: 2026-05-18
 ---

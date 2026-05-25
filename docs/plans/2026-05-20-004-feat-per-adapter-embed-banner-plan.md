@@ -1,8 +1,9 @@
 ---
 title: Per-adapter embed_banner implementations + publish-time dispatcher (Banner Unit 5)
 type: feat
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 claims: {}
 ---
 

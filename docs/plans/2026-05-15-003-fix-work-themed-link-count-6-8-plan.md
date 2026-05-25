@@ -1,8 +1,9 @@
 ---
 title: "fix: work-themed dispatch branch must emit 6-8 links to satisfy schema invariant"
 type: fix
-status: active
+status: completed
 date: 2026-05-15
+completed: 2026-05-15
 ---
 
 # fix: work-themed dispatch branch must emit 6-8 links

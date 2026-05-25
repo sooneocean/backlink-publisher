@@ -1,8 +1,9 @@
 ---
 title: "feat: Velog 适配器（GraphQL writePost + 有头 Playwright 登录，含 Phase 0 可达性/语种前置门）"
 type: feat
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 deepened: 2026-05-18
 origin: docs/brainstorms/2026-05-15-velog-adapter-requirements.md
 ---

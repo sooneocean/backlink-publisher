@@ -1,8 +1,9 @@
 ---
 title: feat: Footprint Regression Gate (Arm A of S2 Footprint Loop Closure)
 type: feat
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/brainstorms/2026-05-18-footprint-regression-gate-requirements.md
 ---
 

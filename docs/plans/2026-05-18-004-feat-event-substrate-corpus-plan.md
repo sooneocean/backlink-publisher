@@ -1,8 +1,9 @@
 ---
 title: "feat: Event substrate + published corpus (read-side projection)"
 type: feat
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/brainstorms/2026-05-18-event-substrate-corpus-requirements.md
 ---
 

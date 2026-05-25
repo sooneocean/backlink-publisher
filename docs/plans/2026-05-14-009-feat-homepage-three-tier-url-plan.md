@@ -1,8 +1,9 @@
 ---
 title: Homepage 三層 URL 輸入結構（主網域 + 分類頁 + 漫畫頁）
 type: feat
-status: active
+status: completed
 date: 2026-05-14
+completed: 2026-05-14
 origin: docs/brainstorms/2026-05-14-homepage-three-tier-url-requirements.md
 ---
 

@@ -1,8 +1,9 @@
 ---
 title: "Portfolio: save_config round-trip + Medium GraphQL spike + dofollow quality audit"
 type: feat
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 deepened: 2026-05-20
 claims: {}  # opt-out: portfolio plan spanning multiple unrelated PRs;
             # each shipped unit (e.g. A.2 #114/#116, B.1 #119) lives on

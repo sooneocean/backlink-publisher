@@ -1,8 +1,9 @@
 ---
 title: "refactor: CLI extension-readiness + codebase hygiene"
 type: refactor
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/brainstorms/2026-05-18-codebase-hygiene-requirements.md
 deepened: 2026-05-18
 ---

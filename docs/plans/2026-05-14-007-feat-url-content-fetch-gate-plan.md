@@ -1,8 +1,9 @@
 ---
 title: URL Content-Fetch Gate — block links with no real content from being emitted
 type: feat
-status: active
+status: completed
 date: 2026-05-14
+completed: 2026-05-14
 ---
 
 # URL Content-Fetch Gate — block links with no real content from being emitted

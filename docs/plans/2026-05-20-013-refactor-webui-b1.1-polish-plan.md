@@ -1,8 +1,9 @@
 ---
 title: "refactor(webui): Plan 013 B-1.1 — mode_toggle.js extensions + shared config selects + sticky CSS"
 type: refactor
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 claims: {}
 ---
 

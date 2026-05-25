@@ -1,8 +1,9 @@
 ---
 title: "feat: Plan Claims Gate — soak, Tier-2 review, required-check promotion"
 type: feat
-status: active
+status: completed
 date: 2026-05-19
+completed: 2026-05-19
 claims:
   paths:
     - .github/workflows/plan-claims-gate.yml

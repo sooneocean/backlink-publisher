@@ -1,8 +1,9 @@
 ---
 title: AI banner image generation wired into the publish pipeline
 type: feat
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 claims: {}
 ---
 

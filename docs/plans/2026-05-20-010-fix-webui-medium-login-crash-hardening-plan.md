@@ -1,8 +1,9 @@
 ---
 title: "fix: WebUI Medium browser-login crash hardening (Playwright lifecycle + error catch)"
 type: fix
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 claims: {}
 ---
 

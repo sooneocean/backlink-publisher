@@ -1,8 +1,9 @@
 ---
 title: "feat: Real Chrome channel binding backend"
 type: feat
-status: active
+status: completed
 date: 2026-05-20
+completed: 2026-05-20
 claims: {}  # opt-out: plan dated on cutoff (2026-05-20); paths/SHAs land
             # incrementally across multiple PRs. The first PR introduces
             # chrome_backend.py + its test; downstream PRs add the WebUI

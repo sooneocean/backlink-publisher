@@ -1,8 +1,9 @@
 ---
 title: 架构健康度重构 — webui / config / 领域分包路线图
 type: refactor
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 origin: docs/brainstorms/2026-05-18-architecture-health-refactor-requirements.md
 ---
 

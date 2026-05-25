@@ -1,8 +1,9 @@
 ---
 title: 三连结作品主题外链（Work-Themed Backlinks）
 type: feat
-status: active
+status: completed
 date: 2026-05-13
+completed: 2026-05-13
 deepened: 2026-05-13
 origin: ../../../docs/brainstorms/2026-05-13-work-themed-backlinks-requirements.md
 ---

@@ -1,8 +1,9 @@
 ---
 title: "feat: 发布历史双维度筛选（状态 + 平台）"
 type: feat
-status: active
+status: completed
 date: 2026-05-18
+completed: 2026-05-18
 ---
 
 # feat: 发布历史双维度筛选（状态 + 平台）
