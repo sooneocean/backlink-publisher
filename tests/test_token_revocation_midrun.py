@@ -10,7 +10,12 @@ from backlink_publisher.config.tokens import save_blogger_token
 
 
 def test_token_drift_aborts_mid_run(tmp_path, monkeypatch):
-    """If a token is updated mid-run, the publisher must abort with code 45."""
+    """If a token is updated mid-run, the publisher must abort with exit 3.
+
+    Mid-run credential revocation is a dependency/auth condition → exit 3
+    (DependencyError family, per the AGENTS.md 0-6 contract), not the
+    undocumented 45 this previously emitted.
+    """
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
     
     # Setup initial token with token_rev=1
@@ -56,9 +61,12 @@ def test_token_drift_aborts_mid_run(tmp_path, monkeypatch):
                             skip_publish_time_check = True
                             no_verify = True
                         
+                        raised = None
                         try:
                             _run_resume(DummyArgs())
                         except SystemExit as exc:
-                            assert exc.code == 45, "Should exit with 45 due to config drift"
-                
+                            raised = exc
+
+    assert raised is not None, "Expected SystemExit on mid-run token drift"
+    assert raised.code == 3, "Should exit 3 (DependencyError) due to config drift"
     assert call_count["n"] == 1, "Should have aborted before processing r1"

@@ -149,7 +149,7 @@ def _check_token_drift(initial_revs: dict[str, int]) -> None:
             emit_error(
                 f"error: configuration for platform {plat!r} was updated mid-run. "
                 "Aborting to prevent using revoked credentials.",
-                exit_code=45,
+                exit_code=3,
             )
 
 
