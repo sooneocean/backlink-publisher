@@ -5,6 +5,18 @@ status: active
 date: 2026-05-25
 deepened: 2026-05-25
 origin: docs/brainstorms/2026-05-25-dofollow-tiering-and-6-platform-expansion-requirements.md
+claims:
+  paths:
+    - src/backlink_publisher/cli/_report_format.py
+    - src/backlink_publisher/cli/plan_backlinks/_payload.py
+    - src/backlink_publisher/cli/plan_backlinks/core.py
+    - src/backlink_publisher/cli/report_anchors.py
+    - src/backlink_publisher/publishing/adapters/__init__.py
+    - src/backlink_publisher/publishing/registry.py
+    - tests/conftest.py
+    - tests/test_registry_dofollow_kwargs.py
+  shas:
+    - "b05f5c7"
 ---
 
 # feat: Dofollow 分層貫穿 + 6 平台擴充
