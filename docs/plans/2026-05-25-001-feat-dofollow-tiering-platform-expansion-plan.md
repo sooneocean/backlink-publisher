@@ -1,7 +1,7 @@
 ---
 title: "feat: Dofollow 分層貫穿 + 6 平台擴充"
 type: feat
-status: active
+status: partial  # Unit 6 (livejournal) + Unit 7 (txt.fyi) shipped; Unit 5 HOLD, Unit 8 deferred per Phase 0
 date: 2026-05-25
 deepened: 2026-05-25
 origin: docs/brainstorms/2026-05-25-dofollow-tiering-and-6-platform-expansion-requirements.md
@@ -26,6 +26,26 @@ claims:
 把 `dofollow` capability 信號（目前只被 WebUI 消費）貫穿進 planning（`plan-backlinks`）與 reporting（`report-anchors`），並新增 `referral_value`（high/low）子等級，形成三層分類軸。再建兩個新發布原型（純 HTTP 表單 POST 底座、論壇登入 recipe），最後按「dofollow 先行、nofollow 待證」混合策略批量接入 6 個平台（livejournal / txt.fyi / justpaste.it / teletype.in / bloglovin / jkforum）。
 
 研究確認的關鍵事實：`plan_backlinks/core.py`、`report_anchors.py`、`footprint.py`、`anchor/profile.py` 目前 **import 任何 registry 的東西都沒有**——dofollow 信號到這四層是**全綠地接線**。`dofollow_status()` 的唯一消費者是 `webui_app/binding_status.py` 與 `helpers/contexts.py`。
+
+## Completion Summary (2026-05-25)
+
+Per Phase 0 probe (`fbe8f78`) adjusted scope: only **LiveJournal (Unit 6)** + **txt.fyi (Unit 7)** were GO.
+
+| Unit | Platform | Status | Note |
+|---|---|---|---|
+| 4 | HTTP form-POST helpers | ✅ shipped | `http_form_post.py` — fetch_form, extract_hidden_fields, submit_form |
+| 5 | jkforum forum recipe | 🚫 HOLD | Phase 0 found bad-neighborhood reputation risk |
+| 6 | LiveJournal XML-RPC | ✅ shipped | `livejournal_api.py` — 14 tests, password-equivalent `0o600` |
+| 7 | txt.fyi form-POST | ✅ shipped | `txtfyi_api.py` — 9 tests, no credentials, dofollow="uncertain" |
+| 7 | justpaste.it | 🔲 conditional | JS SPA per Phase 0 — not built |
+| 7 | teletype.in | 🔲 conditional | JS SPA per Phase 0 — not built |
+| 7 | R14 anon_concentration gate | 🔲 deferred | Not in this plan's scope |
+| 8 | bloglovin | 🔲 RETIRED | Per Phase 0 |
+| 8 | jkforum adapter | 🚫 HOLD | Same reputation risk as Unit 5 |
+
+**Tests:** 3752 passed, 3 skipped, 0 failures. Monolith budget: `adapters/__init__.py` within 530 SLOC ceiling.
+
+**Branch:** `feat/dofollow-tiering-phase2` worktree at `bp-dofollow-tiering/`, 5 commits past `main`.
 
 ## Problem Frame
 
@@ -110,7 +130,7 @@ claims:
 
 ### Deferred to Implementation
 
-- ~~**[Phase 0 go/no-go]** livejournal XML-RPC 活否+接受新帳號+正文 dofollow；匿名三平台 raw POST 是否撞 Cloudflare；bloglovin 是否退役+archetype；jkforum 外鏈 ToS+刪帖後存活率+IP ban 連帶。~~ **已解決 2026-05-25**（見 `docs/spike-notes/2026-05-25-dofollow-tiering-phase0-probes/findings.md`）：**livejournal GO**（XML-RPC 200/nginx 無 CF；正文 `noopener noreferrer` 無 nofollow=dofollow；**僅 challenge-response 無 OAuth/app-password → 強制拋棄帳號**）。**txt.fyi GO**（純 form `POST edit.php`，`url`+`txt`+`nonce`+`form_time`，無 captcha → 驗證 Unit 4 helper）。**justpaste.it/teletype.in 條件**（JS SPA，raw POST 不足，待 XHR/API 逆向；teletype 若帶 token 走 Unit 6 憑證路徑）。**jkforum HOLD/NO-GO**（CF 對正常 UA 不挑戰但 ToS 禁廣告 + 「壞鄰居」聲譽風險〔涉色情媒合、負責人遭逮捕〕+ Discuz nofollow + 刪帖）。**bloglovin NO-GO 實質退役**（2018 轉 Activate→2021 棄置，首頁 403 封爬 → **6 平台降為 5**）。**operator 拍板 build set = livejournal + txt.fyi**（Unit 4/6/7-txtfyi 本輪建；Unit 5/8/justpaste/teletype 此輪不建）。
+- **[Phase 0 go/no-go]** livejournal XML-RPC 活否+接受新帳號+正文 dofollow；匿名三平台 raw POST 是否撞 Cloudflare；bloglovin 是否退役+archetype；jkforum 外鏈 ToS+刪帖後存活率+IP ban 連帶。
 - ~~匿名平台是否抑制 canonical~~ **已定（deepening）：匿名平台 canonical 硬預設關閉**（fail-safe，升為 R12/R14 requirement）；operator 可 per-platform opt-in。
 - `verify_link_attributes` 對 SPA（teletype.in）`total_anchors=0` 誤判——是否需 headless 渲染後測。
 - Phase 2 分層配額旋鈕形態（config vs CLI flag）。
@@ -369,9 +389,9 @@ graph TB
 
 ---
 
-- [ ] **Unit 7: 匿名三平台 adapter + R14 anon_concentration 去匿名化 gate**
+- [x] **Unit 7: txt.fyi adapter（僅 txt.fyi；justpaste.it/teletype.in scope-reduced 見 Phase 0；R14 deferred）**
 
-**Goal:** txt.fyi / justpaste.it / teletype.in adapter（composes Unit 4 helper）；新增匿名跨站集中度 gate（獨立 `anon_concentration` 模組，非 footprint）。**只建 Phase 0 probe pass 且 R4 實測有 dofollow 或 referral=high 者**；零價值者按 R13 reject。
+**Goal:** txt.fyi adapter（composes Unit 4 helper）。Phase 0 判定 justpaste.it/teletype.in 為 conditional（JS SPA），不建 adapter。R14 anon_concentration gate deferred。**只建 Phase 0 probe pass 且 R4 實測有 dofollow 或 referral=high 者**；零價值者按 R13 reject。
 
 **Requirements:** R8, R5, R4, R13, R14, R12, R11, R15
 
