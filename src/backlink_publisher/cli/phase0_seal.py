@@ -34,6 +34,9 @@ from ._seal_init import (
     _NOTES_REF,
     EXIT_OK,
     EXIT_MISUSE,
+    EXIT_WORKTREE,
+    EXIT_VERDICT,
+    EXIT_NOT_IMPLEMENTED,
 )
 
 
