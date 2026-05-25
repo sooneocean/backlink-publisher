@@ -12,6 +12,7 @@ from ._report_format import (  # noqa: F401
     _EXIT_CODE_ALARM,
     _build_profile_report,
     _build_report,
+    _build_tier_summary,
     _compute_alarm,
     _format_alarm_markdown,
     _format_profile_report_json,
@@ -116,11 +117,12 @@ def main(argv: list[str] | None = None) -> None:
     rows = list(read_jsonl(fh, strict=False))
 
     stats = _build_report(rows)
+    tier_summary = _build_tier_summary(rows)
 
     if args.json:
-        print(_json_output(stats))
+        print(_json_output(stats, tier_summary=tier_summary))
     else:
-        print(_markdown_table(stats, top_n=args.top_anchors))
+        print(_markdown_table(stats, top_n=args.top_anchors, tier_summary=tier_summary))
 
 
 if __name__ == "__main__":

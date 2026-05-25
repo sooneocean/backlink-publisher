@@ -84,18 +84,21 @@ register(
     BrowserPublishDispatcher.for_channel("devto"),
     dofollow=False,
     rationale=_R["devto"],
+    referral_value="high",  # high DA + referral traffic + topical signal
 )
 register(
     "notion",
     NotionAPIAdapter,
     dofollow=False,
     rationale=_R["notion"],
+    referral_value="high",  # DA ~75+, entity signal, indexation speed
 )
 register(
     "mastodon",
     BrowserPublishDispatcher.for_channel("mastodon"),
     dofollow=False,
     rationale=_R["mastodon"],
+    referral_value="high",  # Fediverse referral traffic + topical signal
 )
 
 

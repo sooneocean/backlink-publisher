@@ -25,10 +25,12 @@ from backlink_publisher.publishing.registry import (
     Publisher,
     _DOFOLLOW_BY_PLATFORM,
     _RATIONALE_BY_PLATFORM,
+    _REFERRAL_VALUE_BY_PLATFORM,
     _REGISTRY,
     _REJECTED_PLATFORMS,
     dofollow_rationale,
     dofollow_status,
+    referral_value,
     register,
     registered_platforms,
 )
@@ -70,6 +72,22 @@ class TestEveryPlatformHasValidDofollow:
                 f"platform {platform!r} has dofollow={status!r} rationale "
                 f"of {len(rationale.strip())} stripped chars, need "
                 f">={_RATIONALE_MIN_CHARS}. Expand the rationale string."
+            )
+
+    def test_non_true_dofollow_carries_referral_value(self, platform: str) -> None:
+        # Plan 2026-05-25-001 R1/R13: dofollow=False or 'uncertain' must
+        # declare a referral_value ('high'/'low') — the ship/reject
+        # decision input. The register() gate enforces this at import;
+        # this parametrized test is the standing assertion across every
+        # production platform.
+        status = dofollow_status(platform)
+        if status in (False, "uncertain"):
+            value = referral_value(platform)
+            assert value in ("high", "low"), (
+                f"platform {platform!r} declares dofollow={status!r} but has "
+                f"referral_value={value!r}. Add referral_value='high'|'low' "
+                f"to its register() call — it is the ship/reject decision "
+                f"input for nofollow platforms."
             )
 
 
@@ -116,6 +134,7 @@ def _isolate_registry():
     reg_snap = {k: list(v) for k, v in _REGISTRY.items()}
     df_snap = dict(_DOFOLLOW_BY_PLATFORM)
     rat_snap = dict(_RATIONALE_BY_PLATFORM)
+    ref_snap = dict(_REFERRAL_VALUE_BY_PLATFORM)
     rej_snap = dict(_REJECTED_PLATFORMS)
     try:
         yield
@@ -126,6 +145,8 @@ def _isolate_registry():
         _DOFOLLOW_BY_PLATFORM.update(df_snap)
         _RATIONALE_BY_PLATFORM.clear()
         _RATIONALE_BY_PLATFORM.update(rat_snap)
+        _REFERRAL_VALUE_BY_PLATFORM.clear()
+        _REFERRAL_VALUE_BY_PLATFORM.update(ref_snap)
         _REJECTED_PLATFORMS.clear()
         _REJECTED_PLATFORMS.update(rej_snap)
 
@@ -150,6 +171,41 @@ class TestSyntheticRedPaths:
                 dofollow="uncertain",
                 rationale="too short",
             )
+
+    def test_dofollow_false_with_valid_rationale_but_no_referral_value_raises(
+        self,
+    ) -> None:
+        # Plan 2026-05-25-001: rationale satisfied but referral_value
+        # unset → the silent-gap gate fires. Mirrors the rationale gate.
+        with pytest.raises(RegistryError, match="referral_value"):
+            register(
+                "redpath_false_no_referral",
+                _FakeAdapter,
+                dofollow=False,
+                rationale=(
+                    "Valid-length rationale that satisfies the >=80-char "
+                    "rationale gate so the referral_value gate is what fires "
+                    "in this red-path test, not the rationale gate."
+                ),
+            )
+
+    def test_dofollow_uncertain_with_referral_value_succeeds(
+        self, _isolate_registry
+    ) -> None:
+        # Happy path: uncertain + valid rationale + referral_value → ok.
+        register(
+            "redpath_uncertain_ok",
+            _FakeAdapter,
+            dofollow="uncertain",
+            rationale=(
+                "Valid-length rationale satisfying the >=80-char gate so we "
+                "can exercise the referral_value happy path on an uncertain "
+                "platform registration end to end."
+            ),
+            referral_value="low",
+        )
+        assert dofollow_status("redpath_uncertain_ok") == "uncertain"
+        assert referral_value("redpath_uncertain_ok") == "low"
 
     def test_register_rejected_name_raises_with_deletion_instruction(
         self,
@@ -191,6 +247,7 @@ class TestSyntheticRedPaths:
                 "exercises the un-rejection-by-deletion contract that "
                 "replaces R12's deferred-from-brainstorm override kwarg."
             ),
+            referral_value="low",  # nofollow now also requires referral_value (Plan 2026-05-25-001)
         )
         assert dofollow_status("wordpresscom") is False
         assert "wordpresscom" not in _REJECTED_PLATFORMS

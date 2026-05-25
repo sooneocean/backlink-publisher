@@ -24,6 +24,7 @@ from backlink_publisher.anchor.profile import (
     recent_type_counts,
 )
 from backlink_publisher.config import ANCHOR_TYPES, AnchorAlarmConfig
+from backlink_publisher.publishing import registry
 
 # ── module-level constants (re-exported so report_anchors.py shims cleanly) ──
 
@@ -96,6 +97,7 @@ def _build_report(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 def _markdown_table(
     stats: dict[str, dict[str, Any]],
     top_n: int,
+    tier_summary: dict[str, Any] | None = None,
 ) -> str:
     header = "| target | articles | distinct anchors | fallback % | top anchors |"
     sep = "|---|---|---|---|---|"
@@ -114,11 +116,17 @@ def _markdown_table(
         )
         rows.append(f"| {domain} | {total} | {distinct} | {fallback_pct} | {top} |")
 
-    return "\n".join(rows)
+    table = "\n".join(rows)
+    if tier_summary is not None:
+        table += "\n" + _tier_markdown(tier_summary)
+    return table
 
 
-def _json_output(stats: dict[str, dict[str, Any]]) -> str:
-    out = {
+def _json_output(
+    stats: dict[str, dict[str, Any]],
+    tier_summary: dict[str, Any] | None = None,
+) -> str:
+    out: dict[str, Any] = {
         domain: {
             "total_articles": s["total_articles"],
             "anchors": dict(s["anchors"]),
@@ -126,7 +134,129 @@ def _json_output(stats: dict[str, dict[str, Any]]) -> str:
         }
         for domain, s in sorted(stats.items())
     }
+    # Tier breakdown is added under a reserved key (no main_domain is
+    # literally "_dofollow_tiers") so the per-domain top-level contract
+    # stays backward-compatible for existing consumers. Plan 2026-05-25-001
+    # Unit 3 (R3): JSONL-path tier segmentation.
+    if tier_summary is not None:
+        out["_dofollow_tiers"] = tier_summary
     return json.dumps(out, ensure_ascii=False, indent=2)
+
+
+# ── dofollow-tier segmentation (Plan 2026-05-25-001 Unit 3 / R3) ─────────────
+
+
+def _resolve_row_tier(row: dict[str, Any]) -> tuple[str, str | None]:
+    """Return ``(tier, referral_value)`` for a payload row.
+
+    Prefers the ``metadata`` mark stamped by plan-backlinks (Unit 2);
+    falls back to a live registry join on ``row["platform"]`` for rows
+    that predate the mark. Rows with no resolvable platform/status fall
+    into the ``"unknown"`` tier.
+
+    Note the deliberate precedence: the plan-time mark wins over the live
+    registry. This means the report reflects the tier **as classified
+    when the row was planned**, not the registry's current state — so if
+    a platform is re-classified between plan and report, the older mark
+    persists. This is intentional (the report describes what was planned);
+    it is not a live registry read. ``register()`` remains the only writer
+    of tier state — this function reads, never stores.
+    """
+    meta = row.get("metadata") or {}
+    tier = meta.get("dofollow_tier")
+    referral = meta.get("referral_value")
+    platform = row.get("platform")
+    if tier is None:
+        status = registry.dofollow_status(platform) if platform else None
+        if status is True:
+            tier = "dofollow"
+        elif status in (False, "uncertain"):
+            tier = "nofollow-signal"
+        else:
+            tier = "unknown"
+    if referral is None and platform:
+        referral = registry.referral_value(platform)
+    return tier, referral
+
+
+def _count_qualifying_anchors(row: dict[str, Any]) -> int:
+    """Count main_domain/target links carrying an anchor (mirrors
+    ``_build_report``'s qualifying-anchor rule)."""
+    n = 0
+    links = row.get("links", [])
+    if not isinstance(links, list):
+        return 0
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        if link.get("kind") in ("main_domain", "target") and link.get("anchor"):
+            n += 1
+    return n
+
+
+def _build_tier_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate article + anchor counts per dofollow tier, with a
+    referral high/low sub-split inside the nofollow-signal bucket."""
+    def _bucket() -> dict[str, int]:
+        return {"articles": 0, "anchors": 0}
+
+    summary: dict[str, Any] = {
+        "dofollow": _bucket(),
+        "nofollow-signal": {
+            **_bucket(),
+            "referral": {"high": _bucket(), "low": _bucket(), "unclassified": _bucket()},
+        },
+        "unknown": _bucket(),
+    }
+    for row in rows:
+        tier, referral = _resolve_row_tier(row)
+        anchors = _count_qualifying_anchors(row)
+        bucket = summary.get(tier, summary["unknown"])
+        bucket["articles"] += 1
+        bucket["anchors"] += anchors
+        if tier == "nofollow-signal":
+            key = referral if referral in ("high", "low") else "unclassified"
+            rb = summary["nofollow-signal"]["referral"][key]
+            rb["articles"] += 1
+            rb["anchors"] += anchors
+    return summary
+
+
+def _tier_markdown(tier_summary: dict[str, Any]) -> str:
+    """Render the tier breakdown as a markdown section appended after the
+    per-domain table."""
+    total_articles = sum(
+        tier_summary[t]["articles"] for t in ("dofollow", "nofollow-signal", "unknown")
+    )
+
+    def _pct(n: int) -> str:
+        return f"{100 * n / total_articles:.0f}%" if total_articles else "—"
+
+    lines = [
+        "",
+        "## Dofollow tier breakdown",
+        "",
+        "| tier | articles | anchors | article % |",
+        "|---|---|---|---|",
+    ]
+    df = tier_summary["dofollow"]
+    lines.append(f"| dofollow | {df['articles']} | {df['anchors']} | {_pct(df['articles'])} |")
+    nf = tier_summary["nofollow-signal"]
+    lines.append(
+        f"| nofollow-signal | {nf['articles']} | {nf['anchors']} | {_pct(nf['articles'])} |"
+    )
+    for grade in ("high", "low", "unclassified"):
+        rb = nf["referral"][grade]
+        lines.append(
+            f"| &nbsp;&nbsp;↳ referral={grade} | {rb['articles']} | {rb['anchors']} | "
+            f"{_pct(rb['articles'])} |"
+        )
+    unk = tier_summary["unknown"]
+    if unk["articles"]:
+        lines.append(
+            f"| unknown | {unk['articles']} | {unk['anchors']} | {_pct(unk['articles'])} |"
+        )
+    return "\n".join(lines)
 
 
 # ── --from-profile path ──────────────────────────────────────────────────────

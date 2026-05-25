@@ -141,16 +141,30 @@ _REJECTED_PLATFORMS: dict[str, str] = {
 
 _DofollowStatus = Literal[True, False, "uncertain"]
 
+# Referral-value sub-grade for nofollow-signal platforms (Plan
+# 2026-05-25-001 R1). Distinguishes nofollow links that still carry SEO
+# value (high DA + referral traffic + entity signal — e.g. devto/notion/
+# mastodon) from zero-value nofollow (anonymous paste sites with no DA
+# and no referral). Required (via the gate below) only when ``dofollow``
+# is not ``True`` — it is the load-bearing ship/reject decision input for
+# nofollow platforms (R13).
+_ReferralValue = Literal["high", "low"]
+
 
 # Parallel-dict storage for the dofollow capability (Plan 2026-05-20-009
 # U2). Kept alongside ``_REGISTRY`` rather than folded into its value
 # shape so the existing single-key conftest snapshot pattern survives
 # (``tests/conftest.py:206-221`` only saves/restores the ``"fake"`` key).
-# Future capability fields (banner_upload, oauth_dialect, daily_cap)
-# would justify migrating to a ``RegistryEntry`` dataclass — deferred
-# to capability field #2 per Plan 2026-05-20-009 §Scope Boundaries.
+# ``_REFERRAL_VALUE_BY_PLATFORM`` (Plan 2026-05-25-001) is the second
+# such capability dict; a third would justify migrating all of them to a
+# ``RegistryEntry`` dataclass. IMPORTANT: every parallel dict here must
+# be snapshot/restored together in the three registry-isolation fixtures
+# (``tests/conftest.py`` ``fake_platform_registered``,
+# ``tests/test_adapter_dofollow_gate.py`` ``_isolate_registry``,
+# ``tests/test_registry_dofollow_kwargs.py``) or state leaks across tests.
 _DOFOLLOW_BY_PLATFORM: dict[str, _DofollowStatus] = {}
 _RATIONALE_BY_PLATFORM: dict[str, str] = {}
+_REFERRAL_VALUE_BY_PLATFORM: dict[str, _ReferralValue] = {}
 
 
 def register(
@@ -158,6 +172,7 @@ def register(
     *publishers: type[Publisher] | Publisher,
     dofollow: _DofollowStatus,
     rationale: str | None = None,
+    referral_value: _ReferralValue | None = None,
 ) -> None:
     """Register the fallback chain for one platform. Last call wins.
 
@@ -183,12 +198,21 @@ def register(
     is required when ``dofollow`` is anything other than ``True`` (R3 /
     Plan 2026-05-20-009).
 
+    ``referral_value`` (``"high"`` / ``"low"``) is required when
+    ``dofollow`` is anything other than ``True`` (Plan 2026-05-25-001) —
+    the load-bearing ship/reject decision input for nofollow platforms
+    (R13). For ``dofollow=True`` it is optional (defaults to ``None`` =
+    "not classified").
+
     Raises:
         RegistryError: when ``platform`` is listed in
             ``_REJECTED_PLATFORMS`` (un-rejection path: delete the
             entry in the same PR as the new ``register()`` call), OR
-            when ``dofollow ∈ {False, "uncertain"}`` and the rationale
-            is missing / shorter than 80 chars stripped.
+            when ``dofollow`` is not ``True`` and the rationale
+            is missing / shorter than 80 chars stripped, OR when
+            ``dofollow`` is not ``True`` and ``referral_value`` is
+            ``None`` (the silent-gap gate — a nofollow platform must
+            declare high/low referral value before it can ship).
     """
     if platform in _REJECTED_PLATFORMS:
         prior = _REJECTED_PLATFORMS[platform]
@@ -206,8 +230,31 @@ def register(
                 f"(got {actual}). Length-only gate — content is reviewer "
                 f"concern; see `monolith_budget.toml` for the precedent."
             )
+        if referral_value is None:
+            raise RegistryError(
+                f"`register({platform!r}, ..., dofollow={dofollow!r})` "
+                f"requires `referral_value=` ('high' or 'low') — it is the "
+                f"ship/reject decision input for nofollow platforms (Plan "
+                f"2026-05-25-001 R13). 'high' = retains DA/referral/entity "
+                f"value despite nofollow; 'low' = zero value (reject "
+                f"candidate). Leaving it unset is the silent gap this gate "
+                f"closes."
+            )
+    # Runtime-validate the value against _ReferralValue. The Literal type is
+    # static-only; a typo like referral_value="HIGH" would otherwise pass the
+    # None-check, store an out-of-band value, and silently fall into the
+    # report's "unclassified" bucket (review finding — project-standards).
+    if referral_value is not None and referral_value not in ("high", "low"):
+        raise RegistryError(
+            f"`register({platform!r}, ..., referral_value={referral_value!r})` "
+            f"— referral_value must be 'high' or 'low' (got {referral_value!r})."
+        )
     _REGISTRY[platform] = list(publishers)
     _DOFOLLOW_BY_PLATFORM[platform] = dofollow
+    if referral_value is not None:
+        _REFERRAL_VALUE_BY_PLATFORM[platform] = referral_value
+    else:
+        _REFERRAL_VALUE_BY_PLATFORM.pop(platform, None)
     if rationale is not None:
         _RATIONALE_BY_PLATFORM[platform] = rationale
     else:
@@ -226,6 +273,17 @@ def dofollow_status(name: str) -> _DofollowStatus | None:
     Plan 2026-05-20-009 R5.
     """
     return _DOFOLLOW_BY_PLATFORM.get(name)
+
+
+def referral_value(name: str) -> _ReferralValue | None:
+    """Return the declared referral-value sub-grade (``"high"`` /
+    ``"low"``) for ``name``, or ``None`` if not declared.
+
+    ``None`` for dofollow platforms (sub-grade not applicable) and for
+    unregistered platforms. Always non-``None`` for nofollow platforms
+    (enforced by the ``register()`` gate). Plan 2026-05-25-001 R1.
+    """
+    return _REFERRAL_VALUE_BY_PLATFORM.get(name)
 
 
 def dofollow_rationale(name: str) -> str | None:
