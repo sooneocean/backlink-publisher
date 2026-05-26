@@ -29,14 +29,16 @@ from backlink_publisher._util.url import canonicalize_url
 from backlink_publisher.anchor import profile as anchor_profile
 from backlink_publisher.anchor.metrics import group_by_target_url
 from backlink_publisher.anchor.profile import ProfileEntry
-from backlink_publisher.events import EventStore
+from backlink_publisher.events import EventStore, kinds
 
-# Event kinds that mark a target as "attempted" (R1a row universe). These are
-# the projector's dotted kinds — NOT bare "planned"/"published"/"failed".
+# Event kinds that mark a target as "attempted" (R1a row universe), sourced from
+# the registry (no duplicated literals). publish.unverified is intentionally
+# omitted (a link whose liveness was never confirmed shouldn't count as
+# attempted-confirmed); that omission is allowlisted in the R8b reader gate.
 ATTEMPTED_KINDS: tuple[str, ...] = (
-    "publish.intent",
-    "publish.confirmed",
-    "publish.failed",
+    kinds.PUBLISH_INTENT,
+    kinds.PUBLISH_CONFIRMED,
+    kinds.PUBLISH_FAILED,
 )
 
 

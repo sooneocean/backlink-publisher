@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from backlink_publisher._util.errors import BannerUploadError
+from backlink_publisher.events import kinds  # dependency-free; preserves no-I/O purity
 
 
 EmitFn = Callable[[str, dict[str, Any]], None]
@@ -86,11 +87,11 @@ def apply(
         # Medium-style: not opting in.
         if source_url:
             emit(
-                "banner.source_url_fallback",
+                kinds.BANNER_SOURCE_URL_FALLBACK,
                 {"platform": platform, "reason": "adapter_no_method"},
             )
             return f"{_markdown_image(alt, source_url)}\n\n{body}"
-        emit("banner.skipped_no_method", {"platform": platform})
+        emit(kinds.BANNER_SKIPPED_NO_METHOD, {"platform": platform})
         return body
 
     artifact_path = Path(banner["path"])
@@ -101,7 +102,7 @@ def apply(
         if strict:
             raise
         emit(
-            "banner.failed",
+            kinds.BANNER_FAILED,
             {"platform": platform, "reason": str(exc)},
         )
         return body
@@ -110,16 +111,16 @@ def apply(
     # bugs (KeyError / TypeError / etc.) should fail loud.
 
     if uploaded_url is not None:
-        emit("banner.embedded", {"platform": platform})
+        emit(kinds.BANNER_EMBEDDED, {"platform": platform})
         return f"{_markdown_image(alt, uploaded_url)}\n\n{body}"
 
     # embed_banner returned None — explicit "can't upload" signal.
     if source_url:
         emit(
-            "banner.source_url_fallback",
+            kinds.BANNER_SOURCE_URL_FALLBACK,
             {"platform": platform, "reason": "adapter_returned_none"},
         )
         return f"{_markdown_image(alt, source_url)}\n\n{body}"
 
-    emit("banner.skipped_no_artifact", {"platform": platform})
+    emit(kinds.BANNER_SKIPPED_NO_ARTIFACT, {"platform": platform})
     return body

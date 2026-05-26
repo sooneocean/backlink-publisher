@@ -62,6 +62,8 @@ class ProjectionResult:
     articles_inserted: int = 0
     skipped_due_to_dedup: int = 0
     cursor_updated: bool = False
+    quarantined: int = 0
+    records_considered: int = 0
 
 
 def flush_for(
@@ -92,14 +94,28 @@ def flush_for(
 # an operator can see whether the projection is fresh or silently failing.
 _HEALTH_SOURCE = "__projection_health__"
 
+# R10 mass-quarantine alarm: a run whose quarantine ratio reaches this fraction
+# of considered records records a `degraded` health signal — so a flood (an
+# upstream status vocabulary drifting wholesale) can't pass as a clean run even
+# though quarantine-and-continue lets the run finish. Relative (not absolute) so
+# it catches a small all-quarantined run, not just large ones.
+_QUARANTINE_DEGRADED_RATIO = 0.25
+
 
 def record_projection_health(
-    store: EventStore, *, ok: bool, error: str | None = None
+    store: EventStore,
+    *,
+    ok: bool,
+    error: str | None = None,
+    quarantine_ratio: float | None = None,
 ) -> None:
     """Persist the last projection outcome so swallowed failures are visible.
 
     Fail-safe in its own right: never raises (the DB may be the thing that is
-    locked/broken). Stored under a reserved ``projection_cursor`` row.
+    locked/broken). Stored under a reserved ``projection_cursor`` row. When
+    ``quarantine_ratio`` is supplied, sets a ``degraded`` flag (R10) once it
+    reaches ``_QUARANTINE_DEGRADED_RATIO`` — a healthy ``ok=True`` run can still
+    be degraded if a flood of records quarantined.
     """
     now = datetime.now(timezone.utc).isoformat()
     try:
@@ -111,6 +127,9 @@ def record_projection_health(
             else:
                 state["last_error"] = error
                 state["last_error_at"] = now
+            if quarantine_ratio is not None:
+                state["last_quarantine_ratio"] = quarantine_ratio
+                state["degraded"] = quarantine_ratio >= _QUARANTINE_DEGRADED_RATIO
             _cursor_save(conn, _HEALTH_SOURCE, state, mtime=None)
     except Exception as exc:  # noqa: BLE001 — health recording is best-effort
         _log.warning("projector: could not record projection health: %s", exc)
@@ -132,7 +151,12 @@ def project_run_safe(
         from ..checkpoint import checkpoint_path
 
         result = flush_for(checkpoint_path(run_id), store=store)
-        record_projection_health(store, ok=True)
+        ratio = (
+            result.quarantined / result.records_considered
+            if result.records_considered
+            else 0.0
+        )
+        record_projection_health(store, ok=True, quarantine_ratio=ratio)
         return result
     except Exception as exc:  # noqa: BLE001 — projection must never fail publish
         _log.warning(
@@ -310,6 +334,7 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
     events_inserted = 0
     articles_inserted = 0
     skipped_due_to_dedup = 0
+    records_considered = 0
     seen_intent_or_failed: set[tuple[str, str, str]] = set()
     # Quarantine intents are collected during the loop and written AFTER the
     # reducer transaction commits — quarantine() opens its own connection, and
@@ -330,6 +355,7 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
             status = item.get("status")
             if not isinstance(item_id, str) or not isinstance(status, str):
                 continue
+            records_considered += 1
 
             published_url = item.get("published_url") or None
             target_url = (item.get("payload") or {}).get("target_url") or None
@@ -355,12 +381,12 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
                     # An item already projected past pending should not
                     # regress; ignore unexpected rewinds.
                     continue
-                dedup_key = (run_id, target_url or "", "publish.intent")
+                dedup_key = (run_id, target_url or "", kinds.PUBLISH_INTENT)
                 if dedup_key in seen_intent_or_failed:
                     continue
                 seen_intent_or_failed.add(dedup_key)
                 store.append(
-                    "publish.intent",
+                    kinds.PUBLISH_INTENT,
                     {
                         "target_url": target_url,
                         "title": item.get("title"),
@@ -413,7 +439,7 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
                 # kind='publish.confirmed'" count stays honest. Legacy items
                 # without the key default to verified (pre-D5 indistinguishable).
                 _verified = item.get("verified", True)
-                _kind = "publish.confirmed" if _verified else "publish.unverified"
+                _kind = kinds.PUBLISH_CONFIRMED if _verified else kinds.PUBLISH_UNVERIFIED
                 store.append(
                     _kind,
                     {
@@ -436,7 +462,7 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
                 events_inserted += 1
 
             elif outcome is kinds.PUBLISH_FAILED:  # status == "failed"
-                dedup_key = (run_id, target_url or "", "publish.failed")
+                dedup_key = (run_id, target_url or "", kinds.PUBLISH_FAILED)
                 if dedup_key in seen_intent_or_failed:
                     continue
                 seen_intent_or_failed.add(dedup_key)
@@ -444,7 +470,7 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
                 error_message = item.get("error") or ""
                 cleaned, hits = scrub_text(error_message)
                 store.append(
-                    "publish.failed",
+                    kinds.PUBLISH_FAILED,
                     {
                         "error_class": error_class,
                         "error_message_clean": cleaned,
@@ -492,6 +518,8 @@ def _project_checkpoint(path: Path, store: EventStore) -> ProjectionResult:
         articles_inserted=articles_inserted,
         skipped_due_to_dedup=skipped_due_to_dedup,
         cursor_updated=True,
+        quarantined=len(pending_quarantines),
+        records_considered=records_considered,
     )
 
 
@@ -566,6 +594,7 @@ def _project_history(
     events_inserted = 0
     articles_inserted = 0
     skipped_due_to_dedup = 0
+    records_considered = 0
 
     with store.connect() as conn:
         prior = _cursor_load(conn, source)
@@ -580,6 +609,7 @@ def _project_history(
                 continue
             if row_id in seen_ids:
                 continue
+            records_considered += 1
 
             status = row.get("status")
             target_url = row.get("target_url")
@@ -605,7 +635,7 @@ def _project_history(
                     # still emit a confirmed event so consumers see the
                     # row, but article row is skipped.
                     store.append(
-                        "publish.confirmed",
+                        kinds.PUBLISH_CONFIRMED,
                         {
                             "live_url": None,
                             "target_url": target_url,
@@ -640,7 +670,7 @@ def _project_history(
                         continue
                     articles_inserted += 1
                     store.append(
-                        "publish.confirmed",
+                        kinds.PUBLISH_CONFIRMED,
                         {
                             "live_url": live_url,
                             "target_url": target_url,
@@ -663,7 +693,7 @@ def _project_history(
                 error = row.get("error") or ""
                 cleaned, hits = scrub_text(error)
                 store.append(
-                    "publish.failed",
+                    kinds.PUBLISH_FAILED,
                     {
                         # D3: always present so checkpoint- and history-sourced
                         # failed events share one shape; None when the row has
@@ -701,6 +731,7 @@ def _project_history(
         articles_inserted=articles_inserted,
         skipped_due_to_dedup=skipped_due_to_dedup,
         cursor_updated=True,
+        records_considered=records_considered,
     )
 
 
@@ -717,6 +748,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
     events_inserted = 0
     articles_inserted = 0
     skipped_due_to_dedup = 0
+    records_considered = 0
 
     with store.connect() as conn:
         prior = _cursor_load(conn, source)
@@ -735,6 +767,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
             prior_status = prior_items.get(draft_id)
             if prior_status == status:
                 continue
+            records_considered += 1
 
             target_url = row.get("target_url")
             host = _host_of(target_url) if isinstance(target_url, str) else None
@@ -757,7 +790,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
                 if not isinstance(article_urls, list) or not article_urls:
                     # Published without URL: emit event, skip article row.
                     store.append(
-                        "publish.confirmed",
+                        kinds.PUBLISH_CONFIRMED,
                         {"live_url": None, "draft_id": draft_id},
                         target_url=target_url,
                         host=host,
@@ -786,7 +819,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
                         continue
                     articles_inserted += 1
                     store.append(
-                        "publish.confirmed",
+                        kinds.PUBLISH_CONFIRMED,
                         {"live_url": live_url, "draft_id": draft_id},
                         target_url=target_url,
                         host=_host_of(live_url),
@@ -801,7 +834,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
                 if prior_status == "scheduled":
                     continue
                 store.append(
-                    "draft.scheduled",
+                    kinds.DRAFT_SCHEDULED,
                     {"draft_id": draft_id},
                     target_url=target_url,
                     host=host,
@@ -815,7 +848,7 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
                     # on the first encounter.
                     continue
                 store.append(
-                    "draft.created",
+                    kinds.DRAFT_CREATED,
                     {"draft_id": draft_id},
                     target_url=target_url,
                     host=host,
@@ -842,4 +875,5 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
         articles_inserted=articles_inserted,
         skipped_due_to_dedup=skipped_due_to_dedup,
         cursor_updated=True,
+        records_considered=records_considered,
     )

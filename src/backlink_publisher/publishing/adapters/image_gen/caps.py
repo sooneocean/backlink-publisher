@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from backlink_publisher.config import ImageGenConfig
 from backlink_publisher.events.store import EventStore
+from backlink_publisher.events import kinds
 
 
 @dataclass(frozen=True)
@@ -87,17 +88,17 @@ def check_caps(
 
 def record_invocation(store: EventStore, prompt_sha: str) -> None:
     """Persist an ``image_gen_invoked`` event."""
-    store.append("image_gen_invoked", {"prompt_sha": prompt_sha})
+    store.append(kinds.IMAGE_GEN_INVOKED, {"prompt_sha": prompt_sha})
 
 
 def record_cap_hit(store: EventStore, reason: str) -> None:
     """Persist an ``image_gen_capped`` event."""
-    store.append("image_gen_capped", {"reason": reason})
+    store.append(kinds.IMAGE_GEN_CAPPED, {"reason": reason})
 
 
 def record_auto_disable(store: EventStore, threshold: int) -> None:
     """Persist an ``image_gen_disabled_auto`` event."""
-    store.append("image_gen_disabled_auto", {"threshold": threshold})
+    store.append(kinds.IMAGE_GEN_DISABLED_AUTO, {"threshold": threshold})
 
 
 class AutoDisableTracker:
