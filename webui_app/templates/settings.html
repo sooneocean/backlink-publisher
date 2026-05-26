@@ -67,9 +67,14 @@
                         Plan 2026-05-26-002 Unit 3: gates the "Configure ↓" anchor so
                         the ~18 cardless channels no longer render a dead link.
                         Cardless channels get inline forms with the Unit 4 save route. #}
+                    {#- Carded: explicit per-channel partials with bespoke UI exist below.
+                        All other auth-type channels get auto-rendered inline forms
+                        (Unit 3/4). live_browser channels other than the three carded ones
+                        (mastodon) have a deferred stub — no "Configure ↓" anchor needed. #}
                     {% set _carded_channels = ['blogger', 'medium', 'velog', 'ghpages', 'devto', 'notion'] %}
                     {% for name, status in dashboard_channels %}
-                        {{ dashboard_channel_card(name, status, bindable=(name in binding_channels), has_card=(name in _carded_channels)) }}
+                        {{ dashboard_channel_card(name, status, bindable=(name in binding_channels),
+                           has_card=(name in _carded_channels or status.auth_type not in ('live_browser', 'oauth', None))) }}
                     {% endfor %}
                 </div>
             </div>
@@ -326,6 +331,11 @@
                 </div>
             </div>
         </div>
+
+        {#- Plan 2026-05-26-002 Unit 3: one accordion card per cardless templated
+            channel.  Logic extracted to keep settings.html under the 400-line
+            monolith budget. #}
+        {% include '_settings_cardless_channels.html' %}
 
         <h2 id="section-global" class="section-heading">全局设置</h2>
 

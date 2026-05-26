@@ -1,0 +1,166 @@
+{# Token+Fields channel binding partial — Plan 2026-05-26-002 Unit 3.
+
+   Required context vars:
+     channel     str — platform name (wordpresscom, ghost, beehiiv, tumblr, …)
+     status      dict — from get_channel_status(channel)
+     csrf_token  str — session CSRF token
+
+   Each channel has a token plus one or more extra config fields.  Per-channel
+   field config is defined in _FIELD_DEFS below.  All data is stored in the
+   channel-specific token JSON (0600); no config.toml write.
+
+   POSTs to /settings/save-channel-credential (PRG pattern).
+   Leave any field blank to keep existing value (leave-as-is semantics).
+#}
+
+{# Per-channel field definitions: list of {name, label, type, placeholder, help} dicts.
+   "token" is always rendered first (the secret).  Extra fields follow.
+#}
+{% set _FIELD_DEFS = {
+    "wordpresscom": [
+        {
+            "name": "token",
+            "label": "Access Token",
+            "type": "password",
+            "placeholder": "粘贴 WordPress.com OAuth Access Token",
+            "help": "来自 WordPress.com 开发者应用授权后的 access_token。"
+        },
+        {
+            "name": "site",
+            "label": "Site URL",
+            "type": "url",
+            "placeholder": "https://yoursite.wordpress.com",
+            "help": "您的 WordPress.com 站点地址（https://）。"
+        }
+    ],
+    "ghost": [
+        {
+            "name": "token",
+            "label": "Staff API Key",
+            "type": "password",
+            "placeholder": "粘贴 Ghost Staff API Key",
+            "help": "Ghost Admin → Settings → Integrations → Staff API Key。"
+        },
+        {
+            "name": "site_url",
+            "label": "Ghost Site URL",
+            "type": "url",
+            "placeholder": "https://your-ghost-site.com",
+            "help": "您的 Ghost 站点域名（https://）。"
+        }
+    ],
+    "beehiiv": [
+        {
+            "name": "token",
+            "label": "API Key",
+            "type": "password",
+            "placeholder": "粘贴 beehiiv API Key",
+            "help": "beehiiv Settings → API → API Key。"
+        },
+        {
+            "name": "publication_id",
+            "label": "Publication ID",
+            "type": "text",
+            "placeholder": "pub_xxxxxxxxxxxx",
+            "help": "beehiiv 出版物 ID（Settings 页面中显示）。"
+        }
+    ],
+    "tumblr": [
+        {
+            "name": "consumer_key",
+            "label": "Consumer Key",
+            "type": "password",
+            "placeholder": "Tumblr OAuth Consumer Key",
+            "help": "Tumblr App → Consumer Key。"
+        },
+        {
+            "name": "consumer_secret",
+            "label": "Consumer Secret",
+            "type": "password",
+            "placeholder": "Tumblr OAuth Consumer Secret",
+            "help": "Tumblr App → Consumer Secret。"
+        },
+        {
+            "name": "oauth_token",
+            "label": "OAuth Token",
+            "type": "password",
+            "placeholder": "OAuth Access Token",
+            "help": "授权后获得的 OAuth Token。"
+        },
+        {
+            "name": "oauth_token_secret",
+            "label": "OAuth Token Secret",
+            "type": "password",
+            "placeholder": "OAuth Token Secret",
+            "help": "授权后获得的 OAuth Token Secret。"
+        },
+        {
+            "name": "blog_identifier",
+            "label": "Blog Identifier",
+            "type": "text",
+            "placeholder": "yourblog.tumblr.com",
+            "help": "您的 Tumblr 博客地址。"
+        }
+    ]
+} %}
+
+{% set _fields = _FIELD_DEFS.get(channel, []) %}
+
+<div class="bind-section" id="bind-section-{{ channel }}" data-channel="{{ channel }}">
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">
+        <strong>🔑 Token + 配置字段绑定</strong>
+        — 凭据写入
+        <code>~/.config/backlink-publisher/{{ channel }}-token.json</code>（0600 权限）。
+    </p>
+
+    <div class="bind-status-row" style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        {% if status and status.bound %}
+        <span class="badge-status ok" id="bind-badge-{{ channel }}" role="status" aria-live="polite">已绑定 ✓</span>
+        {% if status.identity %}
+        <small class="text-muted">身份: <code>{{ status.identity }}</code></small>
+        {% endif %}
+        {% else %}
+        <span class="badge-status err" id="bind-badge-{{ channel }}" role="status" aria-live="polite">未绑定</span>
+        {% endif %}
+    </div>
+
+    {% if _fields %}
+    <form method="POST" action="/settings/save-channel-credential">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+        <input type="hidden" name="channel" value="{{ channel }}">
+        <input type="hidden" name="auth_type" value="token_fields">
+        {% for f in _fields %}
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="{{ channel }}-{{ f.name }}" style="font-weight:500; font-size:13px;">{{ f.label }}</label>
+            <input type="{{ f.type }}"
+                   id="{{ channel }}-{{ f.name }}"
+                   name="{{ f.name }}"
+                   class="form-control"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="{% if status and status.bound %}已设置 — 空白表示保留现有值{% else %}{{ f.placeholder }}{% endif %}"
+                   style="font-family:monospace; font-size:13px;">
+            {% if f.help %}
+            <small class="form-text text-muted">{{ f.help }}</small>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+                {% if status and status.bound %}更新{% else %}绑定{% endif %}
+            </button>
+            {% if status and status.bound %}
+            <button type="submit" name="clear" value="1"
+                    class="btn btn-outline-danger btn-sm"
+                    aria-label="清除 {{ channel }} 凭据">
+                清除
+            </button>
+            {% endif %}
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-warning" style="font-size:13px;">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        {{ channel }} 的字段配置尚未定义，请通过配置文件直接设置。
+    </div>
+    {% endif %}
+</div>

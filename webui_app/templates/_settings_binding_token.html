@@ -1,0 +1,56 @@
+{# Token channel binding partial — Plan 2026-05-26-002 Unit 3.
+
+   Required context vars:
+     channel     str — platform name (writeas)
+     status      dict — from get_channel_status(channel)
+     csrf_token  str — session CSRF token
+
+   Single secret field (API key / token).  POSTs to /settings/save-channel-credential.
+   Leave field blank to keep existing value (leave-as-is semantics).
+#}
+<div class="bind-section" id="bind-section-{{ channel }}" data-channel="{{ channel }}">
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">
+        <strong>🔑 API Token 绑定</strong>
+        — 将 {{ channel }} API Token 写入
+        <code>~/.config/backlink-publisher/{{ channel }}-token.json</code>（0600 权限）。
+    </p>
+
+    <div class="bind-status-row" style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        {% if status and status.bound %}
+        <span class="badge-status ok" id="bind-badge-{{ channel }}" role="status" aria-live="polite">已绑定 ✓</span>
+        {% if status.identity %}
+        <small class="text-muted">身份: <code>{{ status.identity }}</code></small>
+        {% endif %}
+        {% else %}
+        <span class="badge-status err" id="bind-badge-{{ channel }}" role="status" aria-live="polite">未绑定</span>
+        {% endif %}
+    </div>
+
+    <form method="POST" action="/settings/save-channel-credential">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+        <input type="hidden" name="channel" value="{{ channel }}">
+        <input type="hidden" name="auth_type" value="token">
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="{{ channel }}-token" style="font-weight:500; font-size:13px;">Token / API Key</label>
+            <input type="password"
+                   id="{{ channel }}-token"
+                   name="token"
+                   class="form-control"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="{% if status and status.bound %}已绑定 — 空白表示保留现有值{% else %}粘贴 API Token{% endif %}"
+                   style="font-family:monospace; font-size:13px;">
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+                {% if status and status.bound %}更新{% else %}绑定{% endif %}
+            </button>
+            {% if status and status.bound %}
+            <button type="submit" name="clear" value="1"
+                    class="btn btn-outline-danger btn-sm"
+                    aria-label="清除 {{ channel }} token">
+                清除
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>

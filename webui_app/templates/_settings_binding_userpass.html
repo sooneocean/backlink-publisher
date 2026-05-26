@@ -1,0 +1,76 @@
+{# Userpass channel binding partial — Plan 2026-05-26-002 Unit 3.
+
+   Required context vars:
+     channel     str — platform name (livejournal / cnblogs)
+     status      dict — from get_channel_status(channel)
+     csrf_token  str — session CSRF token
+
+   Username + password stored server-side via the adapter's store_credentials()
+   (livejournal: hpassword=md5; cnblogs: plaintext — divergence preserved via
+   module dispatch in the save route).
+
+   POSTs to /settings/save-channel-credential (PRG pattern).
+   Leave both fields blank to keep existing credentials (leave-as-is semantics).
+#}
+<div class="bind-section" id="bind-section-{{ channel }}" data-channel="{{ channel }}">
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">
+        <strong>🔒 用户名 / 密码绑定</strong>
+        — 凭据写入
+        <code>~/.config/backlink-publisher/{{ channel }}-credentials.json</code>（0600 权限）。
+        {% if channel == "livejournal" %}
+        密码以 MD5 哈希存储，不保留明文。
+        {% endif %}
+    </p>
+
+    <div class="bind-status-row" style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+        {% if status and status.bound %}
+        <span class="badge-status ok" id="bind-badge-{{ channel }}" role="status" aria-live="polite">已绑定 ✓</span>
+        {% if status.identity %}
+        <small class="text-muted">身份: <code>{{ status.identity }}</code></small>
+        {% endif %}
+        {% else %}
+        <span class="badge-status err" id="bind-badge-{{ channel }}" role="status" aria-live="polite">未绑定</span>
+        {% endif %}
+    </div>
+
+    <form method="POST" action="/settings/save-channel-credential">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+        <input type="hidden" name="channel" value="{{ channel }}">
+        <input type="hidden" name="auth_type" value="userpass">
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="{{ channel }}-username" style="font-weight:500; font-size:13px;">用户名</label>
+            <input type="text"
+                   id="{{ channel }}-username"
+                   name="username"
+                   class="form-control"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="{% if status and status.bound %}已绑定 — 空白表示保留现有值{% else %}{{ channel }} 用户名{% endif %}"
+                   style="font-size:13px;">
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="{{ channel }}-password" style="font-weight:500; font-size:13px;">密码</label>
+            <input type="password"
+                   id="{{ channel }}-password"
+                   name="password"
+                   class="form-control"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="{% if status and status.bound %}已绑定 — 空白表示保留现有值{% else %}{{ channel }} 密码{% endif %}"
+                   style="font-size:13px;">
+        </div>
+        <div class="form-group d-flex align-items-center gap-2" style="margin-bottom:12px;">
+            <small class="text-muted">用户名和密码必须同时填写才会更新。空白表示保留现有凭据。</small>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+                {% if status and status.bound %}更新{% else %}绑定{% endif %}
+            </button>
+            {% if status and status.bound %}
+            <button type="submit" name="clear" value="1"
+                    class="btn btn-outline-danger btn-sm"
+                    aria-label="清除 {{ channel }} 凭据">
+                清除
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>

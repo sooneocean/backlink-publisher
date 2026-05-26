@@ -1,14 +1,14 @@
-"""Plan 2026-05-26-002 Unit 3 (slice) — auth-type-aware overview rendering.
+"""Plan 2026-05-26-002 Unit 3 — auth-type-aware overview rendering.
 
-The 渠道綁定總覽 macro now reads ``status.auth_type``:
+The 渠道綁定總覽 macro reads ``status.auth_type``:
   * ANON channels render a "免綁定 · 就緒" badge (no bound/unbound);
-  * the "Configure ↓" anchor renders only for channels that actually have a
-    per-channel partial below — cardless channels no longer dangle on a dead
-    ``#channel-<name>`` link (the core defect);
-  * mastodon renders a non-actionable deferred stub.
+  * all channels with auth_type in (anon/token/token_fields/paste_blob/userpass)
+    get a "Configure ↓" anchor that points to an inline form block rendered
+    below (#channel-<name> div exists — no dead anchors);
+  * mastodon renders a non-actionable deferred stub (no Configure ↓, no form);
+  * the 6 explicitly-carded channels keep their bespoke accordion partials.
 
-Full inline binding forms for cardless channels land with the Unit 4 save
-route.
+U3 landed: inline forms for cardless channels now exist in the page.
 """
 
 from __future__ import annotations
@@ -44,14 +44,21 @@ def test_anon_channel_renders_ready_badge(body):
     assert "免綁定 · 就緒" in body
 
 
-# ── dead-anchor elimination ───────────────────────────────────────────────────
+# ── inline form anchors (U3) ──────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("cardless", ["csdn", "jianshu", "txtfyi", "rentry", "substack", "tumblr"])
-def test_cardless_channel_has_no_configure_anchor(body, cardless):
-    """Cardless channels must not emit a Configure ↓ anchor to a non-existent
-    #channel-<name> target."""
-    assert f'href="#channel-{cardless}"' not in body
+@pytest.mark.parametrize("cardless", [
+    "csdn",       # paste_blob
+    "txtfyi",     # anon
+    "rentry",     # anon
+    "livejournal",  # userpass
+    "wordpresscom",  # token_fields
+])
+def test_cardless_channel_has_configure_anchor_and_form(body, cardless):
+    """After U3, cardless channels emit a Configure ↓ anchor AND an inline
+    form block — no dead anchors."""
+    assert f'href="#channel-{cardless}"' in body
+    assert f'id="channel-{cardless}"' in body
 
 
 @pytest.mark.parametrize("carded", ["blogger", "medium", "velog", "ghpages", "devto", "notion"])

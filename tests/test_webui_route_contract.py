@@ -1198,6 +1198,15 @@ class TestEquityLedgerRoutes:
         assert resp.status_code in (400, 403, 404, 415)
 
 
+class TestChannelBindSaveRoutes:
+    """Plan 2026-05-26-002 Unit 4 — generic credential save route smoke.
+    Full lifecycle in tests/test_channel_bind_save.py; this satisfies the
+    route-coverage gate below."""
+
+    def test_post_save_channel_credential_missing_csrf_returns_403(self, csrf_client):
+        resp = csrf_client.post("/settings/save-channel-credential")
+        assert resp.status_code == 403
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.

@@ -1,0 +1,23 @@
+{# Anon channel binding partial — Plan 2026-05-26-002 Unit 3.
+
+   Required context vars:
+     channel   str — the platform name (telegraph / txtfyi / rentry)
+     status    dict — from get_channel_status(channel)
+
+   Anonymous channels require no credentials; they publish via auto-bootstrap.
+   This partial is read-only — no form, no save route.
+#}
+<div class="bind-section" id="bind-section-{{ channel }}" data-channel="{{ channel }}">
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">
+        <strong>🌐 匿名发布渠道</strong>
+        — {{ channel }} 无需登录凭据，可直接发布。系统会在发布时自动引导完成操作。
+    </p>
+    <div class="bind-status-row" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        <span class="badge-status ok"
+              id="bind-badge-{{ channel }}"
+              role="status">免绑定 · 就绪</span>
+        {% if status and status.identity %}
+        <small class="text-muted">身份: <code>{{ status.identity }}</code></small>
+        {% endif %}
+    </div>
+</div>

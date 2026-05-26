@@ -1,0 +1,55 @@
+{# Cardless templated channel accordions — Plan 2026-05-26-002 Unit 3.
+
+   Renders one Bootstrap accordion card per channel that is NOT in the six
+   explicitly-carded channels (blogger/medium/velog/ghpages/devto/notion).
+   live_browser and oauth channels are excluded: carded live_browser channels
+   already appeared above; mastodon has a deferred stub; blogger is oauth+carded.
+
+   Required context vars (inherited from settings.html):
+     dashboard_channels  list of (name, status) from helpers.contexts
+     csrf_token          str — session CSRF token
+#}
+{% set _carded_channels = ['blogger', 'medium', 'velog', 'ghpages', 'devto', 'notion'] %}
+{% for name, status in dashboard_channels %}
+    {% if name not in _carded_channels and status.auth_type not in ('live_browser', 'oauth', None) %}
+<div class="card channel-card">
+    <div class="card-header p-0">
+        <button type="button" class="channel-toggle"
+                data-bs-toggle="collapse" data-bs-target="#channel-{{ name }}"
+                aria-expanded="false" aria-controls="channel-{{ name }}">
+            <span>{{ name }}</span>
+            <span class="badges">
+                {% if status.auth_type == 'anon' %}
+                <span class="badge-status ok" style="font-size:10px;">免绑定</span>
+                {% elif status.bound %}
+                <span class="badge-status ok">已绑定 ✓</span>
+                {% else %}
+                <span class="badge-status err">未绑定</span>
+                {% endif %}
+                {% if status.dofollow == True %}
+                <span class="badge-dofollow good" title="dofollow">dofollow</span>
+                {% elif status.dofollow == False %}
+                <span class="badge-dofollow weak" title="nofollow">nofollow</span>
+                {% endif %}
+            </span>
+            <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+        </button>
+    </div>
+    <div id="channel-{{ name }}" class="collapse">
+        <div class="card-body">
+            {% if status.auth_type == 'anon' %}
+                {% with channel=name %}{% include '_settings_binding_anon.html' %}{% endwith %}
+            {% elif status.auth_type == 'token' %}
+                {% with channel=name %}{% include '_settings_binding_token.html' %}{% endwith %}
+            {% elif status.auth_type == 'token_fields' %}
+                {% with channel=name %}{% include '_settings_binding_token_fields.html' %}{% endwith %}
+            {% elif status.auth_type == 'paste_blob' %}
+                {% with channel=name %}{% include '_settings_binding_paste_blob.html' %}{% endwith %}
+            {% elif status.auth_type == 'userpass' %}
+                {% with channel=name %}{% include '_settings_binding_userpass.html' %}{% endwith %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+    {% endif %}
+{% endfor %}

@@ -1,0 +1,69 @@
+{# Paste-blob channel binding partial — Plan 2026-05-26-002 Unit 3.
+
+   Required context vars:
+     channel     str — platform name (csdn / jianshu / juejin / note / substack / …)
+     status      dict — from get_channel_status(channel)
+     csrf_token  str — session CSRF token
+
+   Operator pastes a {"cookies":[...]} JSON blob exported from the browser.
+   Written to ~/.config/backlink-publisher/<channel>-credentials.json (0600).
+   Domain is validated server-side against a per-channel allowlist.
+
+   POSTs to /settings/save-channel-credential (PRG pattern).
+#}
+<div class="bind-section" id="bind-section-{{ channel }}" data-channel="{{ channel }}">
+    <p class="text-muted" style="font-size:13px; margin-bottom:8px;">
+        <strong>🍪 浏览器 Cookie 导出绑定</strong>
+        — 使用浏览器扩展（如 Cookie-Editor）导出登录 {{ channel }} 的 Cookie，
+        粘贴 JSON 后保存。凭据写入
+        <code>~/.config/backlink-publisher/{{ channel }}-credentials.json</code>（0600 权限）。
+    </p>
+
+    <div class="bind-status-row" style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+        {% if status and status.bound %}
+        <span class="badge-status ok" id="bind-badge-{{ channel }}" role="status" aria-live="polite">已绑定 ✓</span>
+        {% if status.identity %}
+        <small class="text-muted">身份: <code>{{ status.identity }}</code></small>
+        {% endif %}
+        {% else %}
+        <span class="badge-status err" id="bind-badge-{{ channel }}" role="status" aria-live="polite">未绑定</span>
+        {% endif %}
+    </div>
+
+    <details style="margin-bottom:10px; font-size:12px; color:#6b7280;">
+        <summary style="cursor:pointer;">查看 Cookie JSON 格式说明</summary>
+        <div style="margin-top:6px; padding:8px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:4px; font-family:monospace; white-space:pre-wrap;">{"cookies": [{"name": "SESSION", "value": "abc123", "domain": ".{{ channel }}.com", "path": "/", ...}, ...]}</div>
+        <p style="margin-top:6px;">使用 Cookie-Editor 扩展导出为 JSON 格式，然后整体粘贴到下方文本框。</p>
+    </details>
+
+    <form method="POST" action="/settings/save-channel-credential">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+        <input type="hidden" name="channel" value="{{ channel }}">
+        <input type="hidden" name="auth_type" value="paste_blob">
+        <div class="form-group" style="margin-bottom:12px;">
+            <label for="{{ channel }}-blob" style="font-weight:500; font-size:13px;">Cookie JSON</label>
+            <textarea id="{{ channel }}-blob"
+                      name="blob"
+                      class="form-control"
+                      rows="5"
+                      autocomplete="off" spellcheck="false"
+                      placeholder='{"cookies": [{"name": "...", "value": "...", "domain": "...", ...}]}'
+                      style="font-family:monospace; font-size:12px; resize:vertical;"></textarea>
+            <small class="form-text text-muted">
+                需包含 <code>{"cookies": [...]}</code> 外层结构，单项必须有 name / value / domain 字段。
+            </small>
+        </div>
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+                {% if status and status.bound %}更新{% else %}绑定{% endif %}
+            </button>
+            {% if status and status.bound %}
+            <button type="submit" name="clear" value="1"
+                    class="btn btn-outline-danger btn-sm"
+                    aria-label="清除 {{ channel }} cookies">
+                清除
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>
