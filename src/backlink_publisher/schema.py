@@ -191,30 +191,39 @@ def _check_main_domain_presence(row: dict[str, Any]) -> str | None:
     return None
 
 
-def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
-    """Validate an input seed row. Returns list of error messages.
+# --------------------------------------------------------------------------- #
+# Input-payload validation blocks.                                             #
+#                                                                              #
+# Mirror of the output-payload blocks below: each ``_check_input_*`` helper    #
+# validates one independent aspect and returns its own error list, embedding   #
+# the ``line {line_num}:`` prefix. ``validate_input_payload`` concatenates them #
+# in declaration order — the append ordering is a characterized contract (see  #
+# ``tests/test_schema_input_payload_characterization.py``).                    #
+# --------------------------------------------------------------------------- #
 
-    Side effect (plan 2026-05-18-006 Unit 1): when ``main_domain`` is a valid
-    URL, the normalized punycode form is stored as ``row["main_domain_normalized"]``
-    for downstream consumers (Unit 6 HTML host-parse). The original
-    ``row["main_domain"]`` is preserved verbatim for display / logging.
-    Normalization failures become per-row errors, not batch-aborting
-    ``SystemExit`` (plan-review security P2).
-    """
+
+def _check_input_required_fields(row: dict[str, Any], line_num: int) -> list[str]:
     errors: list[str] = []
-
     for field, ftype in INPUT_SCHEMA_FIELDS.items():
         if field not in row:
             errors.append(f"line {line_num}: missing required field '{field}'")
         elif not isinstance(row[field], ftype):
             errors.append(f"line {line_num}: field '{field}' must be {ftype.__name__}")
+    return errors
 
+
+def _check_input_optional_field_types(row: dict[str, Any], line_num: int) -> list[str]:
     # Check optional fields types
+    errors: list[str] = []
     for field, ftype in INPUT_OPTIONAL_FIELDS.items():
         if field in row and not isinstance(row[field], ftype):
             errors.append(f"line {line_num}: field '{field}' must be {ftype.__name__}")
+    return errors
 
+
+def _check_input_enumerated_values(row: dict[str, Any], line_num: int) -> list[str]:
     # Validate enumerated values
+    errors: list[str] = []
     if "language" in row and row["language"] not in SUPPORTED_LANGUAGES:
         errors.append(
             f"line {line_num}: unsupported language '{row['language']}'. "
@@ -238,10 +247,19 @@ def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
             f"line {line_num}: invalid publish_mode '{row['publish_mode']}'. "
             f"Supported: {', '.join(sorted(PUBLISH_MODES))}"
         )
+    return errors
 
-    # Validate URLs (scheme prefix) and normalize main_domain for downstream
-    # host-parse comparison (Unit 6). target_url is not normalized — it flows
-    # to adapters which need the operator's exact URL.
+
+def _check_input_urls_and_normalize(row: dict[str, Any], line_num: int) -> list[str]:
+    """Validate URL scheme prefixes and normalize ``main_domain``.
+
+    **Side effect (load-bearing):** when ``main_domain`` is a valid URL, the
+    normalized punycode form is stored as ``row["main_domain_normalized"]`` for
+    downstream Unit-6 host-parse. ``target_url`` is not normalized — it flows to
+    adapters which need the operator's exact URL. Normalization failures become
+    per-row errors, not batch-aborting ``SystemExit`` (plan-review security P2).
+    """
+    errors: list[str] = []
     for url_field in ("target_url", "main_domain"):
         if url_field in row:
             url_val = str(row[url_field])
@@ -255,13 +273,35 @@ def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
                     errors.append(
                         f"line {line_num}: field 'main_domain' could not be normalized: {exc}"
                     )
+    return errors
 
+
+def _check_input_seed_keywords(row: dict[str, Any], line_num: int) -> list[str]:
     # Validate seed_keywords item types (list type already checked above)
+    errors: list[str] = []
     if "seed_keywords" in row and isinstance(row["seed_keywords"], list):
         for kw in row["seed_keywords"]:
             if not isinstance(kw, str):
                 errors.append(f"line {line_num}: 'seed_keywords' items must be strings")
+    return errors
 
+
+def validate_input_payload(row: dict[str, Any], line_num: int) -> list[str]:
+    """Validate an input seed row. Returns list of error messages.
+
+    Concatenates the per-block ``_check_input_*`` helpers in a fixed order; the
+    resulting error ordering is a characterized contract.
+
+    Side effect (plan 2026-05-18-006 Unit 1): ``_check_input_urls_and_normalize``
+    stores ``row["main_domain_normalized"]`` when ``main_domain`` is a valid URL,
+    preserving the original ``row["main_domain"]`` verbatim.
+    """
+    errors: list[str] = []
+    errors.extend(_check_input_required_fields(row, line_num))
+    errors.extend(_check_input_optional_field_types(row, line_num))
+    errors.extend(_check_input_enumerated_values(row, line_num))
+    errors.extend(_check_input_urls_and_normalize(row, line_num))
+    errors.extend(_check_input_seed_keywords(row, line_num))
     return errors
 
 
