@@ -41,7 +41,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ..config import _config_dir
-from .projector import _HISTORY_FILENAME, ProjectionError, flush_for
+from ._project_helpers import _HISTORY_FILENAME, ProjectionError
+from .projector import flush_for
 from .store import EventStore
 
 _log = logging.getLogger(__name__)

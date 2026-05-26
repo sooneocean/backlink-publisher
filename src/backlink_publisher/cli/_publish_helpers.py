@@ -433,3 +433,67 @@ def _medium_throttle_sleep(
     if last_success_idx != row_idx - 1 or platform != "medium":
         return
     _sleep_with_throttle(throttle_min, throttle_max, "next Medium post")
+
+
+def _publish_epilogue(
+    outputs: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    args: Any,
+    run_id: str | None,
+    success_count: int,
+    fail_count: int,
+    skipped_unreachable_count: int,
+) -> None:
+    if run_id is not None:
+        from ..events import project_run_safe as _project_run_safe
+        _project_run_safe(run_id)
+
+    successful = [r for r in outputs if r.get("error") is None]
+    failed = [r for r in outputs if r.get("error") is not None]
+    unverified = [s for s in successful if s.get("status", "").endswith("_unverified")]
+
+    publish_logger.recon(
+        "publish_reconciliation",
+        input_payloads=len(rows),
+        output_rows=len(successful),
+        delta=len(rows) - len(successful),
+        dropped={
+            "failed": len(failed),
+            "unverified": len(unverified),
+        },
+        dropped_ids={
+            "failed": [r.get("id", "") for r in failed],
+            "unverified": [r.get("id", "") for r in unverified],
+        },
+    )
+
+    if successful:
+        from backlink_publisher._util.jsonl import write_jsonl
+        write_jsonl(successful)
+
+    if failed:
+        for f in failed:
+            print(f"publish failed: {f['error']}", file=sys.stderr)
+        raise SystemExit(4)
+
+    if not args.dry_run and not successful:
+        from backlink_publisher._util.errors import emit_error
+        emit_error("no payloads were published", exit_code=5)
+
+    if unverified:
+        for u in unverified:
+            print(
+                f"verification failed: id={u.get('id', '')} status={u.get('status', '')}",
+                file=sys.stderr,
+            )
+        raise SystemExit(5)
+
+    publish_logger.info(
+        f"publish complete: {success_count} succeeded, {fail_count} failed, "
+        f"{skipped_unreachable_count} skipped_unreachable",
+        extra={
+            "success": success_count,
+            "failed": fail_count,
+            "skipped_unreachable": skipped_unreachable_count,
+        },
+    )

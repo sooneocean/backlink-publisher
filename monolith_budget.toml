@@ -18,8 +18,8 @@ ceiling = 380
 rationale = "_generate_payload (210 lines) + _resolve_article_anchors (14 lines) extracted to _payload.py (2026-05-22). core.py dropped from 538 to 347 SLOC — holds _dispatch_row, _scheduler_enabled_for, and main() only. Ceiling 380 = round_up_to_10(347+30)."
 
 [files."src/backlink_publisher/cli/publish_backlinks.py"]
-ceiling = 310
-rationale = "Arg parser, checkpoint ops, and AuthExpiredError handler extracted to _publish_helpers.py (2026-05-22). publish_backlinks.py dropped from 414 to 280 SLOC — holds main() and the per-row publish loop only. Ceiling 310 = round_up_to_10(280+30)."
+ceiling = 290
+rationale = "Post-loop epilogue (reconciliation stats, JSONL dump, exit-code dispatch) extracted to _publish_epilogue in _publish_helpers.py (2026-05-26). publish_backlinks.py dropped from 280 to 258 SLOC — holds main() and the per-row publish loop only. Ceiling 290 = round_up_to_10(258+30)."
 
 [files."src/backlink_publisher/content/fetch.py"]
 ceiling = 250
@@ -34,8 +34,8 @@ ceiling = 240
 rationale = "Post-split: body templates (9 functions, ~130 SLOC) extracted to _body_templates.py in 2026-05-19. markdown.py now holds render+link+zh_short utilities at 210 SLOC; ceiling 240 provides 30-SLOC headroom for minor accretion."
 
 [files."src/backlink_publisher/events/projector.py"]
-ceiling = 680
-rationale = "U4 read-side projector: flush_for dispatch + 3 reducers (_project_checkpoint / _project_history / _project_drafts) + shared helpers (cursor I/O, dt normalisation, anchor filter, JSON read retry). Reducers share enough plumbing that splitting into a subpackage would re-import most of that surface; keep the unit whole until a real boundary appears. Ceiling raised 560→620 on 2026-05-25 by Plan 2026-05-25-005 (events projector correctness). Raised 620→640 on 2026-05-26 by Plan 2026-05-26-001 (events kind contract, Unit 3): the three reducers now classify status through kinds.classify() and the checkpoint reducer collects unmapped-status drift into pending_quarantines, written after the transaction commits via the new _write_quarantines() helper (deferred so quarantine()'s private connection doesn't deadlock against the reducer's held WAL write lock). Raised 640→660 on 2026-05-26 by Plan 2026-05-26-001 Unit 4 (R10 mass-quarantine alarm): ProjectionResult gains quarantined + records_considered counters threaded through all three reducers, project_run_safe computes the quarantine ratio, and record_projection_health sets a `degraded` flag once it reaches _QUARANTINE_DEGRADED_RATIO so a quarantine flood can't pass as a clean run. +~25 SLOC; ceiling = round_up_to_10(646+10) = 660. Raised 660→680 on 2026-05-26 by Plan 2026-05-26-001 Unit 8 (R2/R9 append required-field floor): the history and drafts reducers gained their own pending_quarantines sink + post-commit _write_quarantines flush + quarantined counter (mirroring the checkpoint reducer's deferred-write pattern so an R9 missing-field miss never deadlocks the WAL write lock), and all three reducers thread pending_quarantines through their store.append calls. +~16 SLOC; ceiling = round_up_to_10(662+10) = 680."
+ceiling = 580
+rationale = "11 shared helpers (cursor I/O, datetime normalisation, JSON read, anchor extraction, host_of, quarantine writer, checkpoint_event_timestamp, article_payload) extracted to events/_project_helpers.py (2026-05-26 Plan 2026-05-26-004). projector.py dropped from 671 to 542 SLOC — holds flush_for dispatch, 3 reducers, record_projection_health, project_run_safe, and ProjectionResult only. Ceiling 580 = round_up_to_10(542+30) per policy."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
 ceiling = 680
