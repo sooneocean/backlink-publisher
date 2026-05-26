@@ -556,6 +556,27 @@ class TestPipelineRoutes:
         resp = client.post("/ce:generate", data={"urls_json": urls_json})
         assert resp.status_code == 200
 
+    def test_ce_generate_corrupt_urls_json_surfaces_error(self, client):
+        """Plan 009 Unit 4: non-empty malformed urls_json must surface an error
+        and NOT silently generate against stale stored urls."""
+        with client.session_transaction() as sess:
+            sess["config"] = {"urls": ["https://stale-last-session.example/"]}
+        with patch("webui_app.routes.pipeline.plan_logger.warn") as mock_warn:
+            resp = client.post("/ce:generate",
+                               data={"urls_json": "[not valid json"})
+        assert resp.status_code == 200
+        body = resp.data.decode()
+        assert "连结格式无效" in body
+        assert "stale-last-session" not in body  # did not use stale urls
+        mock_warn.assert_called_once()
+        assert mock_warn.call_args[0][0] == "urls_json_parse_error"
+
+    def test_ce_generate_default_urls_json_does_not_error(self, client):
+        """Default '[]' is not 'corrupt' — must not trigger the parse error."""
+        resp = client.post("/ce:generate", data={"urls_json": "[]"})
+        assert resp.status_code == 200
+        assert "连结格式无效" not in resp.data.decode()
+
     def test_ce_validate_with_no_plans_returns_200(self, client):
         resp = client.post("/ce:validate", data={})
         assert resp.status_code == 200

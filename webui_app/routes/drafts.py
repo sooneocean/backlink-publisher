@@ -5,14 +5,35 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timedelta
 
+from apscheduler.jobstores.base import JobLookupError
 from flask import Blueprint, redirect, request, session
 
+from backlink_publisher._util.logger import plan_logger
 from webui_store import drafts_store as _drafts_store
 
 from ..helpers.contexts import _calc_next_available
 from ..scheduler import _schedule_draft_job, _scheduler
 
 bp = Blueprint("drafts", __name__)
+
+
+def _remove_scheduled_job(job_id: str) -> bool:
+    """Remove a scheduler job, distinguishing benign absence from real failure.
+
+    Returns True when removal was clean (job removed, or the job never existed —
+    the expected state for a draft that was never scheduled). Returns False when
+    removal genuinely failed (the job may still fire); logs the real cause.
+    """
+    try:
+        _scheduler.remove_job(job_id)
+    except JobLookupError:
+        # Draft was never scheduled — nothing to remove. Benign.
+        return True
+    except Exception as exc:
+        plan_logger.warn("draft_job_remove_failed", item_id=job_id,
+                         reason=type(exc).__name__)
+        return False
+    return True
 
 
 @bp.route('/ce:draft/save', methods=['POST'])
@@ -88,11 +109,11 @@ def ce_draft_cancel():
     item_id = request.form.get('id', '')
     if not item_id:
         return redirect('/?tab=draft&flash_type=danger&flash_msg=参数缺失')
-    try:
-        _scheduler.remove_job(item_id)
-    except Exception:
-        pass
+    removed = _remove_scheduled_job(item_id)
     _drafts_store.update_item(item_id, status='pending', scheduled_at=None)
+    if not removed:
+        return redirect('/?tab=draft&flash_type=warning'
+                        '&flash_msg=已取消排程，但排程任务可能仍会触发')
     return redirect('/?tab=draft&flash_type=success&flash_msg=已取消排程')
 
 
@@ -102,11 +123,11 @@ def ce_draft_delete():
     item_id = request.form.get('id', '')
     if not item_id:
         return redirect('/?tab=draft&flash_type=danger&flash_msg=参数缺失')
-    try:
-        _scheduler.remove_job(item_id)
-    except Exception:
-        pass
+    removed = _remove_scheduled_job(item_id)
     _drafts_store.delete_item(item_id)
+    if not removed:
+        return redirect('/?tab=draft&flash_type=warning'
+                        '&flash_msg=已删除，但排程任务可能仍会触发')
     return redirect('/?tab=draft&flash_type=success&flash_msg=已删除')
 
 
@@ -115,23 +136,19 @@ def ce_draft_delete():
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _remove_job_silent(job_id: str) -> None:
-    try:
-        from ..scheduler import _scheduler
-        _scheduler.remove_job(job_id)
-    except Exception:
-        pass
-
-
 @bp.route('/ce:draft/bulk-delete', methods=['POST'])
 def ce_draft_bulk_delete():
     """Delete multiple drafts by id. Form: ids=<id1>&ids=<id2>..."""
     ids = request.form.getlist('ids')
     if not ids:
         return redirect('/?tab=draft&flash_type=warning&flash_msg=未选择任何项')
-    for item_id in ids:
-        _remove_job_silent(item_id)
+    job_failures = sum(not _remove_scheduled_job(item_id) for item_id in ids)
     removed = _drafts_store.bulk_delete(ids)
+    if job_failures:
+        return redirect(
+            f'/?tab=draft&flash_type=warning'
+            f'&flash_msg=已删除 {removed} 项，其中 {job_failures} 项的排程任务可能仍会触发'
+        )
     return redirect(
         f'/?tab=draft&flash_type=success&flash_msg=已删除 {removed} 项'
     )
@@ -170,13 +187,20 @@ def ce_draft_bulk_cancel():
     if not ids:
         return redirect('/?tab=draft&flash_type=warning&flash_msg=未选择任何项')
     cancelled = 0
+    job_failures = 0
     for item_id in ids:
         item = _drafts_store.get_item(item_id)
         if not item or item.get('status') != 'scheduled':
             continue
-        _remove_job_silent(item_id)
+        if not _remove_scheduled_job(item_id):
+            job_failures += 1
         _drafts_store.update_item(item_id, status='pending', scheduled_at=None)
         cancelled += 1
+    if job_failures:
+        return redirect(
+            f'/?tab=draft&flash_type=warning'
+            f'&flash_msg=已取消 {cancelled} 项排程，其中 {job_failures} 项的排程任务可能仍会触发'
+        )
     return redirect(
         f'/?tab=draft&flash_type=success&flash_msg=已取消 {cancelled} 项排程'
     )

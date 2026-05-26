@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import unquote
+
 import pytest
 from werkzeug.datastructures import MultiDict
 
@@ -134,3 +136,111 @@ class TestDraftBulkPublishNow:
     def test_empty_ids(self, client, isolated_drafts):
         resp = client.post("/ce:draft/bulk-publish-now", data={})
         assert "flash_type=warning" in resp.location
+
+
+class TestDraftJobRemovalHonesty:
+    """Plan 2026-05-25-009 Unit 2: a genuine scheduler-removal failure must warn
+    the operator the job may still fire, while a JobLookupError (draft never
+    scheduled) stays a silent success."""
+
+    def test_cancel_benign_joblookup_is_success(self, client, isolated_drafts):
+        # Draft is 'scheduled' in the store but no real job exists in the test
+        # scheduler → remove_job raises JobLookupError → benign.
+        _seed_drafts([{"id": "a", "status": "scheduled",
+                       "scheduled_at": "2099-01-01T00:00:00"}])
+        resp = client.post("/ce:draft/cancel", data={"id": "a"})
+        assert resp.status_code == 302
+        assert "flash_type=success" in resp.location
+        assert isolated_drafts.load()[0]["status"] == "pending"
+
+    def test_cancel_genuine_failure_warns_and_logs(self, client, isolated_drafts,
+                                                   monkeypatch):
+        _seed_drafts([{"id": "a", "status": "scheduled",
+                       "scheduled_at": "2099-01-01T00:00:00"}])
+        import webui_app.routes.drafts as drafts_mod
+
+        def _boom(_job_id):
+            raise RuntimeError("jobstore offline")
+        monkeypatch.setattr(drafts_mod._scheduler, "remove_job", _boom)
+        warned = {}
+        monkeypatch.setattr(drafts_mod.plan_logger, "warn",
+                            lambda ev, **kw: warned.update(event=ev, **kw))
+
+        resp = client.post("/ce:draft/cancel", data={"id": "a"})
+        assert resp.status_code == 302
+        assert "flash_type=warning" in resp.location
+        assert "排程任务可能仍会触发" in unquote(resp.location)
+        # store still mutated (operator intent honored) ...
+        assert isolated_drafts.load()[0]["status"] == "pending"
+        # ... but the genuine failure was logged with the exception class.
+        assert warned["event"] == "draft_job_remove_failed"
+        assert warned["reason"] == "RuntimeError"
+
+    def test_delete_genuine_failure_warns(self, client, isolated_drafts,
+                                          monkeypatch):
+        _seed_drafts([{"id": "a", "status": "scheduled",
+                       "scheduled_at": "2099-01-01T00:00:00"}])
+        import webui_app.routes.drafts as drafts_mod
+        monkeypatch.setattr(drafts_mod._scheduler, "remove_job",
+                            lambda _id: (_ for _ in ()).throw(RuntimeError("x")))
+        resp = client.post("/ce:draft/delete", data={"id": "a"})
+        assert resp.status_code == 302
+        assert "flash_type=warning" in resp.location
+        assert isolated_drafts.load() == []  # still deleted from store
+
+    def test_bulk_cancel_reports_genuine_failure_count(self, client,
+                                                       isolated_drafts, monkeypatch):
+        _seed_drafts([
+            {"id": "a", "status": "scheduled", "scheduled_at": "2099-01-01T00:00:00"},
+            {"id": "b", "status": "scheduled", "scheduled_at": "2099-01-01T00:00:00"},
+        ])
+        import webui_app.routes.drafts as drafts_mod
+        calls = {"n": 0}
+
+        def _flaky(_job_id):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("jobstore offline")  # genuine failure
+            from apscheduler.jobstores.base import JobLookupError
+            raise JobLookupError(_job_id)  # benign — counts clean
+        monkeypatch.setattr(drafts_mod._scheduler, "remove_job", _flaky)
+
+        resp = client.post(
+            "/ce:draft/bulk-cancel",
+            data=MultiDict([("ids", "a"), ("ids", "b")]),
+        )
+        assert resp.status_code == 302
+        loc = unquote(resp.location)
+        assert "flash_type=warning" in resp.location
+        assert "1 项的排程任务可能仍会触发" in loc
+
+    def test_bulk_delete_reports_genuine_failure_count(self, client,
+                                                       isolated_drafts, monkeypatch):
+        """ce:review: bulk-delete's job_failures>0 warning branch was untested
+        (only bulk-cancel was). A genuine RuntimeError on one removal must
+        surface a warning count; benign JobLookupError counts clean; and the
+        store deletion still completes (operator intent honored)."""
+        _seed_drafts([
+            {"id": "a", "status": "scheduled", "scheduled_at": "2099-01-01T00:00:00"},
+            {"id": "b", "status": "scheduled", "scheduled_at": "2099-01-01T00:00:00"},
+        ])
+        import webui_app.routes.drafts as drafts_mod
+        calls = {"n": 0}
+
+        def _flaky(_job_id):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise RuntimeError("jobstore offline")  # genuine failure
+            from apscheduler.jobstores.base import JobLookupError
+            raise JobLookupError(_job_id)  # benign — counts clean
+        monkeypatch.setattr(drafts_mod._scheduler, "remove_job", _flaky)
+
+        resp = client.post(
+            "/ce:draft/bulk-delete",
+            data=MultiDict([("ids", "a"), ("ids", "b")]),
+        )
+        assert resp.status_code == 302
+        loc = unquote(resp.location)
+        assert "flash_type=warning" in resp.location
+        assert "1 项的排程任务可能仍会触发" in loc
+        assert isolated_drafts.load() == []  # both still deleted from store

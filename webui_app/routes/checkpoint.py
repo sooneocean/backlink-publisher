@@ -9,6 +9,7 @@ from datetime import datetime
 from flask import Blueprint, redirect, request, session
 
 from backlink_publisher import checkpoint as _checkpoint_mod
+from backlink_publisher._util.logger import plan_logger
 from ..helpers.contexts import _render
 from ..helpers.cli_runner import _REPO_ROOT, _rewrite_cli_cmd
 from ..helpers.security import _check_localhost, _validate_webui_run_id
@@ -88,6 +89,14 @@ def checkpoint_dismiss():
     _validate_webui_run_id(run_id)
     try:
         _checkpoint_mod.delete(run_id)
-    except Exception:
+    except FileNotFoundError:
+        # Idempotent dismiss: the checkpoint is already gone, which is exactly
+        # the operator's intent. Benign — keep the success redirect.
         pass
+    except Exception as exc:
+        # Genuine delete failure (e.g. permission/OS error): the checkpoint is
+        # still present. Do NOT pretend it was dismissed — surface it.
+        plan_logger.warn("checkpoint_dismiss_failed", run_id=run_id,
+                         reason=type(exc).__name__)
+        return redirect("/?flash_type=danger&flash_msg=删除检查点失败，该检查点仍然存在")
     return redirect("/")

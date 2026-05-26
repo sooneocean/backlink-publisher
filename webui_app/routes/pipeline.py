@@ -134,7 +134,15 @@ def ce_generate():
 
     try:
         urls = json.loads(urls_json)
-    except Exception:
+    except Exception as exc:
+        # Distinguish "no input provided" (legitimate fallback to stored urls)
+        # from "operator submitted a non-empty value that failed to parse"
+        # (do NOT silently generate against stale urls — surface it).
+        submitted = request.form.get('urls_json', '').strip()
+        if submitted and submitted != '[]':
+            plan_logger.warn("urls_json_parse_error", reason=type(exc).__name__)
+            return _render('index.html', error="连结格式无效，未使用旧数据",
+                           config=stored_config)
         urls = stored_config.get('urls', [])
 
     if not urls:
@@ -337,9 +345,10 @@ def ce_preview():
     urls_json = request.form.get('urls_json', '[]')
     try:
         urls = json.loads(urls_json)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
+        plan_logger.warn("preview_urls_parse_error", reason=type(exc).__name__)
         return "Invalid URLs"
-        
+
     seed = {
         'target_url': urls[0],
         'main_domain': get_main_domain(urls[0]),

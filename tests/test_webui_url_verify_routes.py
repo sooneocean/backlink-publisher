@@ -579,6 +579,73 @@ class TestTitleTruncation:
 
 
 # ---------------------------------------------------------------------------
+# Fetch-exception diagnostics (Plan 2026-05-25-009 Unit 3)
+# ---------------------------------------------------------------------------
+
+
+def _patch_raises(monkeypatch, exc):
+    def _boom(url, **kw):
+        raise exc
+    monkeypatch.setattr(
+        "backlink_publisher.content.fetch.verify_url_has_content",
+        _boom, raising=True,
+    )
+
+
+class TestFetchExceptionDiagnostics:
+    """A raised fetch exception must keep the uniform shape, carry the right
+    reason, and leave a diagnosable RECON line with the exception class — while
+    preserving the host-hash privacy invariant and the per-session throttle."""
+
+    def test_generic_exception_is_network_error_with_exc_class(self, client, monkeypatch):
+        _patch_raises(monkeypatch, ValueError("boom"))
+        token = _seed_csrf(client)
+        captured = {}
+        import webui_app.routes.url_verify as uv
+        monkeypatch.setattr(uv._logger, "recon",
+                            lambda ev, **kw: captured.update(event=ev, **kw))
+
+        resp = _post(client, {"url": "https://example.com"}, csrf=token)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert body["reason"] == "network_error"
+        # diagnosable: the exception class is logged ...
+        assert captured["exc_class"] == "ValueError"
+        # ... and the host is hashed, never raw.
+        assert "example.com" not in str(captured.get("host_hash", ""))
+        assert captured.get("host_hash")  # non-empty hash present
+
+    def test_timeout_maps_to_timeout_reason(self, client, monkeypatch):
+        _patch_raises(monkeypatch, TimeoutError("slow"))
+        token = _seed_csrf(client)
+        resp = _post(client, {"url": "https://example.com"}, csrf=token)
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert body["reason"] == "timeout"
+        assert body["reason"] in _ALLOWED_REASONS  # closed-enum contract intact
+
+    def test_socket_timeout_maps_to_timeout_reason(self, client, monkeypatch):
+        import socket
+        _patch_raises(monkeypatch, socket.timeout("timed out"))
+        token = _seed_csrf(client)
+        resp = _post(client, {"url": "https://example.com"}, csrf=token)
+        assert resp.get_json()["reason"] == "timeout"
+
+    def test_no_raw_host_in_recon_fields(self, client, monkeypatch):
+        """Privacy guard: the enriched log must not regress to a raw host."""
+        _patch_raises(monkeypatch, RuntimeError("x"))
+        token = _seed_csrf(client)
+        captured = {}
+        import webui_app.routes.url_verify as uv
+        monkeypatch.setattr(uv._logger, "recon",
+                            lambda ev, **kw: captured.update(kw))
+        _post(client, {"url": "https://secret-internal-host.example/"}, csrf=token)
+        assert "secret-internal-host" not in json.dumps(captured)
+
+
+# ---------------------------------------------------------------------------
 # Blueprint registration
 # ---------------------------------------------------------------------------
 

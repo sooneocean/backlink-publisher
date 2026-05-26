@@ -237,6 +237,35 @@ def test_dismiss_deletes_checkpoint_and_redirects(client, tmp_path):
         assert not path.exists()
 
 
+def test_dismiss_genuine_delete_failure_surfaces_danger_flash(client):
+    """Plan 009 Unit 1: a real delete failure (not FileNotFoundError) must NOT
+    redirect to a clean '/' as if dismissed — it surfaces a danger flash and
+    logs, because the checkpoint is still present."""
+    with patch.object(_webui._checkpoint_mod, "delete",
+                       side_effect=PermissionError("locked")):
+        with patch("webui_app.routes.checkpoint.plan_logger.warn") as mock_warn:
+            resp = client.post("/checkpoint/dismiss",
+                               data={"run_id": "20260101T000000-abcdef01"})
+            assert resp.status_code == 302
+            assert "flash_type=danger" in resp.headers["Location"]
+            mock_warn.assert_called_once()
+            assert mock_warn.call_args[0][0] == "checkpoint_dismiss_failed"
+            assert mock_warn.call_args[1]["reason"] == "PermissionError"
+
+
+def test_dismiss_missing_checkpoint_is_benign_success(client):
+    """Plan 009 Unit 1: dismissing an already-gone checkpoint (FileNotFoundError)
+    is idempotent — keep the plain success redirect, no danger flash, no log."""
+    with patch.object(_webui._checkpoint_mod, "delete",
+                       side_effect=FileNotFoundError("checkpoint not found")):
+        with patch("webui_app.routes.checkpoint.plan_logger.warn") as mock_warn:
+            resp = client.post("/checkpoint/dismiss",
+                               data={"run_id": "20260101T000000-abcdef01"})
+            assert resp.status_code == 302
+            assert "flash_type=danger" not in resp.headers["Location"]
+            mock_warn.assert_not_called()
+
+
 def test_dismiss_rejects_non_localhost(client):
     resp = client.post(
         "/checkpoint/dismiss",

@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import socket
 from urllib.parse import urlparse, urlunparse
 
 from flask import Blueprint, abort, jsonify, request, session
@@ -67,22 +68,24 @@ def _session_id() -> str:
     return session.get("csrf_token", "")
 
 
-def _emit_recon(reason: str, host: str = "") -> None:
+def _emit_recon(reason: str, host: str = "", exc_class: str = "") -> None:
     """Emit a RECON log line gated by the per-session 1/10s cap.
 
-    Fields are intentionally minimal: host_hash + request_id + reason. No
-    raw URL, no raw host, no IP — RECON is for operator visibility, not
-    forensics.
+    Fields are intentionally minimal: host_hash + request_id + reason
+    (+ exc_class on raised-exception paths, for diagnosis). No raw URL, no
+    raw host, no IP — RECON is for operator visibility, not forensics.
     """
     sid = _session_id()
     if not throttle.should_emit_recon(sid):
         return
-    _logger.recon(
-        "url-verify.event",
+    fields = dict(
         reason=reason,
         host_hash=_host_hash(host) if host else "",
         request_id=_request_id(),
     )
+    if exc_class:
+        fields["exc_class"] = exc_class
+    _logger.recon("url-verify.event", **fields)
 
 
 def _uniform(ok: bool, reason: str, title: str = "") -> tuple:
@@ -178,11 +181,16 @@ def url_verify():
             timeout_seconds=_FETCH_TIMEOUT_S,
             max_redirects=_FETCH_MAX_REDIRECTS,
         )
-    except Exception:
+    except Exception as exc:
         # Fetch raised unexpectedly — uniform-shape failure so the UI keeps
         # working. RECON-gated since this is a security-adjacent signal.
-        _emit_recon("network_error", host=host_ascii)
-        ok, reason, title = False, "network_error", None
+        # Distinguish a retryable timeout from a generic network error, and
+        # capture the exception class for diagnosis (still host-hashed +
+        # throttled — never a raw-host, ungated log).
+        reason = ("timeout" if isinstance(exc, (TimeoutError, socket.timeout))
+                  else "network_error")
+        _emit_recon(reason, host=host_ascii, exc_class=type(exc).__name__)
+        ok, title = False, None
     finally:
         throttle.release(host_ascii)
 
