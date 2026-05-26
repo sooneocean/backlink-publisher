@@ -380,6 +380,10 @@ class TestOauthCallback:
         assert _flash_type(resp) == "warning"
 
     def test_fetch_token_raises_reports_danger(self, client):
+        # A token-exchange RuntimeError must keep the *generic* failure message,
+        # NOT the transport-security one. The loopback gate is now checked before
+        # the try block, so this RuntimeError can only mean a real exchange
+        # failure — it must not be mislabeled as a transport-security refusal.
         _seed_oauth_session(client)
         flow_cls, mocks = _callback_mocks()
         flow_cls.from_client_config.return_value.fetch_token.side_effect = \
@@ -388,12 +392,13 @@ class TestOauthCallback:
             resp = client.get(f"{CB_PATH}?state=state-xyz&code=abc")
         assert resp.status_code == 302
         assert _flash_type(resp) == "danger"
+        assert quote("授权处理失败") in _location(resp)
+        assert quote("传输安全") not in _location(resp)
 
     def test_non_loopback_callback_reported_distinctly(self, client):
-        # R2: a non-loopback callback URI makes the transport gate raise
-        # RuntimeError; the dedicated `except RuntimeError` reports it as a
-        # distinct transport-security failure (not the generic "授权处理失败"),
-        # and no token is written.
+        # R2: a non-loopback callback URI is refused by an explicit pre-try
+        # `_is_loopback_uri` check, reported as a distinct transport-security
+        # failure (not the generic "授权处理失败"), and no token is written.
         _seed_oauth_session(client)
         flow_cls, mocks = _callback_mocks()
         with mocks[0], mocks[1] as save_tok, mocks[2], \

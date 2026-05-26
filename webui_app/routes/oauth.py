@@ -213,14 +213,27 @@ def settings_blogger_oauth_callback():
             msg='OAuth state 校验失败，疑似跨站请求，请重新点击登入按钮',
             fragment='channel-blogger')
 
+    # Transport-security gate, checked explicitly *before* the try block.
+    # Previously this relied on catching ``RuntimeError`` raised by
+    # ``_oauthlib_insecure_transport`` — but ``fetch_token`` (and the helpers
+    # below) can raise ``RuntimeError`` too, so a token-exchange failure was
+    # mislabeled as a transport-security failure. Checking the URI here keeps
+    # the discriminator precise and lets genuine errors hit the generic branch.
     cb_uri = _oauth_callback_uri()
+    if not _is_loopback_uri(cb_uri):
+        return _safe_flash_redirect(
+            '/settings', flash_type='danger',
+            msg=f'OAuth 回调传输安全检查失败: 回调地址 {cb_uri} 非 loopback，'
+                f'需使用 https 且不启用不安全传输旁路',
+            fragment='channel-blogger')
     try:
         from google_auth_oauthlib.flow import Flow
         from backlink_publisher.publishing.adapters.blogger_api import _SCOPES, json_from_creds
         from backlink_publisher.config import save_blogger_token
 
         # Plan 2026-05-21-006 Unit 3.2 — same loopback-asserting context
-        # manager wraps the token-exchange call that needs the bypass.
+        # manager wraps the token-exchange call that needs the bypass. The
+        # loopback precondition is verified above, so the gate never raises here.
         with _oauthlib_insecure_transport(cb_uri):
             flow = Flow.from_client_config(client_config, scopes=_SCOPES,
                                            redirect_uri=cb_uri, state=state)
@@ -241,13 +254,6 @@ def settings_blogger_oauth_callback():
             '/settings', flash_type='success',
             msg='Google 帐号授权成功！Token 已保存。',
             fragment='channel-blogger')
-    except RuntimeError as exc:
-        # The loopback transport gate refused (non-loopback callback URI).
-        # Report distinctly from a generic token-exchange failure so an
-        # off-loopback TLS-bypass refusal is legible, not masked.
-        return _safe_flash_redirect(
-            '/settings', flash_type='danger',
-            msg=f'OAuth 回调传输安全检查失败: {exc}', fragment='channel-blogger')
     except Exception as exc:
         return _safe_flash_redirect(
             '/settings', flash_type='danger',
