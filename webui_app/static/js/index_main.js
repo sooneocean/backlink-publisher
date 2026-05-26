@@ -93,9 +93,12 @@
         data.append('publish_mode', getVal('publish_mode'));
         const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
         data.append('csrf_token', csrf);
-        fetch('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
-            .then(r => r.json())
-            .then(d => { if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓'); });
+        fetchJson('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
+            .then(d => {
+                if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓');
+                else alert('保存失败：' + (d.error || '未知错误'));
+            })
+            .catch(e => alert('保存失败：' + e.message));
     }
 
     // ── Loading Overlay ──────────────────────────────────────────

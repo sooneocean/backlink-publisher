@@ -126,6 +126,7 @@
     </div>
     
     <script>window.__indexBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([]), 'platform_slugs': platforms | default([]) | map(attribute='slug') | list} | tojson }};</script>
+    <script src="{{ url_for('static', filename='js/fetch_json.js') }}"></script>
     <script src="{{ url_for('static', filename='js/index_main.js') }}"></script>
 
     <!-- Loading component — to be injected in specific panels as needed -->
