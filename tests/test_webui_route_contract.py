@@ -1349,6 +1349,40 @@ class TestSecretLeakRegression:
             "is a long-term secret; PR #139 originally shipped 0644)."
         )
 
+    def test_llm_settings_loose_perms_fixed_on_load(self, client):
+        """O8: pre-#140 llm-settings.json files written at 0o644 must be
+        auto-tightened to 0o600 when the read path loads them.
+
+        The write path routes through ``atomic_write`` (0o600), but a file
+        created by pre-#140 code stays world-readable until re-saved. The
+        loader mirrors ``_util/secrets.py``'s frw-token reader: warn + chmod.
+        """
+        import json as _json
+        import os as _os
+        import stat as _stat
+        from webui_app.helpers.contexts import (
+            _llm_settings_file,
+            _load_llm_settings,
+        )
+
+        path = _llm_settings_file()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Simulate a pre-#140 hand-rolled write: real file, loose 0o644 perms.
+        path.write_text(_json.dumps({"api_key": "sk-legacy-0644"}),
+                        encoding="utf-8")
+        _os.chmod(path, 0o644)
+        assert _stat.S_IMODE(path.stat().st_mode) == 0o644
+
+        settings = _load_llm_settings()
+        # Behaviour otherwise identical: the api_key still loads.
+        assert settings["api_key"] == "sk-legacy-0644"
+        # ...but the file is now 0o600.
+        mode = _stat.S_IMODE(path.stat().st_mode)
+        assert mode == 0o600, (
+            f"llm-settings.json mode is {oct(mode)} — loader must auto-chmod "
+            "a pre-existing 0o644 file to 0o600 (O8)."
+        )
+
     def test_blogger_client_secret_not_rendered(self, client):
         from backlink_publisher.config import load_config, save_config
         canary = "GOCSPX-LEAK-CANARY-do-not-render"

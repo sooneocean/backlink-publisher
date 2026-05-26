@@ -62,11 +62,30 @@ def _load_llm_settings() -> dict:
     }
     path = _llm_settings_file()
     if path.exists():
+        # O8: pre-#140 code hand-rolled this write and shipped without a
+        # chmod, leaving llm-settings.json (which stores the LLM api_key)
+        # world-readable at 0o644. The write path now routes through
+        # ``atomic_write`` (0o600), but files created by the old code never
+        # get re-tightened until the operator happens to re-save. Auto-fix
+        # loose perms on load — mirrors the frw-token.json reader in
+        # ``_util/secrets.py`` (warn-don't-fail: a cp-induced 0o644 is far
+        # more common than tampering).
+        try:
+            mode = os.stat(path).st_mode & 0o777
+            if mode != 0o600:
+                plan_logger.warn(
+                    "llm-settings.json loose perms — auto-chmod to 0o600",
+                    mode=oct(mode),
+                )
+                os.chmod(path, 0o600)
+        except OSError:
+            # Best-effort: never let a perms fix break the settings render.
+            plan_logger.warn("failed to chmod llm-settings.json to 0o600")
         try:
             data = json.loads(path.read_text(encoding='utf-8'))
             defaults.update(data)
         except Exception:
-            plan_logger.warning("failed to parse llm-settings.json, using defaults")
+            plan_logger.warn("failed to parse llm-settings.json, using defaults")
     return defaults
 
 
