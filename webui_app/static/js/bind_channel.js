@@ -111,8 +111,7 @@
         var state = _initState(jobId);
         var url = '/settings/channels/' + encodeURIComponent(channel)
                 + '/bind/' + encodeURIComponent(jobId);
-        fetch(url, {credentials: 'same-origin'})
-            .then(function (r) { return r.json(); })
+        fetchJson(url, {credentials: 'same-origin'})
             .then(function (data) {
                 if (!data) return;
                 // Reset error counter on any successful response.
@@ -187,9 +186,15 @@
             credentials: 'same-origin',
             body: body
         })
-            .then(function (r) { return r.json().then(function (j) {
-                return {status: r.status, body: j};
-            }); })
+            .then(function (r) {
+                var ct = r.headers.get('content-type') || '';
+                if (!ct.includes('application/json')) {
+                    throw new Error('服务器返回非 JSON 响应 (HTTP ' + r.status + ')');
+                }
+                return r.json().then(function (j) {
+                    return {status: r.status, body: j};
+                });
+            })
             .then(function (resp) {
                 if (resp.status !== 200 || !resp.body || !resp.body.job_id) {
                     setBadge(channel, 'failed');

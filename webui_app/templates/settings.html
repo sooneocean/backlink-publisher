@@ -353,6 +353,7 @@
     </div>
 
      <script>window.__settingsBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([])} | tojson }};</script>
+     <script src="{{ url_for('static', filename='js/fetch_json.js') }}"></script>
      <script src="{{ url_for('static', filename='js/settings_main.js') }}"></script>
 
     <script src="/static/js/bind_channel.js" defer></script>

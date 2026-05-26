@@ -123,12 +123,11 @@
             const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
             formData.append('csrf_token', csrf);
 
-            const resp = await fetch('/settings/test-llm-connection', {
+            const data = await fetchJson('/settings/test-llm-connection', {
                 method: 'POST',
                 body: formData,
                 headers: {'X-CSRFToken': csrf}
             });
-            const data = await resp.json();
             if (data.status === 'ok') {
                 resEl.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> ${data.message}</span>`;
                 
@@ -163,12 +162,11 @@
             formData.append('test_title', title);
             const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
             formData.append('csrf_token', csrf);
-            const resp = await fetch('/settings/test-llm-generation', {
+            const data = await fetchJson('/settings/test-llm-generation', {
                 method: 'POST',
                 body: formData,
                 headers: {'X-CSRFToken': csrf}
             });
-            const data = await resp.json();
             if (data.status === 'ok') {
                 resEl.textContent = data.result;
             } else {
@@ -295,12 +293,12 @@
         data.append('publish_mode', getVal('publish_mode'));
         const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
         data.append('csrf_token', csrf);
-        fetch('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
-            .then(r => r.json())
+        fetchJson('/profiles/save', { method: 'POST', body: data, headers: {'X-CSRFToken': csrf} })
             .then(d => {
                 if (d.ok) alert('配置「' + name.trim() + '」已保存 ✓');
                 else alert('保存失败：' + (d.error || '未知错误'));
-            });
+            })
+            .catch(e => alert('保存失败：' + e.message));
     }
 
     // ── F30 sticky section tab bar — click-pin + scroll sync ────
