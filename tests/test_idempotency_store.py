@@ -1,0 +1,217 @@
+"""Unit 1 — dedup store: state round-trip, canonicalization, staleness, the
+single-flight intent-write contract (incl. concurrency), and at-rest perms.
+
+Plan: docs/plans/2026-05-27-005-feat-cross-run-publish-idempotency-plan.md (U1).
+"""
+
+from __future__ import annotations
+
+import os
+import stat
+import threading
+
+import pytest
+
+from backlink_publisher.idempotency.store import DedupKey, DedupStore
+
+
+@pytest.fixture()
+def store(tmp_path):
+    return DedupStore(path=tmp_path / "dedup.db")
+
+
+def _key(target="https://money.example/page", platform="blogger", account="default"):
+    return DedupKey(platform=platform, target_url=target, account=account)
+
+
+# --------------------------------------------------------------------------- #
+# Happy path: state round-trip
+# --------------------------------------------------------------------------- #
+def test_absent_key_returns_none(store):
+    assert store.get(_key()) is None
+
+
+def test_intent_then_done_with_verify_ok(store):
+    key = _key()
+    outcome = store.intent_write(key, run_id="r1")
+    assert outcome.won is True
+
+    rec = store.get(key)
+    assert rec is not None and rec.state == "attempting"
+
+    store.transition(key, "done", live_url="https://blogger.com/p/1")
+    store.set_verify_ok(key, True)
+
+    rec = store.get(key)
+    assert rec.state == "done"
+    assert rec.verify_ok is True
+    assert rec.live_url == "https://blogger.com/p/1"
+
+
+def test_verify_failure_leaves_done_state(store):
+    """R6: a verify failure sets verify_ok=False but never changes state away
+    from done — a flake must not make the key re-publishable."""
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "done", live_url="https://blogger.com/p/2")
+    store.set_verify_ok(key, False)
+
+    rec = store.get(key)
+    assert rec.state == "done"
+    assert rec.verify_ok is False
+
+
+# --------------------------------------------------------------------------- #
+# Key canonicalization
+# --------------------------------------------------------------------------- #
+def test_canonicalization_collapses_variants(store):
+    key = _key(target="https://money.example/page")
+    store.intent_write(key)
+    # Trailing slash + uppercase host + utm should collapse to the same key.
+    variant = _key(target="https://MONEY.example/page/?utm_source=x")
+    assert store.get(variant) is not None
+    assert variant.target_url == key.target_url
+
+
+def test_distinct_non_utm_query_is_distinct_key(store):
+    a = _key(target="https://money.example/page?id=1")
+    b = _key(target="https://money.example/page?id=2")
+    store.intent_write(a)
+    assert store.get(b) is None  # different non-utm query -> different key
+
+
+def test_account_dimension_distinguishes_keys(store):
+    a = _key(account="acct-1")
+    b = _key(account="acct-2")
+    store.intent_write(a)
+    assert store.get(b) is None  # same platform+target, different account
+
+
+# --------------------------------------------------------------------------- #
+# Stale-attempting detection
+# --------------------------------------------------------------------------- #
+def test_attempting_with_dead_pid_is_stale(store):
+    key = _key()
+    store.intent_write(key, owner_pid=2_147_483_000)  # almost certainly dead
+    rec = store.get(key)
+    assert store.is_stale_attempting(rec) is True
+
+
+def test_attempting_with_live_pid_recent_is_not_stale(store):
+    key = _key()
+    store.intent_write(key, owner_pid=os.getpid())
+    rec = store.get(key)
+    assert store.is_stale_attempting(rec) is False
+
+
+def test_attempting_aged_past_ttl_is_stale_even_if_pid_alive(store):
+    """PID-reuse backstop: a live (reused) PID can't keep an attempting row
+    held forever — the absolute TTL ages it out."""
+    key = _key()
+    store.intent_write(key, owner_pid=os.getpid())
+    rec = store.get(key)
+    future = rec.updated_at + 10_000
+    assert store.is_stale_attempting(rec, now=future, ttl_s=3600) is True
+
+
+def test_done_is_never_stale(store):
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "done", live_url="u")
+    rec = store.get(key)
+    assert store.is_stale_attempting(rec) is False
+
+
+# --------------------------------------------------------------------------- #
+# intent_write two-outcome contract + concurrency
+# --------------------------------------------------------------------------- #
+def test_second_intent_write_loses_without_raising(store):
+    key = _key()
+    first = store.intent_write(key)
+    second = store.intent_write(key)
+    assert first.won is True
+    assert second.won is False
+    assert second.existing_state == "attempting"
+
+
+def test_forgotten_key_reinserts_cleanly(store):
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "done", live_url="u")
+    assert store.forget(key) == "done"
+    assert store.get(key) is None
+    # After forget, a fresh intent write wins again.
+    assert store.intent_write(key).won is True
+
+
+def test_concurrent_intent_write_exactly_one_wins(tmp_path):
+    """Two threads racing the same key: exactly one inserts attempting, the
+    other observes the existing row and loses. Proves the BEGIN IMMEDIATE
+    single-flight closes the TOCTOU double-post window."""
+    db = tmp_path / "dedup.db"
+    key = _key()
+    barrier = threading.Barrier(2)
+    results: list[bool] = []
+    lock = threading.Lock()
+
+    def worker():
+        s = DedupStore(path=db)
+        barrier.wait()
+        outcome = s.intent_write(key)
+        with lock:
+            results.append(outcome.won)
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert sorted(results) == [False, True]  # exactly one winner
+
+
+# --------------------------------------------------------------------------- #
+# Transition legality
+# --------------------------------------------------------------------------- #
+def test_transition_on_absent_key_raises(store):
+    with pytest.raises(ValueError):
+        store.transition(_key(), "done")
+
+
+def test_terminal_state_blocks_retransition(store):
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "done", live_url="u")
+    with pytest.raises(ValueError):
+        store.transition(key, "failed")
+
+
+def test_uncertain_adjudicated_to_terminal(store):
+    """uncertain -> done|failed is the adjudication path (legal without
+    allow_from_terminal since uncertain is not terminal)."""
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "uncertain")
+    store.transition(key, "failed")
+    assert store.get(key).state == "failed"
+
+
+def test_illegal_target_state_raises(store):
+    key = _key()
+    store.intent_write(key)
+    with pytest.raises(ValueError):
+        store.transition(key, "attempting")  # type: ignore[arg-type]
+
+
+# --------------------------------------------------------------------------- #
+# At-rest permissions (campaign URLs live in the db + WAL)
+# --------------------------------------------------------------------------- #
+def test_store_files_are_0600(tmp_path):
+    db = tmp_path / "dedup.db"
+    s = DedupStore(path=db)
+    s.intent_write(_key())  # force a write so WAL/SHM appear
+    for suffix in ("", "-wal", "-shm"):
+        p = db.parent / (db.name + suffix)
+        if p.exists():
+            mode = stat.S_IMODE(p.stat().st_mode)
+            assert mode == 0o600, f"{p.name} is {oct(mode)}, expected 0o600"
