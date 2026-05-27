@@ -30,7 +30,7 @@ from backlink_publisher._util.errors import (
 )
 from backlink_publisher._util.jsonl import write_jsonl
 from backlink_publisher._util.logger import PipelineLogger
-from backlink_publisher._util.url import validate_https_url
+from backlink_publisher._util.url import safe_urlparse, validate_https_url
 
 generate_logger = PipelineLogger("generate-backlink-text")
 
@@ -148,12 +148,14 @@ def _validate_candidate(rec: dict) -> dict:
         if not isinstance(val, str) or not val.strip():
             return _make_rejected(rec, "invalid_record")
 
-    # Gate target_url: must be https.  Guard urlparse ValueError on malformed IPv6.
-    try:
-        validated_url = validate_https_url(rec["target_url"])
-    except ValueError:
-        return _make_rejected(rec, "invalid_record")
+    # Gate target_url: must be https.
+    # safe_urlparse inside validate_https_url catches malformed IPv6 etc. and
+    # returns None without raising, so we check that first to distinguish a
+    # truly malformed URL (invalid_record) from a non-https scheme (bad_target_url_scheme).
+    validated_url = validate_https_url(rec["target_url"])
     if validated_url is None:
+        if safe_urlparse(rec["target_url"]) is None:
+            return _make_rejected(rec, "invalid_record")
         return _make_rejected(rec, "bad_target_url_scheme")
 
     return {

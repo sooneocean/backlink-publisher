@@ -38,27 +38,17 @@ import requests
 from backlink_publisher.http import post as http_post
 
 from backlink_publisher._util.errors import DependencyError, ExternalServiceError
+from backlink_publisher.llm.client import _redact_for_log, _sanitize_input
 from .retry import retry_transient_call
 
 _log = logging.getLogger(__name__)
 
-# Input sanitization — length cap and disallowed char classes.
-_INPUT_MAX_LEN: int = 200
 # Control characters and bidi overrides — same set the anchor_resolver
 # filters on output. Stripping at the prompt boundary means a malicious seed
 # row can never smuggle a U+202E into the model's view of the input.
 _PROMPT_UNSAFE_CHARS = re.compile(
     r"[\x00-\x1f\x7f​-‏ -‮⁦-⁩]"
 )
-
-# Patterns we redact from any log/exception text before emission.
-# Match the entire Authorization header value up to the next newline. The
-# value commonly contains spaces (``Bearer sk-...``), so stopping at the first
-# whitespace would leave the token exposed.
-_AUTH_HEADER_RE = re.compile(r"(Authorization|authorization)\s*:\s*[^\n\r]+")
-_BEARER_RE = re.compile(r"[Bb]earer\s+[A-Za-z0-9._\-+/=]+")
-_API_KEY_RE = re.compile(r'("?api[_-]?key"?\s*[:=]\s*"?)[^"\s,}]+', re.IGNORECASE)
-_LOG_TRUNCATE_LEN: int = 200
 
 
 @dataclass(frozen=True)
@@ -384,32 +374,6 @@ def _is_retryable(exc: Exception) -> bool:
     return False
 
 
-def _sanitize_input(text: str) -> str:
-    """Clamp length, strip control/bidi chars, and escape XML structural chars.
-
-    The prompt template wraps untrusted input in ``<input keyword="..."
-    target_url="..." subject="..." />`` XML attributes. Stripping control/bidi
-    chars alone isn't enough — an unescaped ``"`` or ``</input>`` lets a
-    malicious seed_keyword break out of the attribute / tag boundary and
-    inject sibling content that the system message no longer treats as data.
-    HTML-attribute escaping closes that hole so the only thing the model sees
-    inside ``<input ...>`` is genuinely the user-supplied data string.
-    """
-    if not isinstance(text, str):
-        return ""
-    cleaned = _PROMPT_UNSAFE_CHARS.sub("", text)
-    # Escape the five XML/HTML-attribute-significant characters. ``&`` must
-    # go first so we don't double-escape the entities we're about to write.
-    cleaned = (
-        cleaned.replace("&", "&amp;")
-        .replace('"', "&quot;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("'", "&apos;")
-    )
-    return cleaned[:_INPUT_MAX_LEN]
-
-
 #: Long-field cap. The 200-char ``_INPUT_MAX_LEN`` is anchor-tuned and too short for a
 #: context-responsive ``thread_summary``; this is a larger, still-bounded ceiling.
 _LONG_INPUT_MAX_LEN: int = 1000
@@ -461,22 +425,4 @@ def _build_comment_user_prompt(
     )
 
 
-def _redact_for_log(text: str) -> str:
-    """Remove obvious secret material and truncate before any log emission.
 
-    Three layered scrubs:
-    - ``Authorization: ...`` headers (the most common leak path on 4xx/5xx
-      responses that echo the request)
-    - Bare ``Bearer xxx`` tokens that some providers echo back in error bodies
-    - ``api_key`` / ``api-key`` fields in JSON or query strings
-    Followed by a 200-char truncation so a multi-KB error body can't flood the
-    log even if it survived the scrubs.
-    """
-    if not isinstance(text, str):
-        text = str(text)
-    text = _AUTH_HEADER_RE.sub(r"\1: ***", text)
-    text = _BEARER_RE.sub("Bearer ***", text)
-    text = _API_KEY_RE.sub(r'\1***', text)
-    if len(text) > _LOG_TRUNCATE_LEN:
-        text = text[:_LOG_TRUNCATE_LEN] + "…"
-    return text
