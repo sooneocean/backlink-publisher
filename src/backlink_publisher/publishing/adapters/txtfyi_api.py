@@ -34,6 +34,7 @@ from .http_form_post import (
     fetch_form,
     submit_form,
 )
+from .link_attr_verifier import required_link_urls
 
 _TXTFYI_FORM = "https://txt.fyi/"
 _TXTFYI_SUBMIT = "https://txt.fyi/edit.php"
@@ -108,7 +109,7 @@ class TxtfyiFormPostAdapter(Publisher):
                 platform=_PLATFORM,
                 draft_url=published_url,
             )
-        meta = attach_link_verification(published_url)
+        meta = attach_link_verification(published_url, target_urls=required_link_urls(payload))
         return AdapterResult(
             status="published",
             adapter=_ADAPTER,

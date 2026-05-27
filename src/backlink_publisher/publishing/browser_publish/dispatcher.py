@@ -20,6 +20,7 @@ from backlink_publisher._util.errors import (
 from backlink_publisher.config.loader import Config
 from backlink_publisher.publishing.adapters.base import AdapterResult
 from backlink_publisher.publishing.adapters.link_attr_verifier import (
+    required_link_urls,
     verify_link_attributes,
 )
 from backlink_publisher.publishing.registry import Publisher
@@ -159,7 +160,9 @@ class BrowserPublishDispatcher(Publisher):
         if not final_url:
             return None
         try:
-            return verify_link_attributes(final_url)
+            return verify_link_attributes(
+                final_url, target_urls=required_link_urls(payload)
+            )
         except Exception:
             return None
 

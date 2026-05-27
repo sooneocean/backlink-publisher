@@ -26,7 +26,7 @@ from backlink_publisher._util.logger import opencli_logger as log
 from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
-from .link_attr_verifier import verify_link_attributes
+from .link_attr_verifier import required_link_urls, verify_link_attributes
 
 
 def _json_log(**kwargs: Any) -> str:
@@ -419,7 +419,9 @@ class MediumBraveAdapter(Publisher):
         if mode == "publish":
             meta: dict = {}
             if final_url:
-                attr_check = verify_link_attributes(final_url)
+                attr_check = verify_link_attributes(
+                    final_url, target_urls=required_link_urls(payload)
+                )
                 meta["link_attr_verification"] = attr_check
                 ratio = attr_check.get("blank_ratio", 1.0)
                 total = attr_check.get("total_anchors", 0)

@@ -193,7 +193,10 @@ def submit_form(
 
 
 def attach_link_verification(
-    url: str, meta: dict[str, Any] | None = None
+    url: str,
+    meta: dict[str, Any] | None = None,
+    *,
+    target_urls: list[str] | None = None,
 ) -> dict[str, Any]:
     """Fire-and-forget post-publish link-attribute verification (R4 "measure").
 
@@ -205,8 +208,19 @@ def attach_link_verification(
     call. The verification result is what the R4 two-phase loop later reads to
     amend a platform's ``register(dofollow=...)`` from ``uncertain`` to a measured
     value. Never raises — verification failure must not fail a successful publish.
+
+    ``target_urls`` (Plan 2026-05-27-006 Unit 1): the row's required backlink
+    URLs (``required_link_urls(payload)``), threaded to
+    :func:`verify_link_attributes` so the verdict gains the target-specific
+    forward-path fields for the http_form_post family + livejournal. ``None``
+    keeps the page-wide-only shape.
     """
     out = dict(meta) if meta else {}
     if url:
-        out["link_attr_verification"] = verify_link_attributes(url)
+        if target_urls is not None:
+            out["link_attr_verification"] = verify_link_attributes(
+                url, target_urls=target_urls
+            )
+        else:
+            out["link_attr_verification"] = verify_link_attributes(url)
     return out

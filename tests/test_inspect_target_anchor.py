@@ -282,15 +282,20 @@ def test_ssrf_rejected_on_redirect_hop():
 # Regression — verify_link_attributes signature/behavior unchanged.
 # --------------------------------------------------------------------------
 
-def test_verify_link_attributes_signature_unchanged():
+def test_verify_link_attributes_signature():
+    """verify_link_attributes must keep back-compat positional `url`,
+    keyword-only `timeout` (10.0), and the new keyword-only `target_urls`
+    (None default) added in Plan 2026-05-27-006 Unit 1."""
     import inspect as _inspect_mod
 
     sig = _inspect_mod.signature(lav.verify_link_attributes)
     params = list(sig.parameters)
-    assert params == ["url", "timeout"]
-    # timeout is keyword-only with default 10.0
+    # positional: url; keyword-only: timeout, target_urls
+    assert params == ["url", "timeout", "target_urls"]
     assert sig.parameters["timeout"].kind == _inspect_mod.Parameter.KEYWORD_ONLY
     assert sig.parameters["timeout"].default == 10.0
+    assert sig.parameters["target_urls"].kind == _inspect_mod.Parameter.KEYWORD_ONLY
+    assert sig.parameters["target_urls"].default is None
 
 
 def test_verify_link_attributes_still_uses_http_get():

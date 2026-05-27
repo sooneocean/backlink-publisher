@@ -38,6 +38,7 @@ def verify_link_attributes(
     url: str,
     *,
     timeout: float = 10.0,
+    target_urls: Optional[list[str]] = None,
 ) -> dict:
     """Fetch ``url`` and audit ``<a>`` tags for surviving link attributes.
 
@@ -54,6 +55,15 @@ def verify_link_attributes(
             "nofollow_anchors": int,          # count with rel containing "nofollow"
             "nofollow_detected": bool,        # True iff nofollow_anchors > 0
             "nofollow_reason": str | None,    # human-readable warning when detected
+            # target-specific fields, present ONLY when target_urls is given
+            # (Plan 2026-05-27-006 Unit 1): isolate the operator's OWN required
+            # backlink(s) from the page-wide nofollow noise above.
+            "target_found": bool,             # every required target present as an anchor
+            "target_nofollow": bool,          # any present required target carries nofollow
+            "target_rewritten": bool,         # any present target only via interstitial/rewrite
+            "target_nofollow_urls": list[str],
+            "target_missing_urls": list[str],
+            "target_rewritten_urls": list[str],
         }
 
     Return shape (on failure):
@@ -67,6 +77,14 @@ def verify_link_attributes(
     weight even though it renders identically. ``nofollow_detected=True``
     is a warning signal — callers should record it for trend analysis but
     are NOT expected to fail the publish over it.
+
+    ``target_urls`` (Unit 1, no new fetch): when the caller passes the row's
+    required backlink URLs, the same parsed anchors are inspected for the
+    operator's *own* links so a per-target drift signal (nofollow / rewritten /
+    stripped) can be distinguished from the page-wide ``nofollow_detected``
+    (which trips on any footer/nav/share nofollow). Omitting it (``None`` /
+    empty) yields the exact pre-Unit-1 return shape (back-compat for the
+    page-wide consumers).
     """
     try:
         resp = _http.get(
@@ -104,7 +122,105 @@ def verify_link_attributes(
             "dofollow weight transfer is zero — check the publish adapter or "
             "the target platform's link policy"
         )
+    if target_urls:
+        target_fields = _target_verdicts(tags, target_urls)
+        if target_fields is not None:
+            result.update(target_fields)
     return result
+
+
+def _target_verdicts(tags: list[str], target_urls: list[str]) -> Optional[dict]:
+    """Classify the operator's OWN required backlink(s) against the page's
+    already-parsed ``<a>`` ``tags`` (Unit 1 — no extra fetch).
+
+    For each required target, scan the anchors and decide present / nofollow /
+    rewritten by the same canonicalize-and-unwrap-interstitial logic as
+    :func:`inspect_target_anchor` (a target reachable only through a redirect
+    shim counts as *rewritten*; a target with no matching anchor at all is
+    *missing*). A target is ``nofollow`` only when *every* matching anchor
+    strips weight (a single surviving dofollow instance ⇒ dofollow), keeping the
+    signal false-positive-resistant.
+
+    Returns the aggregate ``target_*`` fields (OR-ed across the required links),
+    or ``None`` when no target canonicalizes (nothing checkable → caller adds no
+    target fields, identical to the back-compat path)."""
+    # (original_url, canonical) for each canonicalizable required target.
+    checkable: list[tuple[str, str]] = []
+    for raw in target_urls:
+        canon = _canonicalize_for_match(raw)
+        if canon:
+            checkable.append((raw, canon))
+    if not checkable:
+        return None
+
+    # Pre-parse anchors once into (direct_canonical, effective_canonical, nofollow).
+    parsed: list[tuple[Optional[str], Optional[str], bool]] = []
+    for tag in tags:
+        href = _tag_href(tag)
+        if not href:
+            continue
+        direct = _canonicalize_for_match(href)
+        effective = _canonicalize_for_match(_unwrap_interstitial(href))
+        parsed.append((direct, effective, _rel_is_nofollow(_tag_rel(tag))))
+
+    nofollow_urls: list[str] = []
+    missing_urls: list[str] = []
+    rewritten_urls: list[str] = []
+    all_found = True
+
+    for raw, canon in checkable:
+        direct_match = False
+        has_dofollow = False
+        has_nofollow = False
+        for direct, effective, is_nf in parsed:
+            if direct == canon or effective == canon:
+                if direct == canon:
+                    direct_match = True
+                if is_nf:
+                    has_nofollow = True
+                else:
+                    has_dofollow = True
+        found = has_dofollow or has_nofollow
+        if not found:
+            all_found = False
+            missing_urls.append(raw)
+            continue
+        # Present only via an interstitial/redirect shim → rewritten.
+        if not direct_match:
+            rewritten_urls.append(raw)
+        # nofollow only if NO surviving dofollow instance.
+        if not has_dofollow:
+            nofollow_urls.append(raw)
+
+    return {
+        "target_found": all_found,
+        "target_nofollow": bool(nofollow_urls),
+        "target_rewritten": bool(rewritten_urls),
+        "target_nofollow_urls": nofollow_urls,
+        "target_missing_urls": missing_urls,
+        "target_rewritten_urls": rewritten_urls,
+    }
+
+
+def required_link_urls(payload: dict) -> list[str]:
+    """Extract the operator's REQUIRED backlink URLs from a publish ``payload``.
+
+    The publish payload is ``{**row, "platform": ...}`` (see
+    ``cli/publish_backlinks.py``), so the row's ``links`` list rides along.
+    Mirrors the canonical extraction the CLI verifier uses
+    (``cli/_publish_helpers.py`` ``_do_verify``):
+    ``[lnk["url"] for lnk in row.get("links", []) if lnk.get("required")]`` —
+    deliberately NOT the single top-level ``target_url`` (Plan Scope). Returns
+    ``[]`` when absent (the caller then adds no target-specific fields, keeping
+    the back-compat page-wide-only shape). Never raises."""
+    links = payload.get("links")
+    if not isinstance(links, list):
+        return []
+    urls: list[str] = []
+    for lnk in links:
+        if isinstance(lnk, dict) and lnk.get("required") and lnk.get("url"):
+            urls.append(str(lnk["url"]))
+    return urls
 
 
 def _tag_has_nofollow(tag_html: str) -> bool:

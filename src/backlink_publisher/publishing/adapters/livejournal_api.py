@@ -53,6 +53,7 @@ from backlink_publisher.publishing.registry import Publisher
 
 from .base import AdapterResult
 from .http_form_post import attach_link_verification
+from .link_attr_verifier import required_link_urls
 
 log = logging.getLogger(__name__)
 
@@ -279,7 +280,7 @@ class LivejournalAPIAdapter(Publisher):
                 draft_url=published_url,
             )
         # R4 "measure": fire-and-forget verify of the live dofollow status.
-        meta = attach_link_verification(published_url)
+        meta = attach_link_verification(published_url, target_urls=required_link_urls(payload))
         return AdapterResult(
             status="published",
             adapter="livejournal-api",

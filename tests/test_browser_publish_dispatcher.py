@@ -86,7 +86,7 @@ def stubbed_verify(monkeypatch):
     monkeypatch.setattr(
         disp_mod,
         "verify_link_attributes",
-        lambda url: {"verification": "ok", "url": url},
+        lambda url, *, target_urls=None: {"verification": "ok", "url": url},
     )
 
 

@@ -5,7 +5,10 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 
-from backlink_publisher.publishing.adapters.link_attr_verifier import verify_link_attributes
+from backlink_publisher.publishing.adapters.link_attr_verifier import (
+    required_link_urls,
+    verify_link_attributes,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -354,3 +357,217 @@ def test_verifier_skipped_result_no_warn(caplog):
     meta = result._provider_meta["link_attr_verification"]
     assert meta["verification"] == "skipped"
     assert "stripped" not in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# Unit 1 — target-specific verdict: verify_link_attributes(target_urls=...)
+# Plan 2026-05-27-006 Unit 1: isolate the operator's own required backlink(s)
+# from page-wide nofollow noise (footer / nav / share links).
+# ---------------------------------------------------------------------------
+
+_TARGET = "https://myblog.example.com/post/abc"
+
+
+def test_target_found_dofollow():
+    """Happy path: required target present as a dofollow anchor."""
+    html = _html(
+        f'<a href="{_TARGET}" target="_blank" rel="noopener">myblog</a>',
+        '<a href="https://other.com" rel="noopener">other</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["verification"] == "ok"
+    assert result["target_found"] is True
+    assert result["target_nofollow"] is False
+    assert result["target_rewritten"] is False
+    assert result["target_nofollow_urls"] == []
+    assert result["target_missing_urls"] == []
+    assert result["target_rewritten_urls"] == []
+
+
+def test_target_nofollow_drift_detected():
+    """Required target present but nofollow-injected → target_nofollow=True."""
+    html = _html(
+        f'<a href="{_TARGET}" rel="nofollow noopener">myblog</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["target_found"] is True
+    assert result["target_nofollow"] is True
+    assert _TARGET in result["target_nofollow_urls"]
+    assert result["target_rewritten"] is False
+    assert result["target_missing_urls"] == []
+
+
+def test_target_missing_drift_detected():
+    """Required target URL absent from page → target_found=False, appears in missing list."""
+    html = _html(
+        '<a href="https://unrelated.com" target="_blank">something</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["target_found"] is False
+    assert _TARGET in result["target_missing_urls"]
+    assert result["target_nofollow"] is False
+    assert result["target_rewritten"] is False
+
+
+def test_target_rewritten_via_interstitial():
+    """Required target reachable only via redirect-shim → target_rewritten=True.
+
+    The anchor href uses a redirect shim
+    (e.g., ``https://shim.example.com/?url=<encoded-target>``).  Our unwrap
+    logic resolves to the effective destination, and the *direct* href does not
+    match, so the target is flagged as rewritten.
+    """
+    shim = f"https://shim.example.com/?url={_TARGET}"
+    html = _html(
+        f'<a href="{shim}" rel="noopener">myblog via shim</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["target_found"] is True
+    assert result["target_rewritten"] is True
+    assert _TARGET in result["target_rewritten_urls"]
+    assert result["target_nofollow"] is False
+
+
+def test_unrelated_page_nofollow_does_not_taint_target():
+    """Page-wide nofollow (nav/footer) fires nofollow_detected, but if the
+    operator's OWN target link is dofollow, target_nofollow stays False."""
+    html = _html(
+        f'<a href="{_TARGET}" rel="noopener">myblog</a>',
+        '<a href="https://nav.example.com" rel="nofollow">nav</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["nofollow_detected"] is True      # page-wide fire
+    assert result["target_nofollow"] is False       # our link is dofollow
+    assert result["target_found"] is True
+
+
+def test_target_dofollow_wins_over_same_nofollow_duplicate():
+    """If the same target URL appears twice (once dofollow, once nofollow),
+    a single surviving dofollow instance means target_nofollow=False."""
+    html = _html(
+        f'<a href="{_TARGET}" rel="nofollow">nofollow copy</a>',
+        f'<a href="{_TARGET}" rel="noopener">dofollow copy</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[_TARGET])
+
+    assert result["target_nofollow"] is False  # dofollow copy survives
+
+
+def test_back_compat_no_target_fields_when_target_urls_none():
+    """Back-compat: target_urls=None → no target_* keys in result."""
+    html = _html('<a href="https://a.com" target="_blank">link</a>')
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com")  # no target_urls
+
+    assert "target_found" not in result
+    assert "target_nofollow" not in result
+    assert "target_missing_urls" not in result
+
+
+def test_back_compat_no_target_fields_when_target_urls_empty():
+    """Back-compat: target_urls=[] → no target_* keys in result."""
+    html = _html('<a href="https://a.com" target="_blank">link</a>')
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[])
+
+    assert "target_found" not in result
+    assert "target_nofollow" not in result
+
+
+def test_skipped_result_has_no_target_fields():
+    """verification=skipped → no target_* fields (target_urls present but unused)."""
+    import requests as req_lib
+    with patch("backlink_publisher.http.get", side_effect=req_lib.ConnectionError("refused")):
+        result = verify_link_attributes("http://127.0.0.1:1/x", timeout=0.1,
+                                        target_urls=[_TARGET])
+
+    assert result["verification"] == "skipped"
+    assert "target_found" not in result
+    assert "target_nofollow" not in result
+
+
+def test_multiple_required_links_all_dofollow():
+    """All required links present and dofollow → target_found=True, no drift."""
+    t1 = "https://myblog.example.com/post/one"
+    t2 = "https://myblog.example.com/post/two"
+    html = _html(
+        f'<a href="{t1}" rel="noopener">one</a>',
+        f'<a href="{t2}" rel="noopener">two</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com", target_urls=[t1, t2])
+
+    assert result["target_found"] is True
+    assert result["target_nofollow"] is False
+    assert result["target_missing_urls"] == []
+
+
+def test_multiple_required_links_one_missing_one_nofollow():
+    """One required link missing, another nofollow: both failure modes surface."""
+    present = "https://myblog.example.com/post/one"
+    missing = "https://myblog.example.com/post/two"
+    html = _html(
+        f'<a href="{present}" rel="nofollow">one</a>',
+        '<a href="https://unrelated.com">x</a>',
+    )
+    with patch("backlink_publisher.http.get", return_value=_mock_resp(html)):
+        result = verify_link_attributes("https://pub.example.com",
+                                        target_urls=[present, missing])
+
+    assert result["target_found"] is False
+    assert result["target_nofollow"] is True
+    assert present in result["target_nofollow_urls"]
+    assert missing in result["target_missing_urls"]
+
+
+# ---------------------------------------------------------------------------
+# Unit 1 — required_link_urls() extractor
+# ---------------------------------------------------------------------------
+
+def test_required_link_urls_extracts_required_only():
+    payload = {
+        "links": [
+            {"url": "https://a.com", "required": True},
+            {"url": "https://b.com", "required": False},
+            {"url": "https://c.com"},               # no required key
+            {"url": "https://d.com", "required": True},
+        ]
+    }
+    result = required_link_urls(payload)
+    assert result == ["https://a.com", "https://d.com"]
+
+
+def test_required_link_urls_empty_links():
+    assert required_link_urls({"links": []}) == []
+
+
+def test_required_link_urls_no_links_key():
+    assert required_link_urls({}) == []
+
+
+def test_required_link_urls_links_is_none():
+    assert required_link_urls({"links": None}) == []
+
+
+def test_required_link_urls_skips_non_dict_entries():
+    payload = {"links": ["not-a-dict", 42, {"url": "https://x.com", "required": True}]}
+    result = required_link_urls(payload)
+    assert result == ["https://x.com"]
+
+
+def test_required_link_urls_url_coerced_to_str():
+    """URL value should be coerced to str regardless of input type."""
+    payload = {"links": [{"url": 12345, "required": True}]}
+    result = required_link_urls(payload)
+    assert result == ["12345"]

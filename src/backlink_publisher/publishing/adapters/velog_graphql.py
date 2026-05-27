@@ -60,7 +60,7 @@ from backlink_publisher._util.errors import (
 from backlink_publisher._util.logger import opencli_logger as log
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
-from .link_attr_verifier import verify_link_attributes
+from .link_attr_verifier import required_link_urls, verify_link_attributes
 from .retry import RETRYABLE_HTTP_STATUSES, retry_transient_call
 
 # ── Module constants ──────────────────────────────────────────────────────────
@@ -695,7 +695,9 @@ class VelogGraphQLAdapter(Publisher):
 
         # 9. Link attribute verification (R3 — warn only, does not change status)
         #    verify_publish (link presence) is handled by the CLI layer.
-        link_attr = verify_link_attributes(published_url)
+        link_attr = verify_link_attributes(
+            published_url, target_urls=required_link_urls(payload)
+        )
         if link_attr.get("verification") != "ok":
             log.warning(_json_log(
                 adapter="velog-graphql",
