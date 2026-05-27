@@ -324,11 +324,6 @@ def format_link_md(url: str, anchor: str) -> str:
     return f"[{anchor}]({url})"
 
 
-def format_link_plain(url: str) -> str:
-    """Format a link as a plain URL."""
-    return url
-
-
 def links_to_markdown(links: list[dict[str, Any]]) -> str:
     """Convert a list of link dicts to a markdown links section."""
     lines: list[str] = []
@@ -349,8 +344,3 @@ def slugify(text: str) -> str:
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
     value = re.sub(r"[^\w\s-]", "", value).lower().strip()
     return re.sub(r"[-\s]+", "-", value)
-
-
-def normalize_text(text: str) -> str:
-    """Normalize whitespace in text."""
-    return re.sub(r"\s+", " ", text).strip()
