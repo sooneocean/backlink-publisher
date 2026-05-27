@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>SPA article — comments mounted client-side</title></head>
+<body>
+  <div id="app">
+    <h1>An article rendered by a single-page app</h1>
+    <p>The discussion widget below is mounted entirely by JavaScript after load;
+       the server-rendered HTML contains no discussion markup at all.</p>
+    <div id="thread-root"></div>
+  </div>
+  <script src="/static/threads.bundle.js"></script>
+  <script>
+    window.__BOOT__ = { threadId: 904, mount: 'thread-root' };
+  </script>
+</body>
+</html>

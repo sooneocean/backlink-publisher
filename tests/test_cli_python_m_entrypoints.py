@@ -46,6 +46,7 @@ _CLI_ONLY_MODULES = {
     "preflight-targets": "backlink_publisher.cli.preflight_targets",
     "cull-channels": "backlink_publisher.cli.cull_channels",
     "canary-targets": "backlink_publisher.cli.canary_targets",
+    "comment": "backlink_publisher.cli.comment",
 }
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
