@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -101,12 +101,9 @@ def test_resume_route_exit0_appends_history(client, tmp_path):
         "title": "T", "draft_url": "", "published_url": "https://x.com",
         "created_at": "2026-01-01T00:00:00+00:00", "adapter": "blogger-api", "error": None,
     })
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = done_jsonl + "\n"
-    mock_result.stderr = ""
+    capture = {"stdout": done_jsonl + "\n", "stderr": "", "returncode": 0}
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -128,12 +125,9 @@ def test_resume_route_exit0_empty_stdout_does_not_persist_fake_published(client)
     return 0 with no output (nothing pending), and the route still appended a
     {status:'published', platform:'unknown', article_urls:[]} entry, giving
     operators a green check for a publish that never happened."""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = ""
-    mock_result.stderr = ""
+    capture = {"stdout": "", "stderr": "", "returncode": 0}
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -151,12 +145,9 @@ def test_resume_route_exit0_results_without_urls_does_not_persist_fake_published
         "title": "T", "draft_url": "", "published_url": "",
         "created_at": "2026-01-01T00:00:00+00:00", "adapter": "blogger-api", "error": None,
     })
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = no_url_jsonl + "\n"
-    mock_result.stderr = ""
+    capture = {"stdout": no_url_jsonl + "\n", "stderr": "", "returncode": 0}
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -169,26 +160,35 @@ def test_resume_route_exit4_shows_partial(client, tmp_path):
         "title": "T", "draft_url": "", "published_url": "https://x.com",
         "created_at": "t", "adapter": "blogger-api", "error": None,
     })
-    mock_result = MagicMock()
-    mock_result.returncode = 4
-    mock_result.stdout = done_jsonl + "\n"
-    mock_result.stderr = "item r1 still failed"
+    # Long stderr (> the old 200-char cap) with the config_echo banner prepended,
+    # to prove the truncation fix: the operator sees the full banner-stripped
+    # error, not a 200-char slice and not the banner.
+    banner = (
+        "[publish-backlinks] effective config:\n"
+        "  config:    /tmp/x.toml\n"
+        "  env:       (none)\n"
+        "  platforms: blogger\n"
+        "  sha:       0123456789abcdef\n"
+    )
+    real_error = "item r1 still failed: " + ("X" * 400) + " END_OF_ERROR"
+    mock_result = {"stdout": done_jsonl + "\n", "stderr": banner + real_error,
+                   "returncode": 4}
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=mock_result):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]):
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
             body = resp.data.decode()
             assert "部分发布失败" in body or "failed" in body.lower()
+            # Full error surfaced (banner stripped, not truncated at 200 chars).
+            assert "END_OF_ERROR" in body
+            assert "effective config:" not in body
 
 
 def test_resume_route_exit2_no_history(client, tmp_path):
-    mock_result = MagicMock()
-    mock_result.returncode = 2
-    mock_result.stdout = ""
-    mock_result.stderr = "checkpoint not found"
+    capture = {"stdout": "", "stderr": "checkpoint not found", "returncode": 2}
 
-    with patch("subprocess.run", return_value=mock_result):
+    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -209,18 +209,19 @@ def test_resume_route_rejects_invalid_run_id(client):
     assert resp.status_code == 400
 
 
-def test_resume_route_uses_subprocess_not_run_pipe(client):
-    """Guard: resume must use subprocess.run directly, not run_pipe."""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = ""
-    mock_result.stderr = ""
+def test_resume_route_uses_run_pipe_capture_not_raising_run_pipe(client):
+    """Guard: resume must use the NON-raising ``run_pipe_capture`` (preserves
+    stdout + returncode so exit-4 partial-publish rows survive), never the
+    raising ``run_pipe`` (which discards stdout on any non-zero exit — the
+    original reason this route hand-rolled ``subprocess.run``)."""
+    capture = {"stdout": "", "stderr": "", "returncode": 0}
 
-    with patch("subprocess.run", return_value=mock_result) as mock_sub:
+    with patch("webui_app.routes.checkpoint.run_pipe_capture",
+               return_value=capture) as mock_capture:
         with patch("webui_app.helpers.cli_runner.run_pipe") as mock_run_pipe:
             client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             mock_run_pipe.assert_not_called()
-            mock_sub.assert_called_once()
+            mock_capture.assert_called_once()
 
 
 # ── /checkpoint/dismiss ────────────────────────────────────────────────────────

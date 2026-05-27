@@ -108,8 +108,35 @@ def _rewrite_cli_cmd(cmd):
     return new_cmd, env
 
 
-def run_pipe(cmd, stdin):
-    """Run a pipeline command, raising on non-zero exit or silent failure."""
+# Cap on surfaced CLI error text. Long enough that the real diagnostic (an
+# ImportError / AuthExpiredError / traceback) is never cut off, bounded so an
+# attacker-influenced message (a target URL, a fetched-page snippet folded into
+# str(exc)) can't flood the WebUI/logs. Rendering paths are autoescaped (Jinja);
+# this is the length half of the untrusted-content guard.
+_MAX_SURFACED_ERROR = 4000
+
+
+def surface_cli_error(stderr: str | None, *, limit: int = _MAX_SURFACED_ERROR) -> str:
+    """Banner-stripped, length-bounded CLI error text for operator display.
+
+    Replaces the old ``stderr[:200]`` truncation: strips the config_echo banner
+    (which would otherwise eat the first ~210 chars) so the real error survives,
+    then caps the result so untrusted/voluminous stderr can't flood the UI.
+    """
+    cleaned = strip_cli_diagnostic_banner(stderr or "")
+    if len(cleaned) > limit:
+        return cleaned[:limit].rstrip() + " …(truncated)"
+    return cleaned
+
+
+def run_pipe_capture(cmd, stdin) -> dict[str, str | int]:
+    """Run a pipeline command and return ``{stdout, stderr, returncode}``.
+
+    The non-raising sibling of :func:`run_pipe`. Callers that must branch on the
+    exit code *with stdout intact* — publish exit-4 partial-failure, checkpoint
+    ``--resume`` — use this; ``run_pipe`` discards stdout by raising on any
+    non-zero exit.
+    """
     new_cmd, env = _rewrite_cli_cmd(cmd)
     result = subprocess.run(
         new_cmd,
@@ -119,19 +146,30 @@ def run_pipe(cmd, stdin):
         cwd=_REPO_ROOT or os.getcwd(),
         env=env,
     )
-    if result.returncode != 0:
-        raise Exception(result.stderr or f"Exit code: {result.returncode}")
+    return {
+        'stdout': result.stdout,
+        'stderr': result.stderr,
+        'returncode': result.returncode,
+    }
+
+
+def run_pipe(cmd, stdin):
+    """Run a pipeline command, raising on non-zero exit or silent failure."""
+    captured = run_pipe_capture(cmd, stdin)
+    if captured['returncode'] != 0:
+        raise Exception(captured['stderr'] or f"Exit code: {captured['returncode']}")
     # Detect silent-failure: exit 0 with empty stdout AND empty stderr is
     # almost always a broken entry-point (missing __main__.py or
     # `if __name__ == "__main__":` guard). Surface a real diagnostic.
-    if stdin and not result.stdout.strip() and not result.stderr.strip():
+    if stdin and not captured['stdout'].strip() and not captured['stderr'].strip():
         invoked = ' '.join(cmd) if isinstance(cmd, (list, tuple)) else str(cmd)
+        new_cmd, _ = _rewrite_cli_cmd(cmd)
         raise Exception(
             f"CLI '{invoked}' produced no output (exit 0, stdout/stderr empty). "
             f"Likely a missing __main__.py or `if __name__ == \"__main__\":` "
             f"guard. Rewritten command: {new_cmd}"
         )
-    return {'stdout': result.stdout, 'stderr': result.stderr}
+    return {'stdout': captured['stdout'], 'stderr': captured['stderr']}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
