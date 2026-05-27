@@ -103,7 +103,7 @@ def test_resume_route_exit0_appends_history(client, tmp_path):
     })
     capture = {"stdout": done_jsonl + "\n", "stderr": "", "returncode": 0}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
+    with patch("webui_app.api.pipeline_api.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -127,7 +127,7 @@ def test_resume_route_exit0_empty_stdout_does_not_persist_fake_published(client)
     operators a green check for a publish that never happened."""
     capture = {"stdout": "", "stderr": "", "returncode": 0}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
+    with patch("webui_app.api.pipeline_api.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -147,7 +147,7 @@ def test_resume_route_exit0_results_without_urls_does_not_persist_fake_published
     })
     capture = {"stdout": no_url_jsonl + "\n", "stderr": "", "returncode": 0}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
+    with patch("webui_app.api.pipeline_api.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -174,7 +174,7 @@ def test_resume_route_exit4_shows_partial(client, tmp_path):
     mock_result = {"stdout": done_jsonl + "\n", "stderr": banner + real_error,
                    "returncode": 4}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=mock_result):
+    with patch("webui_app.api.pipeline_api.run_pipe_capture", return_value=mock_result):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]):
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -188,7 +188,7 @@ def test_resume_route_exit4_shows_partial(client, tmp_path):
 def test_resume_route_exit2_no_history(client, tmp_path):
     capture = {"stdout": "", "stderr": "checkpoint not found", "returncode": 2}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture", return_value=capture):
+    with patch("webui_app.api.pipeline_api.run_pipe_capture", return_value=capture):
         with patch.object(__import__("webui_store").base.JsonStore, "update", return_value=[]) as mock_hist:
             resp = client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})
             assert resp.status_code == 200
@@ -216,7 +216,7 @@ def test_resume_route_uses_run_pipe_capture_not_raising_run_pipe(client):
     original reason this route hand-rolled ``subprocess.run``)."""
     capture = {"stdout": "", "stderr": "", "returncode": 0}
 
-    with patch("webui_app.routes.checkpoint.run_pipe_capture",
+    with patch("webui_app.api.pipeline_api.run_pipe_capture",
                return_value=capture) as mock_capture:
         with patch("webui_app.helpers.cli_runner.run_pipe") as mock_run_pipe:
             client.post("/checkpoint/resume", data={"run_id": "20260101T000000-abcdef01"})

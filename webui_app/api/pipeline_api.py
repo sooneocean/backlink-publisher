@@ -18,6 +18,7 @@ from backlink_publisher._util.error_envelope import parse as _parse_envelope
 from ..helpers.cli_runner import (
     _MAX_SURFACED_ERROR,
     run_pipe,
+    run_pipe_capture,
     strip_cli_diagnostic_banner,
     surface_cli_error,
 )
@@ -198,11 +199,51 @@ class PipelineAPI:
         except Exception as exc:
             return _typed_error_result(str(exc), label)
 
+    def _invoke_capture(self, cmd: list[str], stdin: str, label: str) -> PipeResult:
+        """Run one pipeline CLI, **preserving stdout on non-zero exit**.
+
+        The non-raising sibling of :meth:`_invoke`. ``run_pipe`` discards stdout
+        by raising on any non-zero exit; some CLIs carry meaningful stdout *with*
+        a non-zero code — ``report-anchors`` exit-6 (alarm raised, but the report
+        document is on stdout) and ``publish-backlinks`` exit-4 (partial success:
+        some rows published). Those callers branch on ``exit_code`` and still need
+        the rows, so they use this path.
+
+        On success ``exit_code`` is set to ``0`` (not ``None``) so callers like
+        ``checkpoint.py`` can branch 0 / 4 / else uniformly. Carries the same
+        silent-failure guard as ``run_pipe``: a 0-exit with empty stdout *and*
+        stderr on non-empty stdin is almost always a broken entry-point.
+        """
+        captured = run_pipe_capture(cmd, stdin)
+        rc = captured["returncode"]
+        stdout = captured["stdout"]
+        stderr = captured.get("stderr", "")
+        if rc == 0:
+            if stdin and not stdout.strip() and not stderr.strip():
+                return PipeResult(
+                    success=False,
+                    error=f"{label}: CLI produced no output (exit 0, stdout/stderr "
+                    "empty) — likely a broken entry-point.",
+                    error_class="unrecognized",
+                    exit_code=0,
+                )
+            return PipeResult(stdout=stdout, stderr=stderr, success=True, exit_code=0)
+        # Non-zero: keep stdout, attach the typed error, and ensure exit_code
+        # reflects the real code (the envelope's exit_code wins when present).
+        result = _typed_error_result(stderr, label)
+        result.stdout = stdout
+        if result.exit_code is None:
+            result.exit_code = rc
+        return result
+
     # ── plan ─────────────────────────────────────────────────────────────
 
-    def plan(self, seed_json: str) -> PipeResult:
+    def plan(self, seed_json: str, *, work_count: int | None = None) -> PipeResult:
         """Run ``plan-backlinks`` with the given JSONL seed data."""
-        return self._invoke(["plan-backlinks"], seed_json, "plan-backlinks failed")
+        cmd = ["plan-backlinks"]
+        if work_count is not None:
+            cmd += ["--work-count", str(work_count)]
+        return self._invoke(cmd, seed_json, "plan-backlinks failed")
 
     # ── validate ─────────────────────────────────────────────────────────
 
@@ -229,3 +270,46 @@ class PipelineAPI:
         """Run ``publish-backlinks --platform <p> --mode <m>``."""
         cmd = ["publish-backlinks", "--platform", platform, "--mode", mode]
         return self._invoke(cmd, plans_jsonl, "publish-backlinks failed")
+
+    def publish_seed(self, seed_jsonl: str) -> PipeResult:
+        """Run bare ``publish-backlinks`` (platform/mode carried in the seed row).
+
+        The queue processor (``scheduler._process_queue_job``) builds a self-
+        describing seed where ``platform``/``publish_mode`` live in the payload,
+        so it invokes the CLI with no flags. Capture-based so a partial-success
+        exit still carries the published rows and the typed error/exit-code reach
+        the 429-backoff branch.
+        """
+        return self._invoke_capture(
+            ["publish-backlinks"], seed_jsonl, "publish-backlinks failed"
+        )
+
+    # ── resume ───────────────────────────────────────────────────────────
+
+    def resume(self, run_id: str) -> PipeResult:
+        """Run ``publish-backlinks --resume <run_id>`` for checkpoint recovery.
+
+        Capture-based: ``checkpoint.py`` distinguishes exit 0 (full) / 4 (partial,
+        rows still on stdout) / else (failed) via ``PipeResult.exit_code`` — so the
+        exit code must survive and stdout must not be discarded on exit-4.
+        """
+        return self._invoke_capture(
+            ["publish-backlinks", "--resume", run_id], "", "publish resume failed"
+        )
+
+    # ── report-anchors ─────────────────────────────────────────────────────
+
+    def report_anchors(self, profile: str, *, as_json: bool = True) -> PipeResult:
+        """Run ``report-anchors --from-profile <profile>`` (default ``--json``).
+
+        Capture-based because ``report-anchors`` emits a single JSON/markdown
+        **document** (not JSONL rows) and exits 6 when the anchor-distribution
+        alarm fires — but the document is still on stdout. ``run_pipe`` would
+        discard it; this keeps it, with the alarm surfaced as ``error_class``/
+        ``exit_code`` (advisory) while ``stdout`` stays parseable. Read the
+        document via ``result.stdout`` (``.rows`` cannot parse a single document).
+        """
+        cmd = ["report-anchors", "--from-profile", profile]
+        if as_json:
+            cmd.append("--json")
+        return self._invoke_capture(cmd, "", "report-anchors failed")

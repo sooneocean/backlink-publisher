@@ -443,7 +443,7 @@ ceiling raised in-PR with rationale).
 `stderr[:200]`/`[:300]`/`[:500]` for pipeline CLIs (pipeline.py *and* checkpoint.py);
 existing pipeline-route + checkpoint tests green.
 
-- [ ] **Unit 4: B0 — funnel all callers through `PipelineAPI`; add `report-anchors` method**
+- [x] **Unit 4: B0 — funnel all callers through `PipelineAPI`; add `report-anchors` method**
 
 **Goal:** Single seam: no route/service calls `run_pipe`/`subprocess` for in-scope
 CLIs directly; `PipelineAPI` gains `report_anchors()`. Still subprocess underneath

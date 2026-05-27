@@ -10,7 +10,7 @@ from flask import Blueprint, redirect, request, session
 from backlink_publisher import checkpoint as _checkpoint_mod
 from backlink_publisher._util.logger import plan_logger
 from ..helpers.contexts import _render
-from ..helpers.cli_runner import describe_cli_error, run_pipe_capture
+from ..api.pipeline_api import PipelineAPI
 from ..helpers.security import _check_localhost, _validate_webui_run_id
 from ..helpers.history import _parse_publish_results, _push_history_aggregate
 
@@ -23,13 +23,13 @@ def checkpoint_resume():
     run_id = request.form.get("run_id", "")
     _validate_webui_run_id(run_id)
 
-    result = run_pipe_capture(["publish-backlinks", "--resume", run_id], "")
+    result = PipelineAPI().resume(run_id)
 
-    publish_results = _parse_publish_results(result["stdout"])
+    publish_results = _parse_publish_results(result.stdout)
     config = session.get("config", {})
     platform = publish_results[0].get("platform", "unknown") if publish_results else "unknown"
 
-    if result["returncode"] == 0:
+    if result.exit_code == 0:
         article_urls = [u for u in (
             (r.get("published_url") or r.get("draft_url", ""))
             for r in publish_results if r
@@ -55,7 +55,7 @@ def checkpoint_resume():
             publish_results=publish_results, config=config,
             history=history, history_active=True,
             flash={"type": "success", "msg": f"恢复发布成功，共 {len(publish_results)} 篇"})
-    elif result["returncode"] == 4:
+    elif result.exit_code == 4:
         done = [r for r in publish_results if r.get("error") is None]
         _push_history_aggregate({
             "id": str(uuid.uuid4())[:8],
@@ -66,15 +66,15 @@ def checkpoint_resume():
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "article_urls": [r.get("published_url") or r.get("draft_url", "")
                              for r in done],
-            "stderr_summary": describe_cli_error(result["stderr"]),
+            "stderr_summary": result.error,
         })
         return _render('index.html',
             publish_results=publish_results, config=config,
             history_active=True,
-            error=f"部分发布失败。{describe_cli_error(result['stderr'])}")
+            error=f"部分发布失败。{result.error}")
     else:
         return _render('index.html', config=config,
-            error=f"恢复发布失败 (exit {result['returncode']}): {describe_cli_error(result['stderr'])}")
+            error=f"恢复发布失败 (exit {result.exit_code}): {result.error}")
 
 
 @bp.route("/checkpoint/dismiss", methods=["POST"])

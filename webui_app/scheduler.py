@@ -11,7 +11,8 @@ from webui_store import drafts_store as _drafts_store
 from webui_store import history_store as _history_store
 from webui_store import queue_store as _queue_store
 
-from .helpers.cli_runner import run_pipe, strip_cli_diagnostic_banner
+from .api.pipeline_api import PipelineAPI
+from .helpers.cli_runner import strip_cli_diagnostic_banner
 from .helpers.history import (
     _parse_publish_results,
     _push_history_per_row,
@@ -56,27 +57,38 @@ def _process_queue_job() -> None:
             'extra_urls': urls[1:] if urls else [],
         }
         
-        run_pipe(['publish-backlinks'], json.dumps([seed]))
-        _queue_store.update_task(task_id, {
-            'status': 'success',
-            'completed_at': now.isoformat()
-        })
-    except Exception as exc:
-        # run_pipe raises on failure — capture error, detect 429 backoff
-        stderr = str(exc)
-        if "429" in stderr or "Too Many Requests" in stderr:
-            retry_delay = 300
-            next_retry = now + timedelta(seconds=retry_delay)
+        result = PipelineAPI().publish_seed(json.dumps([seed]))
+        if result.success:
             _queue_store.update_task(task_id, {
-                'status': 'failed',
-                'error': f'频率限制 (429)，将在 {next_retry.strftime("%H:%M")} 重试',
-                'next_retry_at': next_retry.isoformat()
+                'status': 'success',
+                'completed_at': now.isoformat()
             })
         else:
-            _queue_store.update_task(task_id, {
-                'status': 'failed',
-                'error': stderr or '发布失败'
-            })
+            # publish failed — capture the typed error, detect 429 backoff.
+            # The string check is kept (not error_class) so backoff fires even
+            # when the rate-limit surfaces only in the message text.
+            err = result.error or '发布失败'
+            if "429" in err or "Too Many Requests" in err:
+                retry_delay = 300
+                next_retry = now + timedelta(seconds=retry_delay)
+                _queue_store.update_task(task_id, {
+                    'status': 'failed',
+                    'error': f'频率限制 (429)，将在 {next_retry.strftime("%H:%M")} 重试',
+                    'next_retry_at': next_retry.isoformat()
+                })
+            else:
+                _queue_store.update_task(task_id, {
+                    'status': 'failed',
+                    'error': err
+                })
+    except Exception as exc:
+        # Defensive: PipelineAPI returns a PipeResult rather than raising, so
+        # this catches only seed-construction / store errors — still mark the
+        # task failed rather than leaving it wedged in 'processing'.
+        _queue_store.update_task(task_id, {
+            'status': 'failed',
+            'error': str(exc) or '发布失败'
+        })
 
 
 def _publish_draft_job(item_id: str) -> None:
@@ -102,12 +114,13 @@ def _publish_draft_job(item_id: str) -> None:
         }, *hist][:100])
 
     try:
-        cmd = ['publish-backlinks', '--platform', platform, '--mode', publish_mode]
-        result = run_pipe(cmd, plans_jsonl)
-        published = result['stdout']
+        result = PipelineAPI().publish(plans_jsonl, platform, publish_mode)
+        if not result.success:
+            raise RuntimeError(result.error or '发布失败')
+        published = result.stdout
 
         if not published.strip():
-            raise RuntimeError(result.get('stderr') or '发布失败，无输出')
+            raise RuntimeError(result.error or '发布失败，无输出')
 
         publish_results = _parse_publish_results(published)
         article_urls = [

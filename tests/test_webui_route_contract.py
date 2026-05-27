@@ -90,10 +90,11 @@ def _no_run_pipe():
     into each module that calls it — so the name binds into that module's
     namespace and must be patched there, not only at the definition site.
     After the route→api extraction the live consumers are ``api.pipeline_api``
-    (the pipeline/batch routes delegate through PipelineAPI, which holds the
-    binding), ``routes.sites``, and ``scheduler``. ``routes.pipeline`` /
-    ``routes.batch`` no longer import run_pipe directly, so patching them
-    would raise AttributeError at fixture setup.
+    (PipelineAPI holds the binding; sites, scheduler, checkpoint, and seo_viz
+    all delegate through it after the Phase 2 Unit 4 funnel). ``routes.sites`` /
+    ``scheduler`` no longer import run_pipe directly, so patching them there
+    would raise AttributeError at fixture setup. checkpoint resume +
+    report_anchors go through the non-raising capture variant.
 
     The ``_no_real_subprocess`` fixture also stubs ``subprocess.run``
     underneath, so even if a patch is missed the call still won't hit the
@@ -102,13 +103,15 @@ def _no_run_pipe():
     def _fake(_cmd, _stdin):
         return {"stdout": "", "stderr": ""}
 
+    def _fake_capture(_cmd, _stdin):
+        return {"stdout": "", "stderr": "", "returncode": 0}
+
     targets = [
-        "webui_app.helpers.cli_runner.run_pipe",
-        "webui_app.api.pipeline_api.run_pipe",
-        "webui_app.routes.sites.run_pipe",
-        "webui_app.scheduler.run_pipe",
+        ("webui_app.helpers.cli_runner.run_pipe", _fake),
+        ("webui_app.api.pipeline_api.run_pipe", _fake),
+        ("webui_app.api.pipeline_api.run_pipe_capture", _fake_capture),
     ]
-    patches = [patch(t, side_effect=_fake) for t in targets]
+    patches = [patch(t, side_effect=f) for t, f in targets]
     for p in patches:
         p.start()
     try:

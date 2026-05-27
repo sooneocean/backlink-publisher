@@ -23,11 +23,11 @@ from backlink_publisher._util.url import (
 from backlink_publisher.content.scraper import fetch_work_metadata
 from backlink_publisher._util.logger import plan_logger
 
+from ..api.pipeline_api import PipelineAPI
 from ..helpers.cli_runner import (
     _WORK_THEMED_RUNS,
     _WORK_THEMED_RUNS_MAX,
     _parse_lines,
-    run_pipe,
 )
 from ..helpers.security import _ensure_csrf_token
 from ..helpers.url_meta import (
@@ -250,14 +250,13 @@ def sites_run():
     }
     seed_jsonl = json.dumps(seed_row, ensure_ascii=False) + "\n"
 
-    try:
-        result = run_pipe(["plan-backlinks", "--work-count", "10"], seed_jsonl)
-    except Exception as exc:
+    result = PipelineAPI().plan(seed_jsonl, work_count=10)
+    if not result.success:
         return redirect(
-            "/sites?flash_type=danger&flash_msg=" + f"plan-backlinks 失败：{exc}"
+            "/sites?flash_type=danger&flash_msg=" + f"plan-backlinks 失败：{result.error}"
         )
 
-    rows = _parse_run_result_local(result["stdout"], entry)
+    rows = _parse_run_result_local(result.stdout, entry)
     summary = {
         "total": len(rows),
         "generated": sum(1 for r in rows if r["status"] == "success"),

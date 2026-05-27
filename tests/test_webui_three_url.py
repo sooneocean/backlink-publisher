@@ -344,7 +344,7 @@ class TestSitesRun:
     def test_run_invokes_run_pipe_and_redirects_to_result(self, client):
         token = self._save_basic(client)
         with patch(
-            "webui_app.routes.sites.run_pipe",
+            "webui_app.api.pipeline_api.run_pipe",
             return_value={"stdout": '{"id":"abc"}\n', "stderr": ""},
         ) as mock_pipe:
             resp = client.post(

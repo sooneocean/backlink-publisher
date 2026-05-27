@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, Any
 import json
-import subprocess
 
 @dataclass
 class AnchorData:
@@ -12,10 +11,17 @@ class AnchorData:
 
     @classmethod
     def from_report(cls, domain: str):
-        # Invoke report-anchors
-        cmd = ["report-anchors", "--from-profile", domain, "--json"]
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        # Note: report-anchors exits with 6 on breach, so we catch it
+        # Funnel through PipelineAPI (Phase 2 Unit 4) instead of a raw
+        # subprocess.run. report-anchors exits 6 on an anchor-distribution
+        # alarm but still writes the JSON document to stdout, so the
+        # capture-based report_anchors() keeps it. Only an empty stdout (a
+        # genuine crash) is fatal — the old code did json.loads(stdout)
+        # regardless of returncode and would raise an opaque JSONDecodeError.
+        from ..api.pipeline_api import PipelineAPI
+
+        result = PipelineAPI().report_anchors(domain)
+        if not result.stdout.strip():
+            raise RuntimeError(result.error or "report-anchors produced no output")
         data = json.loads(result.stdout)
         return cls(
             main_domain=data["main_domain"],
