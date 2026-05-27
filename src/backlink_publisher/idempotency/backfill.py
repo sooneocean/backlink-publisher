@@ -69,7 +69,6 @@ _ADAPTER_STRING_TO_PLATFORM: dict[str, str] = {
     "ghpages": "ghpages",
     "hashnode": "hashnode",
     "hashnode-gql": "hashnode",
-    "jianshu": "jianshu",
     "juejin": "juejin",
     "linkedin": "linkedin",
     "livejournal-api": "livejournal",

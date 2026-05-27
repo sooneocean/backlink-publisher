@@ -177,6 +177,7 @@ _KNOWN_UNMAPPED = frozenset({
     "llm-anchor-provider",
     "llm-article-provider",
     "llm-image-prompt-generator",
+    "comment-brief",  # LLM comment-brief generator (llm_anchor_provider.py) — not a publisher
     "image-gen",
     "http-form-post",
 })
