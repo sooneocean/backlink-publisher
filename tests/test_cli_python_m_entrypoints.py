@@ -43,6 +43,7 @@ _CLI_MODULES = {
 # read-only CLI-only in v1 (Plan 2026-05-26-001).
 _CLI_ONLY_MODULES = {
     "audit-state": "backlink_publisher.cli.audit_state",
+    "preflight-targets": "backlink_publisher.cli.preflight_targets",
 }
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent

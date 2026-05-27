@@ -118,6 +118,44 @@ def test_plan_three_rows():
         assert payload["main_domain"] in payload["content_markdown"]
 
 
+def test_plan_emits_preflight_nudge_on_success():
+    """Plan 2026-05-26-008 R3a: a successful run emits a RECON preflight_nudge
+    on stderr (asserted on RAW stderr), stdout stays pure JSONL, and the nudge
+    does NOT break the existing _stderr_without_warnings assertion (RECON is
+    stripped) — so no assertion inversion is needed."""
+    seeds = [{
+        "target_url": "https://example.com/article",
+        "main_domain": "https://example.com",
+        "language": "en",
+        "platform": "medium",
+        "url_mode": "A",
+        "publish_mode": "draft",
+        "topic": "Test Topic",
+    }]
+    input_data = "\n".join(json.dumps(s) for s in seeds)
+    stdout, stderr, code = _run_plan(input_data)
+
+    assert code == 0, f"stderr: {stderr}"
+    # Nudge present on RAW stderr.
+    assert '"msg": "preflight_nudge"' in stderr
+    assert '"level": "RECON"' in stderr
+    assert "preflight-targets" in stderr
+    # Existing filtered-empty assertion still holds (RECON stripped).
+    assert _stderr_without_warnings(stderr) == ""
+    # stdout is pure JSONL — no nudge text leaked to the data channel.
+    for line in stdout.strip().split("\n"):
+        json.loads(line)
+    assert "preflight_nudge" not in stdout
+
+
+def test_plan_failure_path_no_preflight_nudge():
+    """The nudge fires only on the success path; a run that fails before
+    write_jsonl (malformed input -> exit 2) must not emit it."""
+    stdout, stderr, code = _run_plan("{not valid json")
+    assert code != 0
+    assert "preflight_nudge" not in stderr
+
+
 def test_plan_empty_input():
     """Empty input must produce an error on stderr and non-zero exit."""
     stdout, stderr, code = _run_plan("")

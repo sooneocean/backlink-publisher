@@ -26,6 +26,7 @@ from backlink_publisher._util.errors import (
 )
 from backlink_publisher._util.jsonl import read_jsonl, write_jsonl
 from backlink_publisher._util.logger import plan_logger
+from backlink_publisher._util.url import canonicalize_url
 from ...schema import (
     validate_input_payload,
 )
@@ -374,3 +375,20 @@ def main(argv: list[str] | None = None) -> None:
 
     plan_logger.info(f"generated {len(outputs)} payloads")
     write_jsonl(outputs)
+
+    # Forcing function (Plan 2026-05-26-008 R3a): on the success path only, nudge
+    # the operator to verify destination pages before publishing. RECON-level so
+    # it survives the default WARN gate (and is stripped by tests'
+    # _stderr_without_warnings, so existing assertions stay green). stdout stays
+    # pure JSONL — the nudge goes to stderr.
+    distinct_targets = {
+        canonicalize_url(target.strip())
+        for row in outputs
+        if isinstance((target := row.get("target_url")), str) and target.strip()
+    }
+    if distinct_targets:
+        plan_logger.recon(
+            "preflight_nudge",
+            distinct_targets=len(distinct_targets),
+            hint="run `preflight-targets` to verify destination pages before publishing",
+        )
