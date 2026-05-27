@@ -471,13 +471,17 @@ def _handle_checkpoint_ops(args: Any) -> None:
         getattr(args, "adjudicate_bulk", False),
         getattr(args, "backfill_dedup", False),
         getattr(args, "check_enforce_readiness", False),
+        # --force-manifest modifies a fresh publish run; it is NOT honored on the
+        # resume seam (which calls the plain gate), so reject the combination here
+        # rather than silently dropping the operator's force-flags.
+        getattr(args, "force_manifest", None),
     ]
     if sum(bool(x) for x in exclusive) > 1:
         emit_error(
             "error: --resume, --list-runs, --cleanup, --cleanup-all, "
             "--preview-manifest, --forget, --list-uncertain, "
-            "--adjudicate-uncertain, --adjudicate-bulk, --backfill-dedup, and "
-            "--check-enforce-readiness are mutually exclusive",
+            "--adjudicate-uncertain, --adjudicate-bulk, --backfill-dedup, "
+            "--check-enforce-readiness, and --force-manifest are mutually exclusive",
             exit_code=2,
         )
 
@@ -675,6 +679,16 @@ def _publish_epilogue(
         )
 
     if not args.dry_run and not successful:
+        if dedup_hold_count > 0:
+            # Enforce held every row (uncertain/in-flight) — this is operator-action
+            # required (adjudicate the holds), not an internal error. Exit 3
+            # (DependencyError), not 5.
+            emit_error(
+                f"all {dedup_hold_count} row(s) held by the dedup gate "
+                "(uncertain/in-flight); adjudicate with --list-uncertain / "
+                "--adjudicate-uncertain, then re-run",
+                exit_code=3,
+            )
         emit_error("no payloads were published", exit_code=5)
 
     if unverified:

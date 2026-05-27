@@ -79,6 +79,10 @@ def test_confirmed_missing_live_url_seeds_uncertain():
         ("medium-brave", "medium"),
         ("telegraph-cdp", "telegraph"),
         ("mastodon-browser-attach", "mastodon"),
+        # API-primary adapters whose strings differ from the browser fallback:
+        ("velog-graphql", "velog"),
+        ("devto", "devto"),
+        ("hashnode-gql", "hashnode"),
     ],
 )
 def test_real_adapter_strings_map(adapter, platform):
@@ -92,8 +96,10 @@ def test_real_adapter_strings_map(adapter, platform):
 # --------------------------------------------------------------------------- #
 # Quarantine (retired/unknown), never crash / never silent-drop
 # --------------------------------------------------------------------------- #
-def test_retired_adapter_string_quarantines():
-    _event("publish.confirmed", "https://x.com/old", "hashnode-gql", "https://h/p")
+def test_unregistered_adapter_string_quarantines():
+    # http-form-post is a real adapter string but HttpFormPostAdapter is not
+    # registered to any platform → genuinely unmappable → quarantine.
+    _event("publish.confirmed", "https://x.com/old", "http-form-post", "https://h/p")
     r = run_backfill()
     assert r.quarantined == 1
     assert r.seeded == 0
@@ -164,6 +170,51 @@ def test_every_registered_platform_is_reachable():
     assert set(registered_platforms()) <= set(_ADAPTER_STRING_TO_PLATFORM.values())
 
 
+#: Adapter-string literals that intentionally do NOT map: non-publisher helpers
+#: (llm-*, image-gen) and HttpFormPostAdapter (a generic adapter registered to no
+#: platform). None of these emit publish.confirmed/unverified backlink events.
+_KNOWN_UNMAPPED = frozenset({
+    "llm-anchor-provider",
+    "llm-article-provider",
+    "llm-image-prompt-generator",
+    "image-gen",
+    "http-form-post",
+})
+
+
+def test_every_live_adapter_string_is_mapped():
+    """Plan U6 invariant: every `adapter="..."` literal an adapter can emit must
+    be a map key (else its posts quarantine and enforce-after-ACK double-posts) OR
+    be in the explicit _KNOWN_UNMAPPED set. Greps the adapter sources so a NEW or
+    renamed adapter string fails this test instead of silently quarantining.
+
+    This is the test that catches the velog-graphql/devto/hashnode-gql class of
+    bug: an API-primary adapter whose string differs from the browser fallback."""
+    import pathlib
+    import re
+
+    adapters_dir = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "src" / "backlink_publisher" / "publishing" / "adapters"
+    )
+    literal_re = re.compile(r"""adapter\s*=\s*["']([a-z0-9-]+)["']""")
+    found: set[str] = set()
+    for py in adapters_dir.rglob("*.py"):  # recursive: catch subdir adapters too
+        found.update(literal_re.findall(py.read_text(encoding="utf-8")))
+
+    mapped = set(_ADAPTER_STRING_TO_PLATFORM)
+    unaccounted = found - mapped - _KNOWN_UNMAPPED
+    assert not unaccounted, (
+        f"live adapter string(s) neither mapped nor known-unmapped: {sorted(unaccounted)}. "
+        "Add to _ADAPTER_STRING_TO_PLATFORM (or _KNOWN_UNMAPPED if non-publishing)."
+    )
+
+    # Browser-dispatcher channels emit f"{channel}-browser-attach" (an f-string the
+    # literal grep can't see) — assert those fallback strings are mapped too.
+    for channel in ("velog", "devto", "mastodon"):
+        assert f"{channel}-browser-attach" in mapped
+
+
 # --------------------------------------------------------------------------- #
 # CLI verb
 # --------------------------------------------------------------------------- #
@@ -185,7 +236,7 @@ def _run(argv):
 
 def test_cli_backfill_dedup_summary_and_exit_0():
     _event("publish.confirmed", "https://x.com/a", "blogger-api", "https://blogger.com/p/1")
-    _event("publish.confirmed", "https://x.com/old", "hashnode-gql", "https://h/p")
+    _event("publish.confirmed", "https://x.com/old", "http-form-post", "https://h/p")
     _out, stderr, code = _run(["--backfill-dedup"])
     assert code == 0, stderr
     assert "seeded done=1" in stderr
@@ -203,3 +254,17 @@ def test_backfill_conflicts_with_forget():
     )
     assert code == 2
     assert "mutually exclusive" in stderr
+
+
+# --------------------------------------------------------------------------- #
+# Per-key best-outcome aggregation (ce:review fix): order-independent
+# --------------------------------------------------------------------------- #
+def test_unverified_then_confirmed_same_key_seeds_done():
+    """A key with both publish.unverified and publish.confirmed events seeds
+    `done` regardless of event order (best outcome wins, not first-processed)."""
+    _event("publish.unverified", "https://x.com/k", "blogger-api", "https://b/p")
+    _event("publish.confirmed", "https://x.com/k", "blogger-api", "https://b/p")
+    run_backfill()
+    assert DedupStore().get(
+        DedupKey(platform="blogger", target_url="https://x.com/k")
+    ).state == "done"

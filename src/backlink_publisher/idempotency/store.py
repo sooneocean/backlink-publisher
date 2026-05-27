@@ -247,8 +247,11 @@ class DedupStore:
         return self.path.with_name(self.path.name + _SECRET_SUFFIX)
 
     def _load_or_create_secret(self) -> bytes:
-        """Per-store HMAC secret. Created once (``O_CREAT|O_EXCL``, 0o600); a
-        concurrent loser of the create race reads the winner's bytes."""
+        """Per-store HMAC secret. Created once (``O_CREAT|O_EXCL``, fsync'd, 0o600).
+        A concurrent loser of the create race re-reads the winner's bytes, briefly
+        retrying if it observes the file before the winner's write lands — so two
+        processes always converge on the same secret (never an ephemeral one that
+        would silently invalidate manifests)."""
         sp = self._secret_path()
         existing = self._read_secret(sp)
         if existing:
@@ -258,9 +261,18 @@ class DedupStore:
         try:
             fd = os.open(str(sp), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
-            return self._read_secret(sp) or token  # raced; read the winner
+            # Lost the create race: the winner is mid-write. Re-read with a short
+            # backoff until its bytes are visible rather than returning `token`
+            # (which would differ from the persisted secret).
+            for _ in range(50):
+                won = self._read_secret(sp)
+                if won:
+                    return won
+                time.sleep(0.01)
+            return self._read_secret(sp) or token
         try:
             os.write(fd, token)
+            os.fsync(fd)
         finally:
             os.close(fd)
         return token
@@ -433,6 +445,9 @@ class DedupStore:
         owner_pid: int | None = None,
         owner_run_id: str | None = None,
         owner_started_at: float | None = None,
+        # Reserved for multi-account support (see DedupKey.account): persisted to
+        # the dedup_keys column but deliberately NOT in _COLS/DedupRecord yet — no
+        # reader until a second account per platform exists. All callers pass None.
         account_binding_id: str | None = None,
     ) -> IntentOutcome:
         """Single-flight ``absent -> attempting`` transition.
@@ -498,6 +513,7 @@ class DedupStore:
         verify_ok: bool | None = None,
         run_id: str | None = None,
         allow_from_terminal: bool = False,
+        expect_from: tuple[str, ...] | None = None,
     ) -> None:
         """Move an existing key to a terminal/held state.
 
@@ -505,7 +521,13 @@ class DedupStore:
         ``uncertain -> done|failed``. ``done``/``failed`` are terminal and not
         re-transitioned unless ``allow_from_terminal`` (used by adjudication's
         explicit override). Raises ``ValueError`` for an illegal transition or a
-        missing row (call :meth:`intent_write` first)."""
+        missing row (call :meth:`intent_write` first).
+
+        ``expect_from`` asserts the current state is one of the given states
+        **inside the same transaction** as the write — used by adjudication to
+        avoid a TOCTOU where a concurrent enforce run reclaims an ``uncertain``
+        row to ``attempting`` between the caller's read and this write. A mismatch
+        raises ``ValueError`` and the row is left untouched."""
         if to_state not in ("done", "failed", "uncertain"):
             raise ValueError(f"illegal target state {to_state!r}")
 
@@ -519,6 +541,11 @@ class DedupStore:
                 if row is None:
                     raise ValueError(f"transition on absent key {key.as_tuple()!r}")
                 current = row[0]
+                if expect_from is not None and current not in expect_from:
+                    raise ValueError(
+                        f"key {key.as_tuple()!r} is {current!r}, expected one of "
+                        f"{expect_from!r} (concurrent change?)"
+                    )
                 if current in _TERMINAL and not allow_from_terminal:
                     raise ValueError(
                         f"key {key.as_tuple()!r} is terminal ({current}); "

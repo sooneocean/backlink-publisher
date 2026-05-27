@@ -215,3 +215,22 @@ def test_store_files_are_0600(tmp_path):
         if p.exists():
             mode = stat.S_IMODE(p.stat().st_mode)
             assert mode == 0o600, f"{p.name} is {oct(mode)}, expected 0o600"
+
+
+def test_transition_expect_from_mismatch_raises(store):
+    """expect_from makes the from-state check atomic with the write — a row that
+    is not in the expected state (e.g. reclaimed to attempting) is left untouched.
+    Closes the adjudicate-bulk TOCTOU."""
+    key = _key()
+    store.intent_write(key)  # attempting
+    with pytest.raises(ValueError):
+        store.transition(key, "failed", expect_from=("uncertain",))
+    assert store.get(key).state == "attempting"  # untouched
+
+
+def test_transition_expect_from_match_succeeds(store):
+    key = _key()
+    store.intent_write(key)
+    store.transition(key, "uncertain")
+    store.transition(key, "done", live_url="u", expect_from=("uncertain",))
+    assert store.get(key).state == "done"

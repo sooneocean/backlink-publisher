@@ -266,6 +266,13 @@ def main(argv: list[str] | None = None) -> None:
         # dispatch. Enforce: done->skip, uncertain/live-attempting->hold,
         # absent/failed/stale-attempting->claim+dispatch (fail-closed). A manifest
         # force-flag (U7c) overrides a hold; a force on a done key conflicts (exit 1).
+        # Token-drift check BEFORE the gate claim: in enforce mode gate_with_force
+        # claims the row (-> attempting), and _check_token_drift raises SystemExit
+        # on revocation — running it first avoids stranding a just-claimed row in
+        # `attempting` (a BaseException bypasses the per-row except arms). Token
+        # revs are a run-level snapshot, so checking before the gate is equivalent.
+        _check_token_drift(initial_token_revs)
+
         verdict, drec = gate_with_force(
             row, platform, run_id=run_id, forced_keys=forced_keys, reason=args.reason
         )
@@ -288,7 +295,6 @@ def main(argv: list[str] | None = None) -> None:
             continue
 
         try:
-            _check_token_drift(initial_token_revs)
             result = adapter_publish(
                 payload={**row, "platform": platform},
                 mode=mode,

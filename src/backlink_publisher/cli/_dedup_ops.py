@@ -159,7 +159,9 @@ def _handle_dedup_ops(args: Any) -> None:
         _do_check_enforce_readiness()
 
 
-def load_force_manifest(path: str, *, confirm: int | None, reason: str | None):
+def load_force_manifest(
+    path: str, *, confirm: int | None, reason: str | None
+) -> set[tuple[str, str, str]]:
     """Validate a preview manifest's force-flags and return the set of forced key
     tuples ``(platform, account, target_url)`` (U7c). Exits 1 on any guard
     failure: missing --reason, store-token mismatch (foreign/stale manifest), or
@@ -173,7 +175,8 @@ def load_force_manifest(path: str, *, confirm: int | None, reason: str | None):
         emit_error("error: --force-manifest requires --reason <text>", exit_code=1)
 
     try:
-        text = open(path, encoding="utf-8").read()
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
     except OSError as exc:
         emit_error(f"error: cannot read --force-manifest {path!r}: {exc}", exit_code=1)
 
@@ -239,7 +242,9 @@ def _do_check_enforce_readiness() -> None:
         "BACKLINK_PUBLISHER_DEDUP_ENFORCE_ACK_QUARANTINE.",
         file=sys.stderr,
     )
-    raise SystemExit(1)
+    # Operator-action-required (DependencyError, exit 3) — same class as the
+    # enforce precondition gate, NOT a CLI usage error (exit 1).
+    raise SystemExit(3)
 
 
 def _resolve_to_state(args: Any) -> str:
@@ -274,11 +279,15 @@ def _parse_older_than(spec: str | None) -> float | None:
     return int(spec[:-1]) * units[unit]
 
 
-def _adjudicate_one(store: Any, key: Any, to_state: str, reason: str, *, run_id) -> None:
-    """Append the audit entry then transition uncertain → terminal (append-first
-    so a crash still leaves a trail)."""
+def _adjudicate_one(store: Any, key: Any, to_state: str, reason: str, *, run_id: str | None) -> None:
+    """Transition uncertain → terminal, then append the audit entry. The
+    ``expect_from=("uncertain",)`` guard makes the state check atomic with the
+    write, so a concurrent enforce run that reclaimed the row (uncertain ->
+    attempting) raises ValueError instead of letting us clobber an in-flight
+    dispatch. The audit entry is written only after the transition succeeds."""
     from backlink_publisher.idempotency import audit_log
 
+    store.transition(key, to_state, run_id=run_id, expect_from=("uncertain",))
     audit_log.append_entry(
         action="adjudicate",
         platform=key.platform,
@@ -289,7 +298,6 @@ def _adjudicate_one(store: Any, key: Any, to_state: str, reason: str, *, run_id)
         reason=reason,
         run_id=run_id,
     )
-    store.transition(key, to_state, run_id=run_id)
 
 
 def _do_adjudicate_single(args: Any) -> None:
@@ -313,7 +321,12 @@ def _do_adjudicate_single(args: Any) -> None:
             "only held rows can be adjudicated (use --forget for a terminal row)",
             exit_code=1,
         )
-    _adjudicate_one(store, key, to_state, args.reason, run_id=record.run_id)
+    try:
+        _adjudicate_one(store, key, to_state, args.reason, run_id=record.run_id)
+    except ValueError as exc:
+        # The row changed (e.g. a concurrent enforce run reclaimed it) between the
+        # read above and the guarded transition — surface cleanly, do not clobber.
+        emit_error(f"error: adjudication skipped — {exc}", exit_code=1)
     print(
         f"adjudicate: {platform} key uncertain -> {to_state}.",
         file=_sys.stderr,
@@ -352,13 +365,29 @@ def _do_adjudicate_bulk(args: Any) -> None:
             exit_code=1,
         )
 
+    resolved = 0
+    skipped = 0
     for r in rows:
         key = DedupKey(platform=r.platform, target_url=r.target_url, account=r.account)
-        _adjudicate_one(store, key, to_state, args.reason, run_id=r.run_id)
+        try:
+            _adjudicate_one(store, key, to_state, args.reason, run_id=r.run_id)
+            resolved += 1
+        except (ValueError, _sqlite_error()) as exc:
+            # A concurrent change (reclaim, --forget) raced this row — skip it and
+            # keep going so one mid-loop race doesn't abort the whole batch.
+            skipped += 1
+            print(f"adjudicate-bulk: skipped one row — {exc}", file=_sys.stderr)
     print(
-        f"adjudicate-bulk: resolved {len(rows)} row(s) uncertain -> {to_state}.",
+        f"adjudicate-bulk: resolved {resolved} row(s) uncertain -> {to_state}"
+        + (f"; {skipped} skipped (concurrent change)." if skipped else "."),
         file=_sys.stderr,
     )
+
+
+def _sqlite_error() -> type[BaseException]:
+    import sqlite3
+
+    return sqlite3.Error
 
 
 def _do_forget(args: Any) -> None:

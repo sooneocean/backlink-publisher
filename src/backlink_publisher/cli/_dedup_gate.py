@@ -1,20 +1,24 @@
-"""Dedup recording + (later) gate hooks for the publish path.
+"""Dedup recording + gate hooks for the publish path.
 
-Unit 2 (this module, observe phase): record dedup state on every dispatch across
-**both** the fresh (``publish_backlinks``) and resume (``_resume``) seams, WITHOUT
-gating — publish behavior is unchanged. Unit 7 adds the enforce gate that consults
-these records.
+Recording (U2, observe): ``record_intent`` / ``record_done`` / ``record_failure``
+write dedup state on every dispatch across **both** the fresh (``publish_backlinks``)
+and resume (``_resume``) seams. The gate (U7): ``gate`` / ``gate_with_force`` decide
+skip/hold/dispatch in enforce mode, ``enforce_enabled`` / ``enforce_precondition_or_exit``
+gate the flip. The single funnel keeps both seams identical.
 
-All recording is **observe-safe**: a dedup-store failure is logged and swallowed so
+All **recording** is observe-safe: a dedup-store failure is logged and swallowed so
 it can never break a publish run. The intent write runs before dispatch (so a crash
-leaves ``attempting``); the terminal write runs on the dispatch outcome.
+leaves ``attempting``); the terminal write runs on the dispatch outcome. The
+**enforce gate** is fail-CLOSED instead: a store error holds the row (never a
+possible double-post).
 
 Failure → state mapping (R8, conservative): only ``http_5xx`` (the may-have-committed
 class) maps to ``uncertain``; every other error class is ``failed`` (re-publishable).
 ``classify_exception`` is message-based and cannot truly see send-state, so this is a
-conservative hold, not a precise one.
+conservative hold, not a precise one. ``uncertain`` is never auto-downgraded to
+``failed`` (a later non-5xx failure can't disprove the original may-have-landed).
 
-Plan: docs/plans/2026-05-27-005-feat-cross-run-publish-idempotency-plan.md (U2).
+Plan: docs/plans/2026-05-27-005-feat-cross-run-publish-idempotency-plan.md (U2, U7).
 """
 
 from __future__ import annotations
@@ -233,6 +237,14 @@ def _record_terminal(
             # already-done key). Do not re-transition; leave the existing record.
             # Backfilling a second observe-mode post's live_url is a documented
             # refinement deferred past observe (see plan U2 Approach).
+            return
+        if rec.state == "uncertain" and state == "failed":
+            # Never DOWNGRADE a held key to re-publishable: `uncertain` means a
+            # prior attempt's 5xx may have committed server-side. A later non-5xx
+            # failure on a re-dispatch does not prove the original didn't land, so
+            # demoting to `failed` would let enforce re-publish a possibly-live
+            # post. Hold it (adjudicate via --adjudicate-uncertain). uncertain ->
+            # done is still allowed (a confirmed success settles the key).
             return
         store.transition(
             key, state, live_url=live_url, verify_ok=verify_ok, run_id=run_id

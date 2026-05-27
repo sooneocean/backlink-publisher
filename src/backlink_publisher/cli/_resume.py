@@ -225,6 +225,10 @@ def _run_resume(args: Any) -> None:
             extra={"id": item["id"], "platform": platform},
         )
 
+        # Token-drift check BEFORE the gate claim (see fresh seam): avoids
+        # stranding a just-claimed `attempting` row when revocation raises SystemExit.
+        _check_token_drift(initial_token_revs)
+
         # Dedup gate (U2 observe / U7 enforce) — R17: resume consults the dedup
         # record like a fresh run. skip -> mark the item done from the recorded
         # live_url; hold -> leave the item for adjudication; dispatch -> publish.
@@ -253,7 +257,6 @@ def _run_resume(args: Any) -> None:
             continue
 
         try:
-            _check_token_drift(initial_token_revs)
             result = adapter_publish(
                 payload={**row, "platform": platform},
                 mode=mode,
@@ -306,6 +309,25 @@ def _run_resume(args: Any) -> None:
             _record_resume_failure(
                 run_id, item, exc,
                 "unexpected", f"unexpected error: {exc}", platform,
+            )
+            continue
+
+        if result.error:
+            # In-band adapter failure (returned, not raised) — record terminal so
+            # the row doesn't strand as `done`, mark the checkpoint item failed,
+            # and do NOT record done. Parity with the fresh seam (publish_backlinks
+            # has the same guard); without it a returned-error result would seed a
+            # `done` dedup row and enforce would permanently skip a post that never
+            # landed.
+            record_failure(row, platform, error_class=None, run_id=run_id)
+            from .. import checkpoint as _ckpt
+            _ckpt.update_item(
+                run_id, item["id"], "failed",
+                error=str(result.error), error_class="unexpected",
+            )
+            publish_logger.error(
+                f"publish failed (in-band): {result.error}",
+                extra={"id": item["id"], "platform": platform},
             )
             continue
 

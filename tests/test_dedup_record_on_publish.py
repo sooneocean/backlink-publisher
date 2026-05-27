@@ -320,3 +320,62 @@ def test_resume_transient_records_failed(mock_pub, _mv, _ms, mock_cache, tmp_pat
     rec = _record("blogger")
     assert rec is not None
     assert rec.state == "failed"
+
+
+# --------------------------------------------------------------------------- #
+# Terminal-write guards (ce:review fixes): never downgrade a held key
+# --------------------------------------------------------------------------- #
+def test_uncertain_not_downgraded_to_failed_by_later_non_5xx():
+    """A 5xx-set `uncertain` key must NOT be flipped to `failed` (re-publishable)
+    by a subsequent non-5xx failure — that would let enforce re-publish a post
+    that may have committed. Regression for the ce:review P1."""
+    from backlink_publisher.cli._dedup_gate import record_failure
+
+    store = DedupStore()
+    key = DedupKey(platform="medium", target_url=_TARGET)
+    store.intent_write(key)
+    store.transition(key, "uncertain")
+
+    row = {"id": "x", "target_url": _TARGET}
+    record_failure(row, "medium", error_class="unexpected", run_id="r")  # non-5xx
+    assert store.get(key).state == "uncertain"  # held, not demoted
+
+
+def test_uncertain_can_still_settle_to_done():
+    """A subsequent confirmed success DOES settle an uncertain key to done."""
+    from backlink_publisher.cli._dedup_gate import record_done
+
+    store = DedupStore()
+    key = DedupKey(platform="medium", target_url=_TARGET)
+    store.intent_write(key)
+    store.transition(key, "uncertain")
+
+    row = {"id": "x", "target_url": _TARGET}
+    record_done(row, "medium", live_url="https://m/p", verify_ok=True, run_id="r")
+    assert store.get(key).state == "done"
+
+
+# --------------------------------------------------------------------------- #
+# Resume seam: in-band adapter error (returned, not raised) records failed
+# --------------------------------------------------------------------------- #
+@patch("backlink_publisher.cli._resume.verify_adapter_setup")
+@patch("backlink_publisher.cli._publish_helpers._do_sleep")
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli._resume.adapter_publish")
+def test_resume_inband_error_records_failed_not_done(mock_pub, mock_cache, _ms, _mv, tmp_path):
+    """A resume dispatch returning AdapterResult(error=...) (not raising) records
+    `failed`, not `done` — parity with the fresh seam, so enforce won't later skip
+    a post that never landed."""
+    from backlink_publisher.checkpoint import create_checkpoint
+
+    mock_cache.return_value = tmp_path / "cache"
+    rows = [_payload(platform="blogger")]
+    run_id, _ = create_checkpoint(rows, platform="blogger", mode="draft")
+    mock_pub.return_value = AdapterResult(
+        status="failed", adapter="blogger-api", platform="blogger",
+        draft_url="", published_url="", error="rejected in-band",
+    )
+    _run("", ["--resume", run_id])
+    rec = _record("blogger")
+    assert rec is not None
+    assert rec.state == "failed"

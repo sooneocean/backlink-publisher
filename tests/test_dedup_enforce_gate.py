@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
 import time
 from io import StringIO
 from unittest.mock import patch
@@ -278,3 +279,44 @@ def test_resume_enforce_absent_dispatches(mock_pub, _mv, _ms, mock_cache, tmp_pa
     _out, _err, code = _run([], ["--resume", run_id], enforce=True)
     assert code == 0
     mock_pub.assert_called_once()  # absent -> dispatched
+
+
+# --------------------------------------------------------------------------- #
+# gate_and_claim concurrency (the core single-flight safety claim)
+# --------------------------------------------------------------------------- #
+def test_concurrent_gate_and_claim_exactly_one_dispatches(tmp_path):
+    """Two threads race gate_and_claim on the same absent key: exactly one gets
+    `dispatch` (claims attempting), the other `hold` (observes the live claim).
+    Proves the BEGIN IMMEDIATE read-decide-claim is TOCTOU-safe for enforce."""
+    db = tmp_path / "dedup.db"
+    key = DedupKey(platform="medium", target_url=_TARGET)
+    barrier = threading.Barrier(2)
+    verdicts: list[str] = []
+    lock = threading.Lock()
+
+    def worker():
+        s = DedupStore(path=db)
+        barrier.wait()
+        v = s.gate_and_claim(key, run_id="r", owner_pid=os.getpid()).verdict
+        with lock:
+            verdicts.append(v)
+
+    threads = [threading.Thread(target=worker) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(verdicts) == ["dispatch", "hold"]  # exactly one winner
+
+
+# --------------------------------------------------------------------------- #
+# All rows held under enforce -> exit 3 (operator adjudication), not 5
+# --------------------------------------------------------------------------- #
+@patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
+@patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
+def test_all_held_exits_3_not_5(mock_pub, _mv):
+    _seed("uncertain")
+    _out, stderr, code = _run([_payload()], ["--platform", "medium"], enforce=True)
+    assert code == 3  # DependencyError (adjudicate), not InternalError (5)
+    assert "held" in stderr.lower()
+    mock_pub.assert_not_called()

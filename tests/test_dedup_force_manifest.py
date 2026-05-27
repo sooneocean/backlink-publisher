@@ -246,3 +246,16 @@ def test_preview_manifest_emits_store_token(_fresh_dir):
     entry = json.loads(out.getvalue().strip())
     assert entry["store_token"] == DedupStore().store_token()
     assert entry["force"] is False
+
+
+def test_force_manifest_conflicts_with_resume(_fresh_dir):
+    """--force-manifest is not honored on the resume seam, so the combination is
+    rejected (exit 2) rather than silently dropping the operator's force-flags."""
+    manifest = _write_manifest(_fresh_dir)
+    _out, stderr, code = _run(
+        [],
+        ["--resume", "20260101T000000-deadbeef", "--force-manifest", manifest,
+         "--confirm", "1", "--reason", "x"],
+    )
+    assert code == 2
+    assert "mutually exclusive" in stderr

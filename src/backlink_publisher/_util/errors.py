@@ -207,8 +207,9 @@ def _emit_error_envelope(error_class: str, exit_code: int, message: str) -> None
 
 def emit_error(
     message: str, exit_code: int = 5, *, error_class: str | None = None
-) -> None:
-    """Print diagnostic to stderr and exit.
+) -> NoReturn:
+    """Print diagnostic to stderr and exit. Always raises ``SystemExit`` —
+    ``NoReturn`` lets type checkers narrow past ``emit_error(...)`` guards.
 
     ``error_class`` overrides the envelope's class name. Pass it when the caller
     holds a specific exception whose type the operator must see (e.g.

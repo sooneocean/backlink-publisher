@@ -122,7 +122,7 @@ def test_enforce_proceeds_after_backfill(mock_pub, _mv):
 @patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
 @patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
 def test_enforce_blocked_by_quarantine_until_acked(mock_pub, _mv):
-    _event("https://example.com/old", adapter="hashnode-gql")  # retired -> quarantine
+    _event("https://example.com/old", adapter="http-form-post")  # unregistered -> quarantine
     _out, stderr, code = _run([_payload()], ["--platform", "medium"], enforce=True)
     assert code == 3
     assert "unmappable/retired" in stderr
@@ -132,7 +132,7 @@ def test_enforce_blocked_by_quarantine_until_acked(mock_pub, _mv):
 @patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
 @patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
 def test_enforce_proceeds_with_quarantine_acknowledged(mock_pub, _mv):
-    _event("https://example.com/old", adapter="hashnode-gql")
+    _event("https://example.com/old", adapter="http-form-post")
     mock_pub.return_value = AdapterResult(
         status="drafted", adapter="medium-api", platform="medium",
         draft_url="https://medium.com/p/new",
@@ -182,10 +182,10 @@ def test_backfill_verb_not_blocked_by_precondition():
 # --------------------------------------------------------------------------- #
 # --check-enforce-readiness verb
 # --------------------------------------------------------------------------- #
-def test_check_readiness_not_ready_exit_1_counts_only():
+def test_check_readiness_not_ready_exit_3_counts_only():
     _event("https://example.com/live-secret-campaign")
     _out, stderr, code = _run([], ["--check-enforce-readiness"])
-    assert code == 1
+    assert code == 3  # DependencyError: operator action required (matches precondition)
     assert "NOT READY" in stderr
     assert "missing=1" in stderr
     assert "secret-campaign" not in stderr  # no URL leak (digest only)

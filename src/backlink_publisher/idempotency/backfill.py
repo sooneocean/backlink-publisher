@@ -46,7 +46,6 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .._util.url import canonicalize_url
 from ..config import _config_dir
 from . import audit_log
 from .store import DedupKey, DedupStore
@@ -54,17 +53,22 @@ from .store import DedupKey, DedupStore
 _EVENTS_DB_FILENAME = "events.db"
 _WAL_SUFFIX = "-wal"
 
-#: Explicit live adapter-string → bare-platform map. Browser-dispatched channels
-#: emit ``f"{channel}-browser-attach"`` (BrowserPublishDispatcher); API/special
-#: adapters emit their own literal. Hand-maintained: the value set must equal the
-#: currently-registered platforms (enforced by a test). Retired strings
-#: (e.g. ``hashnode-gql``, the old ``velog-graphql``/bare ``devto``,
-#: ``http-form-post``) are deliberately ABSENT → they quarantine.
+#: Explicit live adapter-string → bare-platform map. A platform's registered
+#: fallback chain can emit MORE than one string over its history, so every live
+#: string a chain can produce must map. velog/devto register an API adapter as
+#: primary (``velog-graphql`` / ``devto``) with the browser dispatcher
+#: (``{channel}-browser-attach``) as fallback; mastodon is browser-only. hashnode
+#: emits both ``hashnode-gql`` and ``hashnode`` from its one adapter.
+#: ``test_every_live_adapter_string_is_mapped`` greps the adapter sources and
+#: fails if a new live string appears unmapped. Non-publisher helpers (``llm-*``)
+#: and the unregistered ``http-form-post`` are intentionally absent → quarantine.
 _ADAPTER_STRING_TO_PLATFORM: dict[str, str] = {
     "blogger-api": "blogger",
     "csdn": "csdn",
+    "devto": "devto",
     "ghpages": "ghpages",
     "hashnode": "hashnode",
+    "hashnode-gql": "hashnode",
     "jianshu": "jianshu",
     "juejin": "juejin",
     "linkedin": "linkedin",
@@ -80,9 +84,10 @@ _ADAPTER_STRING_TO_PLATFORM: dict[str, str] = {
     "telegraph-cdp": "telegraph",
     "tumblr": "tumblr",
     "txtfyi-form-post": "txtfyi",
+    "velog-graphql": "velog",
     "wordpresscom": "wordpresscom",
     "writeas": "writeas",
-    # Browser-dispatched channels (adapter string = f"{channel}-browser-attach").
+    # Browser-dispatcher fallback strings (adapter = f"{channel}-browser-attach").
     "velog-browser-attach": "velog",
     "devto-browser-attach": "devto",
     "mastodon-browser-attach": "mastodon",
@@ -108,10 +113,11 @@ def _events_db_path() -> Path:
     return _config_dir() / _EVENTS_DB_FILENAME
 
 
-def _read_publish_events(db_path: Path) -> list[tuple[str, str | None, str]]:
+def _read_publish_events(db_path: Path) -> list[tuple[str, str | None, str | None]]:
     """Snapshot-copy ``events.db`` (+ ``-wal``) and read ``(kind, target_url,
     payload_json)`` for the publish-success kinds. Leaves the live store
-    byte-identical. Returns ``[]`` if the db is absent."""
+    byte-identical. Returns ``[]`` if the db is absent OR has no ``events`` table
+    (a fresh/foreign db) — a missing table is benign here, not an operator error."""
     if not db_path.exists():
         return []
     wal_path = db_path.with_name(db_path.name + _WAL_SUFFIX)
@@ -129,6 +135,9 @@ def _read_publish_events(db_path: Path) -> list[tuple[str, str | None, str]]:
                 f"WHERE kind IN ({placeholders})",
                 _BACKFILL_KINDS,
             ).fetchall()
+        except sqlite3.OperationalError:
+            # No `events` table (fresh/foreign db) → nothing to seed, not a crash.
+            return []
         finally:
             conn.close()
         return [(r[0], r[1], r[2]) for r in rows]
@@ -147,6 +156,11 @@ def run_backfill() -> BackfillResult:
     store = DedupStore()
     touched = audit_log.touched_keys()
 
+    # Aggregate per key first so the best outcome wins regardless of event order
+    # (a key with both a confirmed and an unverified event must seed `done`, not
+    # `uncertain` — INSERT-OR-IGNORE alone would let whichever row is processed
+    # first win). ``done`` (confirmed + live_url) beats ``uncertain``.
+    best: dict[tuple[str, str, str], tuple[DedupKey, str, str | None]] = {}
     for kind, col_target_url, payload_json in events:
         try:
             payload = json.loads(payload_json) if payload_json else {}
@@ -164,19 +178,27 @@ def run_backfill() -> BackfillResult:
             continue
 
         key = DedupKey(platform=platform, target_url=str(target_url))
-        if key.as_tuple() in touched:
+        tup = key.as_tuple()
+        state = "done" if (kind == "publish.confirmed" and live_url) else "uncertain"
+        existing = best.get(tup)
+        # Keep the stronger outcome; prefer a non-null live_url when both are done.
+        if existing is None or (state == "done" and existing[1] != "done"):
+            best[tup] = (key, state, live_url)
+        elif state == "done" and existing[2] is None and live_url:
+            best[tup] = (key, state, live_url)
+
+    for tup, (key, state, live_url) in best.items():
+        if tup in touched:
             # The operator has --forget/--adjudicate-ed this key; never resurrect.
             result.skipped_operator_touched += 1
             continue
-
-        if kind == "publish.confirmed" and live_url:
+        if state == "done":
             inserted = store.seed(key, "done", live_url=live_url, verify_ok=True)
             if inserted:
                 result.seeded_done += 1
             else:
                 result.skipped_existing += 1
         else:
-            # publish.unverified, or confirmed-but-missing-live_url → hold.
             inserted = store.seed(key, "uncertain", live_url=live_url)
             if inserted:
                 result.seeded_uncertain += 1
