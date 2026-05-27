@@ -31,6 +31,7 @@ from ._publish_helpers import (
     _error_class,
     _load_throttle_config,
     _make_banner_emit,
+    _record_publish_path,
     _sleep_with_throttle,
 )
 
@@ -268,12 +269,16 @@ def _run_resume(args: Any) -> None:
             continue
 
         completed_at = datetime.now(timezone.utc).isoformat()
+        # U3: advisory forward-path drift recording (Plan 2026-05-27-006).
+        # Must run on both fresh and resume paths (R7). Never gating.
+        row = item["payload"]
+        _record_publish_path(platform, result, row)
+
         # Verify before the checkpoint write so the `done` record carries the
         # verification verdict (Plan 005 / D5). Previously verification ran
         # after the write and only updated the transient `unverified_ids` set,
         # so the projector could never tell a verified `done` from an
         # unverified one — and counted unverified publishes as successes.
-        row = item["payload"]
         verify_ok, verify_reason = _do_verify(
             getattr(args, "no_verify", False), False, result, row
         )

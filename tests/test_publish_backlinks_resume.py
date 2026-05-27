@@ -497,3 +497,84 @@ def test_fresh_run_then_resume_full_flow(
     # After full success, run is marked complete → list_incomplete returns []
     list_out, _, _ = _run_publish(argv=["--list-runs"])
     assert "No incomplete" in list_out
+
+
+# ---------------------------------------------------------------------------
+# Unit 3 — R7: resume path records forward-path drift advisory
+# Plan 2026-05-27-006 Unit 3
+# ---------------------------------------------------------------------------
+
+def _drift_blogger_result(item_id: str = "r0", *, nofollow: bool = False) -> AdapterResult:
+    """A blogger AdapterResult with target-specific link_attr_verification set."""
+    link_attr = {
+        "verification": "ok",
+        "total_anchors": 2,
+        "target_found": True,
+        "target_nofollow": nofollow,
+        "target_rewritten": False,
+        "target_nofollow_urls": ["https://example.com"] if nofollow else [],
+        "target_missing_urls": [],
+        "target_rewritten_urls": [],
+    }
+    return AdapterResult(
+        status="drafted",
+        adapter="blogger-api",
+        platform="blogger",
+        draft_url=f"https://blogger.example.com/p/{item_id}",
+        _provider_meta={"link_attr_verification": link_attr},
+    )
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli._resume.verify_adapter_setup")
+@patch("backlink_publisher.cli._resume.adapter_publish")
+def test_resume_records_publish_path_link_alive(
+    mock_pub, mock_verify, mock_cache, tmp_path, monkeypatch
+):
+    """R7: --resume path records link-alive when required links are dofollow."""
+    mock_cache.return_value = tmp_path / "cache"
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    from backlink_publisher.canary import store as cstore
+    cstore.canary_health_store.reset()
+
+    rows = [_make_payload(item_id="r0")]
+    create_checkpoint(rows, platform="blogger", mode="draft")
+    run_id = [
+        f.stem for f in (tmp_path / "cache" / "checkpoints").glob("*.json")
+    ][0]
+
+    mock_pub.return_value = _drift_blogger_result("r0", nofollow=False)
+
+    _run_publish(argv=["--resume", run_id])
+
+    health = cstore.get_publish_path_health("blogger")
+    assert health["status"] == cstore.STATUS_LINK_ALIVE
+    cstore.canary_health_store.reset()
+
+
+@patch("backlink_publisher.checkpoint._cache_dir")
+@patch("backlink_publisher.cli._resume.verify_adapter_setup")
+@patch("backlink_publisher.cli._resume.adapter_publish")
+def test_resume_records_publish_path_drift_nofollow(
+    mock_pub, mock_verify, mock_cache, tmp_path, monkeypatch
+):
+    """R7: --resume path records drift when required link is nofollow; no exit-code change."""
+    mock_cache.return_value = tmp_path / "cache"
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    from backlink_publisher.canary import store as cstore
+    cstore.canary_health_store.reset()
+
+    rows = [_make_payload(item_id="r0")]
+    create_checkpoint(rows, platform="blogger", mode="draft")
+    run_id = [
+        f.stem for f in (tmp_path / "cache" / "checkpoints").glob("*.json")
+    ][0]
+
+    mock_pub.return_value = _drift_blogger_result("r0", nofollow=True)
+
+    stdout, stderr, code = _run_publish(argv=["--resume", run_id])
+
+    assert code == 0, f"drift must not change exit code. stderr={stderr}"
+    health = cstore.get_publish_path_health("blogger")
+    assert health["status"] == cstore.STATUS_DRIFT_CONFIRMED
+    cstore.canary_health_store.reset()

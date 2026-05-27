@@ -56,3 +56,7 @@ rationale = "_enhance_payload (101 lines) + its exclusive helpers (_HrefCollecto
 [files."src/backlink_publisher/cli/report_anchors.py"]
 ceiling = 130
 rationale = "Formatting helpers (_markdown_table, _json_output, _build_report, _build_profile_report, _format_alarm_markdown, _format_profile_report_markdown, _format_profile_report_json) and _compute_alarm extracted to _report_format.py (2026-05-22). report_anchors.py dropped from 353 to 94 SLOC — holds main() only plus re-export imports. Ceiling 130 = round_up_to_10(94+30) with headroom for argparse additions."
+
+[files."src/backlink_publisher/cli/_publish_helpers.py"]
+ceiling = 540
+rationale = "Canary Phase 2 Unit 3 (2026-05-27) added _record_publish_path (advisory forward-path drift recording, ~50 SLOC) and a publish_path_drift_count param to _publish_epilogue. _publish_helpers.py grew from ~450 to 507 SLOC. Ceiling 540 = round_up_to_10(507+30) per policy; future extraction candidate is the lease/throttle cluster."

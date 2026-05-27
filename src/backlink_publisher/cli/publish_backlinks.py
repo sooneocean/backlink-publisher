@@ -41,6 +41,7 @@ from ._publish_helpers import (
     _medium_throttle_sleep,
     _publish_epilogue,
     _record_publish_failure,
+    _record_publish_path,
 )
 
 
@@ -127,6 +128,7 @@ def main(argv: list[str] | None = None) -> None:
     banner_emit = _make_banner_emit()
     skipped_unreachable_count = 0
     skipped_quarantined_count = 0
+    publish_path_drift_count = 0
     canary_warned: set[str] = set()  # dedup advisory WARNINGs per platform per run
     last_medium_success_idx: int = -1
 
@@ -277,6 +279,10 @@ def main(argv: list[str] | None = None) -> None:
             if result.post_publish_delay_seconds > 0:
                 last_medium_success_idx = row_idx
 
+            # U3: advisory forward-path drift recording (Plan 2026-05-27-006).
+            # Never gating — only records to canary-health.json + WARN on drift.
+            publish_path_drift_count += _record_publish_path(platform, result, row)
+
             verify_ok, verify_reason = _do_verify(
                 args.no_verify, args.dry_run, result, row
             )
@@ -314,6 +320,7 @@ def main(argv: list[str] | None = None) -> None:
         fail_count,
         skipped_unreachable_count,
         skipped_quarantined_count,
+        publish_path_drift_count,
     )
 
 

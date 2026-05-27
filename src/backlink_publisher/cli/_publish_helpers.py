@@ -493,6 +493,60 @@ def _handle_auth_expired(
     emit_error(str(exc), exit_code=3, error_class=type(exc).__name__)
 
 
+def _record_publish_path(platform: str, result: Any, row: dict[str, Any]) -> int:
+    """Record per-platform forward-path drift advisory verdict after publish.
+
+    Reads the target-specific fields from the adapter's ``link_attr_verification``
+    result (computed in Unit 1 with no extra fetch) and writes a ``link-alive``
+    or ``drift`` verdict to the per-platform ``_publish_path`` stream in
+    ``canary-health.json``. Issues a WARN on drift naming the offending link(s).
+
+    Returns 1 if drift was recorded, 0 otherwise (for the epilogue count).
+    Skips silently (returns 0) when:
+    - verification was skipped/absent (R5: skipped → nothing recorded)
+    - no required links in the payload (``target_*`` fields absent)
+
+    Advisory only: never raises, never changes exit code.
+    Plan 2026-05-27-006 Unit 3.
+    """
+    meta = (result._provider_meta or {}) if result._provider_meta is not None else {}
+    link_attr = meta.get("link_attr_verification") or {}
+    if link_attr.get("verification") != "ok":
+        return 0  # skipped or missing — R5: record nothing
+    if "target_found" not in link_attr:
+        return 0  # no required links in payload — nothing checkable
+
+    is_drift = (
+        bool(link_attr.get("target_nofollow"))
+        or bool(link_attr.get("target_rewritten"))
+        or not bool(link_attr.get("target_found", True))
+    )
+
+    try:
+        from backlink_publisher.canary.store import (
+            STATUS_DRIFT_CONFIRMED,
+            STATUS_LINK_ALIVE,
+            record_publish_path_verdict,
+        )
+        verdict = STATUS_DRIFT_CONFIRMED if is_drift else STATUS_LINK_ALIVE
+        record_publish_path_verdict(platform, verdict)
+    except Exception:
+        pass  # advisory — never fail publish
+
+    if is_drift:
+        nofollow_urls = link_attr.get("target_nofollow_urls", [])
+        rewritten_urls = link_attr.get("target_rewritten_urls", [])
+        missing_urls = link_attr.get("target_missing_urls", [])
+        row_id = row.get("id", "")
+        publish_logger.warn(
+            f"[publish-path-canary] id={row_id} platform={platform} verdict=drift "
+            f"nofollow={nofollow_urls} rewritten={rewritten_urls} missing={missing_urls}",
+            extra={"id": row_id, "platform": platform},
+        )
+        return 1
+    return 0
+
+
 def _medium_throttle_sleep(
     row_idx: int,
     last_success_idx: int,
@@ -518,6 +572,7 @@ def _publish_epilogue(
     fail_count: int,
     skipped_unreachable_count: int,
     skipped_quarantined_count: int = 0,
+    publish_path_drift_count: int = 0,
 ) -> None:
     if run_id is not None:
         from ..events import project_run_safe as _project_run_safe
@@ -571,11 +626,13 @@ def _publish_epilogue(
     publish_logger.info(
         f"publish complete: {success_count} succeeded, {fail_count} failed, "
         f"{skipped_unreachable_count} skipped_unreachable, "
-        f"{skipped_quarantined_count} skipped_quarantined",
+        f"{skipped_quarantined_count} skipped_quarantined, "
+        f"{publish_path_drift_count} publish_path_drift",
         extra={
             "success": success_count,
             "failed": fail_count,
             "skipped_unreachable": skipped_unreachable_count,
             "skipped_quarantined": skipped_quarantined_count,
+            "publish_path_drift_count": publish_path_drift_count,
         },
     )
