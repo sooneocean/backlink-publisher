@@ -154,6 +154,25 @@ The project keeps lessons in two places:
 
 Next curation review: **2026-08-15**. Next `/ce:compound` run should scan recent `feedback_*.md` and promote what's worth keeping.
 
+### Bugfix discipline
+
+**Don't patch blindly.** Every bugfix runs five steps: **reproduce → identify root cause → classify → apply the smallest safe fix → leave traceable evidence.** This applies to *all* fixes — only the written depth scales (table below), never the obligation to reproduce and classify.
+
+- **Smallest safe fix** — change only what the root cause requires. No opportunistic refactors, scope creep, or unrelated cleanups in a bugfix; a reviewer should be able to tie the diff line-by-line to the cause.
+- **Classify** using the `docs/solutions/` categories listed above (`logic-errors`, `test-failures`, `integration-issues`, `ui-bugs`, `workflow-issues`, `best-practices`, `developer-experience`). The fix-time label is the same one the fix carries if promoted via `/ce:compound`.
+- `/investigate` is an optional aid for the reproduce + root-cause phases — it's a generic skill, not a project command, so the contract stands without it.
+
+| Fix size | Reproduce | Root cause | Evidence carried |
+|---|---|---|---|
+| One-liner / typo / rename / doc | one-line note (no test) | one sentence | inline in commit/PR body |
+| Normal bug | failing test or repro steps | short paragraph | commit/PR body |
+
+**Overlay (not a size tier):** if the bug is a regression / recurring / subtle class — a judgment call, not a function of fix size — add a failing test to the suite, write *why prior code allowed it*, and promote via `/ce:compound`. Authors self-classify, so the floor (never exempt from reproduce + classify) is the load-bearing rule; the table is guidance, not a loophole.
+
+### Before opening a PR
+
+- [ ] **Bugfix?** Carry repro + root cause + a `docs/solutions/` label + smallest-safe-fix rationale in the PR body — see **Bugfix discipline** above.
+
 ## Plan-doc claims contract
 
 > **Status (2026-05-20):** Cutoff is now in effect. Any plan-doc dated `2026-05-20` or later **must** include a `claims:` block (or explicit `claims: {}` opt-out) — otherwise `plan-check` exits 8 and the `plan-claims-gate` check fails. The gate is currently a non-required check during a 14-day soak; promotion to a required status check is scheduled for **2026-06-02** (see `docs/plans/2026-05-19-010-feat-plan-claims-gate-followups-plan.md`).
