@@ -81,21 +81,38 @@
                             <textarea class="form-control" name="system_prompt" id="llmPromptInput"
                                       rows="4" style="font-size:13px;font-family:monospace;"
                                       placeholder="留空则使用内置默认提示词...">{{ llm_settings.system_prompt }}</textarea>
-                            <div class="form-check form-switch mt-2">
-                                <input class="form-check-input" type="checkbox" name="use_article_gen" id="useArticleGen" {% if llm_settings.use_article_gen %}checked{% endif %}>
-                                <label class="form-check-label" for="useArticleGen">启用 AI 全文生成</label>
-                            </div>
                         </div>
                         <div class="col-12">
-                            <label class="form-label">AI Cover Image Generation (FRW API)</label>
-                            <div class="input-group mb-2">
-                                <input type="password" class="form-control" name="image_gen_api_key"
-                                       placeholder="{% if llm_settings.image_gen_api_key %}已设置 (留空保留现值){% else %}输入 FRW API Key{% endif %}"
-                                       value="">
-                            </div>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" name="use_image_gen" id="useImageGen" {% if llm_settings.use_image_gen %}checked{% endif %}>
-                                <label class="form-check-label" for="useImageGen">启用 AI 封面生成</label>
+                            <button type="button"
+                                    class="llm-pro-toggle btn btn-link p-0 text-decoration-none text-secondary d-flex align-items-center gap-2"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#llm-pro-mode-collapse"
+                                    aria-expanded="{{ 'true' if llm_settings.use_article_gen or llm_settings.use_image_gen else 'false' }}"
+                                    aria-controls="llm-pro-mode-collapse">
+                                <span style="font-size:13px;font-weight:500;">Pro Mode AI 生成</span>
+                                <span class="badge bg-warning text-dark" style="font-size:10px;">Pro</span>
+                                <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+                            </button>
+                            <div id="llm-pro-mode-collapse"
+                                 class="collapse{% if llm_settings.use_article_gen or llm_settings.use_image_gen %} show{% endif %}">
+                                <div class="mt-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" name="use_article_gen" id="useArticleGen" {% if llm_settings.use_article_gen %}checked{% endif %}>
+                                        <label class="form-check-label" for="useArticleGen">启用 AI 全文生成</label>
+                                    </div>
+                                    <div class="mt-3">
+                                        <label class="form-label">AI Cover Image Generation (FRW API)</label>
+                                        <div class="input-group mb-2">
+                                            <input type="password" class="form-control" name="image_gen_api_key"
+                                                   placeholder="{% if llm_settings.image_gen_api_key %}已设置 (留空保留现值){% else %}输入 FRW API Key{% endif %}"
+                                                   value="">
+                                        </div>
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" name="use_image_gen" id="useImageGen" {% if llm_settings.use_image_gen %}checked{% endif %}>
+                                            <label class="form-check-label" for="useImageGen">启用 AI 封面生成</label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

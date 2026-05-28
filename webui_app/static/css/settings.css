@@ -148,6 +148,7 @@
         }
         .overview-collapse-toggle:hover { color:#374151; }
         .overview-collapse-toggle[aria-expanded="true"] .chevron { transform:rotate(90deg); }
+        .llm-pro-toggle[aria-expanded="true"] .chevron { transform:rotate(90deg); }
         /* Plan 2026-05-19-006 Unit 5 — channel binding dashboard */
         .dashboard-channel-card {
             padding:12px 16px; border:1px solid #e2e8f0; border-radius:8px;
