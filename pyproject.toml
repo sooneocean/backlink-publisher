@@ -26,7 +26,7 @@ dependencies = [
 # radon is pinned to exact version (deviates from house `>=` style) because SLOC counts
 # must be deterministic across CI matrix rows; bumping radon requires re-measuring all
 # 5 monolith ceilings in the same PR. See docs/plans/2026-05-18-006-feat-monolith-sloc-ceiling-plan.md.
-dev = ["pytest>=7", "pytest-mock>=3.15", "pytest-timeout>=2.4", "pytest-socket>=0.7", "pytest-env>=1.1", "requests", "pytest-asyncio>=0.23", "hypothesis>=6.151", "radon==6.0.1"]
+dev = ["pytest>=8.4", "pytest-mock>=3.15", "pytest-timeout>=2.4", "pytest-socket>=0.7", "pytest-env>=1.6", "requests", "pytest-asyncio>=1.1,<2", "hypothesis>=6.151", "radon==6.0.1"]
 # webwright is pinned to exact version — upstream is a 3-week-old project in rapid iteration;
 # loose constraints risk silent breaking changes. Upgrade manually after evaluating changelog.
 dev-webwright = ["webwright==0.0.7"]
@@ -60,6 +60,11 @@ where = ["src"]
 # Set here via pytest-env so `pytest tests/` works out of the box locally;
 # .github/workflows/ci.yml also pins it at the job level for belt+suspenders.
 env = ["PYTHONHASHSEED=0"]
+# Defensive: zero @pytest.mark.asyncio markers exist in the tree (confirmed
+# at Wave 3 time). strict mode is already the default in pytest-asyncio 1.x
+# but is declared explicitly so any future async-fixture conversion surfaces
+# a clear error rather than a silent mode mismatch.
+asyncio_mode = "strict"
 # webui_app/ and webui_store/ live at the repo root (not under src/), so any
 # test that imports them (e.g. tests/test_bind_channel_driver.py) used to
 # require `PYTHONPATH=.`. This pin makes `pytest tests/` collect them out
