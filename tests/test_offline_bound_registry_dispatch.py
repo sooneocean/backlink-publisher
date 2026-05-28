@@ -84,7 +84,7 @@ def test_anon_channels_bound_without_credentials(platform, cfg):
 
 @pytest.mark.parametrize(
     "platform",
-    ["csdn", "note", "tumblr", "wordpresscom", "substack"],
+    ["tumblr", "wordpresscom", "substack"],
 )
 def test_credential_channel_unbound_without_credentials(platform, cfg):
     assert _is_bound(platform, cfg) is False
@@ -93,12 +93,12 @@ def test_credential_channel_unbound_without_credentials(platform, cfg):
 
 
 def test_cookie_channel_bound_once_cookies_present(cfg):
-    """A cookie-export adapter (csdn) flips to bound when its credential file
+    """A cookie-export adapter (substack) flips to bound when its credential file
     exists — delegating to its ``available()`` probe."""
-    assert _is_bound("csdn", cfg) is False
-    cred = cfg.config_dir / "csdn-credentials.json"
+    assert _is_bound("substack", cfg) is False
+    cred = cfg.config_dir / "substack-credentials.json"
     cred.write_text(json.dumps({"cookies": [{"name": "x", "value": "y"}]}))
-    assert _is_bound("csdn", cfg) is True
+    assert _is_bound("substack", cfg) is True
 
 
 # ── P0 false-positive guards: the two traps ───────────────────────────────────

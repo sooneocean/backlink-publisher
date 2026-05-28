@@ -25,7 +25,7 @@ _EXPECTED_BUCKETS = {
     "anon": {"rentry", "telegraph", "txtfyi"},
     "token": {"devto", "writeas"},
     "token_fields": {"ghpages", "hashnode", "notion", "tumblr", "wordpresscom"},
-    "paste_blob": {"csdn", "juejin", "note", "substack"},
+    "paste_blob": {"substack"},
     "userpass": {"livejournal"},
     "oauth": {"blogger"},
     "live_browser": {"mastodon", "medium", "velog"},

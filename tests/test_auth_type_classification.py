@@ -69,7 +69,7 @@ def test_auth_type_returns_none_for_unknown():
         ("rentry", "anon"),
         ("devto", "token"),
         ("notion", "token_fields"),
-        ("csdn", "paste_blob"),
+        ("substack", "paste_blob"),
         ("livejournal", "userpass"),
         ("blogger", "oauth"),
         ("velog", "live_browser"),

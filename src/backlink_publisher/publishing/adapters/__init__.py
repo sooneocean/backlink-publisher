@@ -29,16 +29,13 @@ from backlink_publisher._util.errors import DependencyError
 from ..registry import _REGISTRY, dispatch, register, registered_platforms
 from .._manifests import (
     BLOGGER_MANIFEST,
-    CSDN_MANIFEST,
     DEVTO_MANIFEST,
     GHPAGES_MANIFEST,
     HASHNODE_MANIFEST,
-    JUEJIN_MANIFEST,
     LINKEDIN_MANIFEST,
     LIVEJOURNAL_MANIFEST,
     MASTODON_MANIFEST,
     MEDIUM_MANIFEST,
-    NOTE_MANIFEST,
     NOTION_MANIFEST,
     RENTRY_MANIFEST,
     SUBSTACK_MANIFEST,
@@ -67,11 +64,8 @@ from .wordpresscom_api import WordpresscomAPIAdapter
 from .hashnode_graphql import HashnodeGraphQLAdapter
 from .writeas_api import WriteasAPIAdapter
 from .tumblr_api import TumblrAPIAdapter
-from .juejin_api import JuejinAPIAdapter
-from .csdn_api import CSDNAPIAdapter
 from .linkedin_api import LinkedInAPIAdapter
 from .substack_api import SubstackAPIAdapter
-from .note_api import NoteAPIAdapter
 from .rentry_api import RentryAPIAdapter
 
 # Import the Unit 4a velog browser recipe module so it can populate
@@ -134,36 +128,12 @@ register(
     **WRITEAS_MANIFEST,
 )
 register(
-    "juejin",
-    JuejinAPIAdapter,
-    dofollow=False,  # link.juejin.cn redirect interstitial strips equity
-    rationale=_R["juejin"],
-    referral_value="high",
-    **JUEJIN_MANIFEST,
-)
-register(
-    "csdn",
-    CSDNAPIAdapter,
-    dofollow=False,  # link.csdn.net redirect interstitial strips equity
-    rationale=_R["csdn"],
-    referral_value="high",
-    **CSDN_MANIFEST,
-)
-register(
     "substack",
     SubstackAPIAdapter,
     dofollow="uncertain",  # 3rd-party live check = dofollow; OUR canary pending
     rationale=_R["substack"],
     referral_value="high",
     **SUBSTACK_MANIFEST,
-)
-register(
-    "note",
-    NoteAPIAdapter,
-    dofollow=False,  # note.com auto rel=nofollow on all links (JP SEO documented)
-    rationale=_R["note"],
-    referral_value="high",
-    **NOTE_MANIFEST,
 )
 register(
     "rentry",

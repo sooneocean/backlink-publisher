@@ -64,18 +64,15 @@ _WAL_SUFFIX = "-wal"
 #: and the unregistered ``http-form-post`` are intentionally absent → quarantine.
 _ADAPTER_STRING_TO_PLATFORM: dict[str, str] = {
     "blogger-api": "blogger",
-    "csdn": "csdn",
     "devto": "devto",
     "ghpages": "ghpages",
     "hashnode": "hashnode",
     "hashnode-gql": "hashnode",
-    "juejin": "juejin",
     "linkedin": "linkedin",
     "livejournal-api": "livejournal",
     "medium-api": "medium",
     "medium-brave": "medium",
     "medium-browser": "medium",
-    "note": "note",
     "notion": "notion",
     "rentry": "rentry",
     "substack": "substack",

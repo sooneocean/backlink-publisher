@@ -18,11 +18,9 @@ class TestRejectedPlatformsMap:
     def test_rejected_entries(self) -> None:
         # PR #108 → #109 negative-knowledge corpus.
         # devto/mastodon/wordpresscom were all un-rejected and re-registered.
-        # jianshu re-rejected 2026-05-27 (hard removal): nofollow redirect
-        #   interstitial strips equity + operator has no account. The entry
-        #   arms register()'s re-add tripwire.
-        assert "jianshu" in _REJECTED_PLATFORMS
-        assert len(_REJECTED_PLATFORMS) == 1
+        # jianshu re-rejected 2026-05-27; csdn/juejin/note hard-removed
+        # 2026-05-28. All four entries arm register()'s re-add tripwire.
+        assert set(_REJECTED_PLATFORMS) == {"jianshu", "csdn", "juejin", "note"}
 
     def test_every_rationale_meets_length_floor(self) -> None:
         # Mirrors monolith_budget.toml rationale discipline. Loop assertion

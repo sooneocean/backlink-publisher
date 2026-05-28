@@ -63,18 +63,18 @@ def test_unverified_seeds_uncertain():
 
 
 def test_confirmed_missing_live_url_seeds_uncertain():
-    _event("publish.confirmed", "https://x.com/c", "note", None)
+    _event("publish.confirmed", "https://x.com/c", "substack", None)
     r = run_backfill()
     assert r.seeded_uncertain == 1
     assert DedupStore().get(
-        DedupKey(platform="note", target_url="https://x.com/c")
+        DedupKey(platform="substack", target_url="https://x.com/c")
     ).state == "uncertain"
 
 
 @pytest.mark.parametrize(
     "adapter,platform",
     [
-        ("note", "note"),
+        ("substack", "substack"),
         ("txtfyi-form-post", "txtfyi"),
         ("medium-brave", "medium"),
         ("telegraph-cdp", "telegraph"),

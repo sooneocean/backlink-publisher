@@ -83,30 +83,6 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
     # lacking an OUR-pipeline canary => dofollow="uncertain" (the
     # livejournal/txtfyi precedent — third-party spot-checks do not
     # discharge the canary burden). Zero stay dofollow=True.
-    "juejin": (
-        "Juejin (掘金) wraps all external body links in a "
-        "https://link.juejin.cn/?target= redirect/risk-warning interstitial "
-        "that strips link equity — server-side and unavoidable per account. "
-        "No PageRank transfer; kept for referral traffic and dev-topical "
-        "relevance on a high-DA Chinese developer community. Same "
-        "link.<domain> redirect-interstitial family as csdn."
-    ),
-    "csdn": (
-        "CSDN (blog.csdn.net) rewrites outbound body links to a "
-        "https://link.csdn.net/?target= redirect interstitial that strips "
-        "link equity server-side for all accounts, so no PageRank transfers. "
-        "Retained for referral traffic and dev-topical relevance from a very "
-        "high-DA Chinese developer blog. Same link.<domain> redirect-"
-        "interstitial family as juejin."
-    ),
-    "note": (
-        "note.com auto-applies rel=\"nofollow\" to ALL links — profile, post "
-        "body, and embedded references alike — server-side and not "
-        "disableable per-post or per-account, per multiple Japanese SEO "
-        "sources documenting the platform policy. No PageRank transfer; "
-        "retained for referral traffic and topical signal from a high-DA "
-        "Japanese publishing platform."
-    ),
     "wordpresscom": (
         "Registered dofollow=\"uncertain\": evidence conflicts. This "
         "project's PR #108->#109 (the 9-minute revert) observed that free "

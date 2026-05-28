@@ -157,10 +157,28 @@ _REJECTED_PLATFORMS: dict[str, str] = {
     "jianshu": (
         "Jianshu (简书) routes outbound body links through a "
         "https://link.jianshu.com/go?to= redirect interstitial that strips "
-        "link equity server-side (same pattern as juejin/csdn), so external "
+        "link equity server-side, so external "
         "<a> elements pass no PageRank — nofollow dead weight. Removed "
         "2026-05-27; re-register only with a fresh dofollow canary that "
         "disproves the interstitial."
+    ),
+    "csdn": (
+        "CSDN rewrites outbound body links through a link.csdn.net redirect "
+        "interstitial that strips link equity, and the operator has no account "
+        "or intent to use it. Removed 2026-05-28; re-register only with a "
+        "fresh dofollow canary and explicit operator approval."
+    ),
+    "juejin": (
+        "Juejin rewrites outbound body links through a link.juejin.cn redirect "
+        "interstitial that strips link equity, and the operator has no account "
+        "or intent to use it. Removed 2026-05-28; re-register only with a "
+        "fresh dofollow canary and explicit operator approval."
+    ),
+    "note": (
+        "note.com applies nofollow to outbound links and the operator has no "
+        "account or intent to use it. The channel added maintenance and WebUI "
+        "noise without distribution value. Removed 2026-05-28; re-register "
+        "only with a fresh canary and explicit operator approval."
     ),
 }
 
@@ -216,8 +234,7 @@ _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     "wordpresscom": "token_fields", "hashnode": "token_fields",
     "tumblr": "token_fields",
     # PASTE-BLOB — pasted {"cookies":[...]} JSON (cookie-export)
-    "csdn": "paste_blob", "juejin": "paste_blob",
-    "note": "paste_blob", "substack": "paste_blob",
+    "substack": "paste_blob",
     # USERPASS — username + password (stored server-side)
     "livejournal": "userpass",
     # OAUTH — redirect flow
@@ -421,8 +438,8 @@ def auth_type(name: str) -> str | None:
 
 def platforms_by_auth_type(target: str) -> frozenset[str]:
     """Return the set of active platforms whose binding ``auth_type`` equals
-    ``target`` (e.g. ``"paste_blob"`` -> ``{"csdn", "juejin", "note",
-    "substack"}``); empty for an unknown auth-type.
+    ``target`` (e.g. ``"paste_blob"`` -> ``{"substack"}``); empty for an
+    unknown auth-type.
 
     This is the single registry reverse-lookup the credential-save drift guard
     (``tests/test_credential_save_dispatch_drift.py``, Plan 2026-05-27-008)

@@ -38,8 +38,8 @@ ceiling = 110
 rationale = "3 reducers (_project_checkpoint, _project_history, _project_drafts) extracted to events/_project_reducers.py (2026-05-27). projector.py dropped from 542 to 75 SLOC — holds only flush_for dispatch, record_projection_health, project_run_safe, and health constants. Ceiling 110 = round_up_to_10(75+30) per policy."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 640
-rationale = "Removed 7 unusable channels (2026-05-26): operator has no accounts on beehiiv/cnblogs/habr/ghost/zhihu/segmentfault/pikabu, so their register() blocks + manifest/adapter imports were deleted (28 → 21 platforms). SLOC dropped 646 → 601 after rebasing onto #249's auth_type/visibility additions. Ceiling re-tightened 680 → 640 = round_up_to_10(601+30) per policy."
+ceiling = 600
+rationale = "Removed 3 additional channels (2026-05-28): operator has no accounts on csdn/juejin/note and does not intend to use them, so their register() blocks plus manifest/adapter imports were deleted. SLOC dropped 601 → 562. Ceiling re-tightened 640 → 600 = round_up_to_10(562+30) per policy."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465
