@@ -64,9 +64,16 @@ def test_pipeline_api_quarantine_when_no_envelope():
 
 
 def test_pipeline_api_success_has_no_error():
-    raw = {"stdout": json.dumps({"id": "1", "target_url": "https://x/y"}) + "\n",
-           "stderr": ""}
-    with mock.patch("webui_app.api.pipeline_api.run_pipe", return_value=raw):
+    # U7: plan() is in-process; mock plan_rows not run_pipe.
+    from backlink_publisher.cli.plan_backlinks._engine import PlanOutcome
+    stub_outcome = PlanOutcome(outputs=[{"id": "1", "target_url": "https://x/y"}])
+    with (
+        mock.patch("backlink_publisher.config.load_config", return_value=mock.MagicMock()),
+        mock.patch(
+            "backlink_publisher.cli.plan_backlinks._engine.plan_rows",
+            return_value=stub_outcome,
+        ),
+    ):
         result = PipelineAPI().plan("{}")
     assert result.success is True
     assert result.error is None

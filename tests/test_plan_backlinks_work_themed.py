@@ -381,11 +381,9 @@ class TestDispatcherRouting:
         ) as wt, patch.object(
             plan_backlinks, "_plan_zh_short_row", return_value={"id": "zh"},
         ) as zh, patch.object(
-            # long-form _generate_payload is imported at core.py module top
-            # (from ._payload import _generate_payload), so it binds as
-            # core._generate_payload — patch there, not on the package
-            # re-export, or the real impl runs (mock never called).
-            plan_backlinks.core, "_generate_payload", return_value={"id": "long"},
+            # U7: _dispatch_row was extracted to _engine.py, which imports
+            # _generate_payload directly from ._payload — patch _engine, not core.
+            plan_backlinks._engine, "_generate_payload", return_value={"id": "long"},
         ) as lf:
             outputs = _drive_dispatcher([row], cfg)
         assert not wt.called

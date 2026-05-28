@@ -14,8 +14,8 @@
 # plan_backlinks.py was decomposed into a package (plan_backlinks/) in 2026-05-19.
 # Monitoring the largest sub-file (core.py) post-split.
 [files."src/backlink_publisher/cli/plan_backlinks/core.py"]
-ceiling = 400
-rationale = "Blast-radius Phase 1 (2026-05-27) added _cell_gate_drop + cell_gate_summary helpers for the opt-in cell admission gate (R7-minimal), growing core.py from 347 to 392 SLOC. Ceiling 400 = round_up_to_10(392+5)."
+ceiling = 250
+rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): pure generation kernel (_cell_gate_drop, _dispatch_row, _emit_link_count_recon, _scheduler_enabled_for, PlanOutcome, plan_rows) extracted to plan_backlinks/_engine.py so the in-process PipelineAPI.plan path shares it. core.py dropped from 392 to 208 SLOC — now argparse + set_log_level + row parsing + load_config + config_echo banner + reset_stats (H2) + plan_rows call + error-print + write_jsonl + preflight/canary nudge shell only. Ceiling 250 = round_up_to_10(208+30) per policy."
 
 [files."src/backlink_publisher/cli/publish_backlinks.py"]
 ceiling = 370
@@ -54,8 +54,8 @@ ceiling = 150
 rationale = "thin-WebUI Phase 2 Unit 6 (2026-05-27): the pure validation kernel (URL-collection + check_urls_strict + the per-row loop) extracted to validate/engine.py so the in-process PipelineAPI.validate path shares it. validate_backlinks.py dropped from 168 to 116 SLOC — now argparse + set_log_level + load_config_tolerant + config_echo banner + read_jsonl + a single validate_rows call + recon/emit_envelope_and_exit shell only. Ceiling 150 = round_up_to_10(116+30)."
 
 [files."src/backlink_publisher/cli/report_anchors.py"]
-ceiling = 130
-rationale = "Formatting helpers (_markdown_table, _json_output, _build_report, _build_profile_report, _format_alarm_markdown, _format_profile_report_markdown, _format_profile_report_json) and _compute_alarm extracted to _report_format.py (2026-05-22). report_anchors.py dropped from 353 to 94 SLOC — holds main() only plus re-export imports. Ceiling 130 = round_up_to_10(94+30) with headroom for argparse additions."
+ceiling = 120
+rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): main() split into two engine calls (report_from_profile + report_from_rows) extracted to _report_engine.py so the in-process PipelineAPI.report_anchors path shares it. report_anchors.py stayed at 89 SLOC — holds argparse + load_config + config_echo banner + engine call + stdout print + stderr breach lines + emit_envelope_and_exit shell only. Ceiling 120 = round_up_to_10(89+30) per policy."
 
 [files."src/backlink_publisher/cli/_publish_helpers.py"]
 ceiling = 580

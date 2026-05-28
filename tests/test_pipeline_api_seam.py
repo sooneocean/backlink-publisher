@@ -96,11 +96,25 @@ def _captured(stdout: str, stderr: str, returncode: int) -> dict:
 
 def test_report_anchors_retains_stdout_on_exit6_alarm():
     # exit-6 = anchor-distribution alarm, but the JSON document is still on
-    # stdout. run_pipe would discard it by raising; report_anchors must keep it.
-    envelope = ErrorEnvelope("AnchorDistributionAlarm", 6, "anchor alarm").serialize()
-    captured = _captured('{"main_domain":"x","total_entries":3}', envelope + "\n", 6)
-    with mock.patch(
-        "webui_app.api.pipeline_api.run_pipe_capture", return_value=captured
+    # stdout. The in-process path (Unit 7) maps alarm → PipeResult with
+    # success=False, exit_code=6, error_class="AnchorDistributionAlarm",
+    # while result.stdout carries the report document — NOT discarded.
+    from backlink_publisher.cli._report_engine import ReportOutcome
+
+    alarm_outcome = ReportOutcome(
+        document='{"main_domain":"x","total_entries":3}',
+        alarm_breach=True,
+        breach_count=1,
+        breach_lines=["WARN: breach"],
+        exit_code=6,
+    )
+    cfg_mock = mock.MagicMock()
+    with (
+        mock.patch("backlink_publisher.config.load_config", return_value=cfg_mock),
+        mock.patch(
+            "backlink_publisher.cli._report_engine.report_from_profile",
+            return_value=alarm_outcome,
+        ),
     ):
         result = PipelineAPI().report_anchors("example.com")
     assert result.stdout == '{"main_domain":"x","total_entries":3}'  # NOT discarded
@@ -110,9 +124,20 @@ def test_report_anchors_retains_stdout_on_exit6_alarm():
 
 
 def test_report_anchors_success_path():
-    captured = _captured('{"main_domain":"x"}', "", 0)
-    with mock.patch(
-        "webui_app.api.pipeline_api.run_pipe_capture", return_value=captured
+    from backlink_publisher.cli._report_engine import ReportOutcome
+
+    ok_outcome = ReportOutcome(
+        document='{"main_domain":"x"}',
+        alarm_breach=False,
+        exit_code=0,
+    )
+    cfg_mock = mock.MagicMock()
+    with (
+        mock.patch("backlink_publisher.config.load_config", return_value=cfg_mock),
+        mock.patch(
+            "backlink_publisher.cli._report_engine.report_from_profile",
+            return_value=ok_outcome,
+        ),
     ):
         result = PipelineAPI().report_anchors("example.com")
     assert result.success is True
@@ -156,13 +181,23 @@ def test_publish_seed_success():
     assert result.rows[0]["published_url"] == "https://m/p"
 
 
-def test_plan_work_count_flag_passed_through():
-    seen = {}
+def test_plan_work_count_passed_to_engine():
+    # Unit 7: plan() is in-process; verify work_count reaches plan_rows.
+    from backlink_publisher.cli.plan_backlinks._engine import PlanOutcome
 
-    def _fake_run_pipe(cmd, stdin):
-        seen["cmd"] = cmd
-        return {"stdout": "{}", "stderr": ""}
+    seen: dict = {}
 
-    with mock.patch("webui_app.api.pipeline_api.run_pipe", side_effect=_fake_run_pipe):
-        PipelineAPI().plan("{}", work_count=10)
-    assert seen["cmd"] == ["plan-backlinks", "--work-count", "10"]
+    def _fake_plan_rows(rows, cfg, *, work_count=10, fetch_verify_enabled=True):
+        seen["work_count"] = work_count
+        return PlanOutcome()
+
+    cfg_mock = mock.MagicMock()
+    with (
+        mock.patch("backlink_publisher.config.load_config", return_value=cfg_mock),
+        mock.patch(
+            "backlink_publisher.cli.plan_backlinks._engine.plan_rows",
+            side_effect=_fake_plan_rows,
+        ),
+    ):
+        PipelineAPI().plan("{}", work_count=7)
+    assert seen["work_count"] == 7

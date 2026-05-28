@@ -263,11 +263,63 @@ class PipelineAPI:
     # ── plan ─────────────────────────────────────────────────────────────
 
     def plan(self, seed_json: str, *, work_count: int | None = None) -> PipeResult:
-        """Run ``plan-backlinks`` with the given JSONL seed data."""
-        cmd = ["plan-backlinks"]
-        if work_count is not None:
-            cmd += ["--work-count", str(work_count)]
-        return self._invoke(cmd, seed_json, "plan-backlinks failed")
+        """Run ``plan-backlinks`` **in-process** (thin-WebUI Phase 2 Unit 7).
+
+        Replaces the old subprocess invocation with a direct call to the pure
+        :func:`plan_backlinks._engine.plan_rows`. Hazard handling:
+
+        - H1: ``set_log_level`` is NOT called here (stays in CLI shell only).
+        - H2: ``content_fetch.reset_stats()`` is NOT called — in-process path
+          accepts process-aggregate stats (see audit surface 2).
+        - H3: output is built in a ``StringIO``, never ``sys.stdout``.
+
+        Config load is fail-loud (unlike validate's tolerant fallback — plan
+        requires a valid config to generate usable payloads).
+        """
+        import io
+
+        from backlink_publisher._util.jsonl import write_jsonl
+        from backlink_publisher.cli.plan_backlinks._engine import PlanOutcome, plan_rows
+        from backlink_publisher.config import load_config
+
+        rows = _parse_jsonl_rows(seed_json)
+
+        try:
+            cfg = load_config()
+        except Exception as exc:  # noqa: BLE001
+            return PipeResult(
+                success=False,
+                error=f"config load failed: {exc}",
+                error_class="InputValidationError",
+                exit_code=2,
+            )
+
+        def _jsonl(outputs: list[dict[str, Any]]) -> str:
+            buf = io.StringIO()
+            write_jsonl(outputs, buf)
+            return buf.getvalue()
+
+        outcome: PlanOutcome = plan_rows(
+            rows, cfg,
+            work_count=work_count if work_count is not None else 10,
+            fetch_verify_enabled=True,
+        )
+
+        if outcome.errors:
+            message = f"generation failed: {len(outcome.errors)} errors"
+            return PipeResult(
+                stdout=_jsonl(outcome.outputs),
+                success=False,
+                error=message,
+                error_class="InputValidationError",
+                exit_code=2,
+            )
+
+        return PipeResult(
+            stdout=_jsonl(outcome.outputs),
+            success=True,
+            exit_code=0,
+        )
 
     # ── validate ─────────────────────────────────────────────────────────
 
@@ -382,16 +434,55 @@ class PipelineAPI:
     # ── report-anchors ─────────────────────────────────────────────────────
 
     def report_anchors(self, profile: str, *, as_json: bool = True) -> PipeResult:
-        """Run ``report-anchors --from-profile <profile>`` (default ``--json``).
+        """Run ``report-anchors --from-profile`` **in-process** (thin-WebUI Phase 2 Unit 7).
 
-        Capture-based because ``report-anchors`` emits a single JSON/markdown
-        **document** (not JSONL rows) and exits 6 when the anchor-distribution
-        alarm fires — but the document is still on stdout. ``run_pipe`` would
-        discard it; this keeps it, with the alarm surfaced as ``error_class``/
-        ``exit_code`` (advisory) while ``stdout`` stays parseable. Read the
-        document via ``result.stdout`` (``.rows`` cannot parse a single document).
+        Replaces the old subprocess invocation with a direct call to the pure
+        :func:`_report_engine.report_from_profile`. Hazard handling:
+
+        - H3: document is built in a string, never written to ``sys.stdout``.
+
+        The alarm is surfaced as ``error_class``/``exit_code`` (advisory) while
+        ``stdout`` stays parseable — same contract as the old capture-based path.
+        Read the document via ``result.stdout`` (``.rows`` cannot parse a
+        single-document JSON/markdown blob).
         """
-        cmd = ["report-anchors", "--from-profile", profile]
-        if as_json:
-            cmd.append("--json")
-        return self._invoke_capture(cmd, "", "report-anchors failed")
+        from backlink_publisher.cli._report_engine import report_from_profile
+        from backlink_publisher.config import load_config
+
+        try:
+            cfg = load_config()
+        except Exception as exc:  # noqa: BLE001
+            return PipeResult(
+                success=False,
+                error=f"config load failed: {exc}",
+                error_class="InputValidationError",
+                exit_code=2,
+            )
+
+        try:
+            outcome = report_from_profile(profile, cfg, as_json=as_json)
+        except Exception as exc:  # noqa: BLE001
+            return PipeResult(
+                success=False,
+                error=f"report-anchors failed: {exc}",
+                error_class="unrecognized",
+                exit_code=1,
+            )
+
+        if outcome.alarm_breach:
+            return PipeResult(
+                stdout=outcome.document,
+                success=False,
+                error=(
+                    f"anchor distribution alarm: {outcome.breach_count} "
+                    "target(s) breached"
+                ),
+                error_class="AnchorDistributionAlarm",
+                exit_code=outcome.exit_code,
+            )
+
+        return PipeResult(
+            stdout=outcome.document,
+            success=True,
+            exit_code=0,
+        )

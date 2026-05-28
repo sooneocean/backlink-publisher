@@ -24,7 +24,7 @@ feedback_jinja2-banner-text-collision.md failure mode.
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -341,12 +341,17 @@ class TestSitesRun:
         resp = csrf_client.post("/sites/run", data={"main_url": "https://run.com/"})
         assert resp.status_code == 403
 
-    def test_run_invokes_run_pipe_and_redirects_to_result(self, client):
+    def test_run_invokes_plan_and_redirects_to_result(self, client):
+        # U7: plan() is now in-process; verify the route still redirects correctly.
+        from backlink_publisher.cli.plan_backlinks._engine import PlanOutcome
         token = self._save_basic(client)
-        with patch(
-            "webui_app.api.pipeline_api.run_pipe",
-            return_value={"stdout": '{"id":"abc"}\n', "stderr": ""},
-        ) as mock_pipe:
+        stub_outcome = PlanOutcome(outputs=[{"id": "abc", "platform": "medium",
+                                             "work_url": "https://run.com/work/1",
+                                             "main_domain": "https://run.com"}])
+        with (
+            patch("backlink_publisher.config.load_config", return_value=MagicMock()),
+            patch("backlink_publisher.cli.plan_backlinks._engine.plan_rows", return_value=stub_outcome),
+        ):
             resp = client.post(
                 "/sites/run",
                 data={
@@ -358,10 +363,6 @@ class TestSitesRun:
         assert resp.status_code == 302
         assert "/sites/run/" in resp.headers["Location"]
         assert "/result" in resp.headers["Location"]
-        # Pipeline was actually shelled out
-        assert mock_pipe.called
-        cmd = mock_pipe.call_args.args[0]
-        assert cmd[0] == "plan-backlinks"
 
     def test_run_for_unknown_main_url_returns_400(self, client):
         token = _fetch_csrf(client)

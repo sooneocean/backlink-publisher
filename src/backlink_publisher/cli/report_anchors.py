@@ -1,15 +1,23 @@
-"""Report anchor-text distribution across backlink article payloads."""
+"""Report anchor-text distribution across backlink article payloads.
+
+CLI shell over :func:`._report_engine.report_from_profile` and
+:func:`~.report_from_rows` (thin-WebUI Phase 2 Unit 7). The shell owns argparse,
+config-load + config_echo banner, stdin/stdout I/O (H3), stderr breach lines,
+and the typed-error exit. The pure reporting kernel lives in ``_report_engine``
+so the in-process ``PipelineAPI.report_anchors()`` bridge shares it.
+"""
 
 from __future__ import annotations
 
 import sys
 
-import backlink_publisher.publishing.adapters  # noqa: F401  populate registry before config load
+import backlink_publisher.publishing.adapters  # noqa: F401  populate registry
 from .. import config_echo
 from backlink_publisher._util.errors import emit_envelope_and_exit
 from backlink_publisher._util.jsonl import read_jsonl
-from backlink_publisher.anchor.profile import load_profile
 from backlink_publisher.config import load_config
+
+# Re-export format helpers so callers that import them from here still find them.
 from ._report_format import (  # noqa: F401
     _EXIT_CODE_ALARM,
     _build_profile_report,
@@ -70,69 +78,41 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     if args.from_profile:
-        # ── Profile-based report path ────────────────────────────────────
-        # Load config to pull the target proportions; missing config is fine
-        # (defaults to Safe SEO) — we want to be useful even before the user
-        # has wired up the full scheduler config.
+        # ── Profile-based report path ────────────────────────────────────────
+        from ._report_engine import report_from_profile
+
         cfg = load_config()
-        # Config Echo Chamber (Round-3 #7): banner so operator sees which
-        # config was resolved + env overrides + SHA.
         config_echo.emit_banner(cfg, "report-anchors")
-        profile = load_profile(args.from_profile)
-        report = _build_profile_report(profile, cfg.anchor_proportions)
+        outcome = report_from_profile(args.from_profile, cfg, as_json=args.json)
 
-        # Layer the anchor distribution alarm on top of the existing report.
-        # Computes per-target metrics over 30d / 90d windows, emits a structured
-        # alarm block in the JSON output, prints one stderr WARN per breaching
-        # target, and exits with code 6 if any target's 90d window breaches.
-        alarm_block, breach_lines = _compute_alarm(
-            profile, cfg.anchor_alarm, args.from_profile,
-        )
-        report["alarm"] = alarm_block
-
-        if args.json:
-            print(_format_profile_report_json(report))
-        else:
-            print(_format_profile_report_markdown(report))
-            if alarm_block.get("any_breach"):
-                print(_format_alarm_markdown(alarm_block))
-
-        for line in breach_lines:
+        # H3: stdout write stays in the shell.
+        print(outcome.document)
+        for line in outcome.breach_lines:
             print(line, file=sys.stderr)
-        if alarm_block.get("any_breach"):
-            # Exit 6 is an *advisory* anchor-distribution alarm, not a crash: the
-            # report (incl. the structured `alarm` block) was emitted to stdout
-            # successfully. The envelope carries a domain-specific class name so a
-            # WebUI consumer renders it as a breach signal, not a pipeline failure.
+
+        if outcome.alarm_breach:
             emit_envelope_and_exit(
                 "AnchorDistributionAlarm",
-                _EXIT_CODE_ALARM,
-                f"anchor distribution alarm: {len(breach_lines)} target(s) breached",
+                outcome.exit_code,
+                f"anchor distribution alarm: {outcome.breach_count} target(s) breached",
             )
         return
 
-    # ── JSONL-stdin aggregate path ─────────────────────────────────────────
-    # Document-review F6: an operator running `cat payloads.jsonl |
-    # report-anchors` could see exit 0 and falsely conclude "no anchor
-    # breaches". This path is structurally incapable of computing the alarm
-    # because the JSONL `links[]` array lacks anchor_type. Emit a one-line
-    # hint so the false-safety failure mode does not occur silently.
+    # ── JSONL-stdin aggregate path ──────────────────────────────────────────
+    # Document-review F6: this path is structurally incapable of computing the
+    # alarm because the JSONL `links[]` array lacks anchor_type.
     print(
         "NOTE: anchor distribution alarm requires --from-profile <main_domain>; "
         "this stdin-aggregate path does not compute distributional metrics.",
         file=sys.stderr,
     )
 
+    from ._report_engine import report_from_rows
+
     fh = args.input or sys.stdin
     rows = list(read_jsonl(fh, strict=False))
-
-    stats = _build_report(rows)
-    tier_summary = _build_tier_summary(rows)
-
-    if args.json:
-        print(_json_output(stats, tier_summary=tier_summary))
-    else:
-        print(_markdown_table(stats, top_n=args.top_anchors, tier_summary=tier_summary))
+    outcome = report_from_rows(rows, as_json=args.json, top_anchors=args.top_anchors)
+    print(outcome.document)
 
 
 if __name__ == "__main__":
