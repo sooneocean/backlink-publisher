@@ -81,7 +81,7 @@ def settings_body(client):
 @pytest.mark.parametrize("channel,auth_type", [
     ("livejournal", "userpass"),
     ("wordpresscom", "token_fields"),
-    ("csdn", "paste_blob"),
+    ("substack", "paste_blob"),
     ("txtfyi", "anon"),
     ("writeas", "token"),
 ])
@@ -299,7 +299,7 @@ def test_token_fields_round_trip(client, tmp_path, monkeypatch):
 
 def test_paste_blob_invalid_json_rejected(client):
     csrf = _seed_csrf(client)
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": "not-json"}, csrf=csrf)
     assert resp.status_code == 302
     assert "danger" in resp.headers["Location"]
@@ -307,7 +307,7 @@ def test_paste_blob_invalid_json_rejected(client):
 
 def test_paste_blob_missing_cookies_key_rejected(client):
     csrf = _seed_csrf(client)
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": '{"data": []}'}, csrf=csrf)
     assert resp.status_code == 302
     assert "danger" in resp.headers["Location"]
@@ -321,7 +321,7 @@ def test_paste_blob_wrong_domain_rejected(client):
             {"name": "sid", "value": "abc", "domain": ".github.com"},
         ]
     })
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": blob}, csrf=csrf)
     assert resp.status_code == 302
     assert "danger" in resp.headers["Location"]
@@ -330,16 +330,16 @@ def test_paste_blob_wrong_domain_rejected(client):
 def test_paste_blob_missing_name_field_rejected(client):
     csrf = _seed_csrf(client)
     blob = json.dumps({
-        "cookies": [{"value": "abc", "domain": ".csdn.net"}]
+        "cookies": [{"value": "abc", "domain": ".substack.com"}]
     })
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": blob}, csrf=csrf)
     assert resp.status_code == 302
     assert "danger" in resp.headers["Location"]
 
 
 def test_paste_blob_round_trip(client, tmp_path, monkeypatch):
-    """Valid CSDN cookie blob saves as 0600 credentials.json."""
+    """Valid Substack cookie blob saves as 0600 credentials.json."""
     config_dir = tmp_path / "cfg"
     config_dir.mkdir()
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(config_dir))
@@ -347,19 +347,19 @@ def test_paste_blob_round_trip(client, tmp_path, monkeypatch):
     csrf = _seed_csrf(client)
     blob = json.dumps({
         "cookies": [
-            {"name": "UserName", "value": "testuser", "domain": ".csdn.net",
+            {"name": "UserName", "value": "testuser", "domain": ".substack.com",
              "path": "/"},
-            {"name": "uuid_tt_dd", "value": "token123", "domain": ".csdn.net",
+            {"name": "uuid_tt_dd", "value": "token123", "domain": ".substack.com",
              "path": "/"},
         ]
     })
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": blob}, csrf=csrf)
     assert resp.status_code == 302
     assert "success" in resp.headers["Location"]
 
     import os as _os
-    cred_path = config_dir / "csdn-credentials.json"
+    cred_path = config_dir / "substack-credentials.json"
     assert cred_path.exists()
     mode = _os.stat(cred_path).st_mode & 0o777
     assert mode == 0o600
@@ -372,9 +372,9 @@ def test_paste_blob_size_limit_rejected(client):
     csrf = _seed_csrf(client)
     big_value = "x" * 110_000
     blob = json.dumps({
-        "cookies": [{"name": "k", "value": big_value, "domain": ".csdn.net"}]
+        "cookies": [{"name": "k", "value": big_value, "domain": ".substack.com"}]
     })
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": blob}, csrf=csrf)
     assert resp.status_code == 302
     assert "danger" in resp.headers["Location"]
@@ -383,7 +383,7 @@ def test_paste_blob_size_limit_rejected(client):
 def test_paste_blob_leave_as_is_empty(client):
     """Empty blob → info flash."""
     csrf = _seed_csrf(client)
-    resp = _post(client, {"channel": "csdn", "auth_type": "paste_blob",
+    resp = _post(client, {"channel": "substack", "auth_type": "paste_blob",
                            "blob": ""}, csrf=csrf)
     assert resp.status_code == 302
     assert "info" in resp.headers["Location"]

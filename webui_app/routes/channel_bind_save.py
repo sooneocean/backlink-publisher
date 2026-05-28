@@ -74,9 +74,6 @@ _URL_FIELDS: frozenset[str] = frozenset({"site", "site_url"})
 # Domain suffix is checked against at least one cookie's domain field (advisory
 # only — warn, not reject — because some channels use multiple subdomains).
 _PASTE_BLOB_CHANNELS: dict[str, tuple[str, str]] = {
-    "csdn":          ("csdn-credentials.json",          "csdn.net"),
-    "juejin":        ("juejin-credentials.json",         "juejin.cn"),
-    "note":          ("note-credentials.json",           "note.com"),
     "substack":      ("substack-credentials.json",       "substack.com"),
 }
 _PASTE_BLOB_MAX_BYTES = 100_000
