@@ -52,6 +52,7 @@ from ._publish_helpers import (
     _publish_epilogue,
     _record_publish_failure,
     _record_publish_path,
+    _try_update_ckpt_failed,
 )
 
 
@@ -354,6 +355,18 @@ def main(argv: list[str] | None = None) -> None:
             # In-band adapter failure (returned, not raised): record terminal so the
             # attempting row does not orphan. No exception => not http_5xx => failed.
             record_failure(row, platform, error_class=None, run_id=run_id)
+            # Update checkpoint so the item shows "failed" (not "pending") on
+            # --list-runs. Policy-skip results get their own error_class so
+            # operators can distinguish deliberate gate decisions from adapter
+            # failures. run_id capture matches the success-path pattern (line ~396).
+            _ckpt_error_class = (
+                checkpoint.POLICY_SKIP
+                if result.status in ("skipped_policy", "skipped_circuit_open")
+                else "unexpected"
+            )
+            run_id = _try_update_ckpt_failed(
+                run_id, row.get("id", ""), str(result.error), _ckpt_error_class
+            )
         else:
             success_count += 1
             if result.post_publish_delay_seconds > 0:

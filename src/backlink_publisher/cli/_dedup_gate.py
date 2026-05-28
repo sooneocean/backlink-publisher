@@ -232,11 +232,8 @@ def _record_terminal(
             # No intent row (intent write lost/failed) — observe-only, skip rather
             # than fabricate a row out of band.
             return
-        if rec.state in ("done", "failed"):
-            # Already terminal (a prior run, or an observe re-dispatch of an
-            # already-done key). Do not re-transition; leave the existing record.
-            # Backfilling a second observe-mode post's live_url is a documented
-            # refinement deferred past observe (see plan U2 Approach).
+        if rec.state == "done":
+            # Already confirmed success — immutable. Do not re-transition.
             return
         if rec.state == "uncertain" and state == "failed":
             # Never DOWNGRADE a held key to re-publishable: `uncertain` means a
@@ -246,8 +243,17 @@ def _record_terminal(
             # post. Hold it (adjudicate via --adjudicate-uncertain). uncertain ->
             # done is still allowed (a confirmed success settles the key).
             return
+        # "failed" → "done" is a valid path (policy-skip on fresh run, then
+        # operator fixes the channel binding and runs --resume successfully).
+        # allow_from_terminal=True is required because store._TERMINAL includes
+        # "failed"; without it, transition raises ValueError (swallowed silently
+        # by the except arm below), leaving the key permanently at "failed".
+        if rec.state == "failed" and state != "done":
+            return  # failed→anything-except-done: already terminal, no-op
+        allow_failed_to_done = rec.state == "failed"
         store.transition(
-            key, state, live_url=live_url, verify_ok=verify_ok, run_id=run_id
+            key, state, live_url=live_url, verify_ok=verify_ok, run_id=run_id,
+            allow_from_terminal=allow_failed_to_done,
         )
     except Exception as exc:  # observe-only: never break the run
         _log.debug(f"dedup terminal write skipped ({state}): {exc}")

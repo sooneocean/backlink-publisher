@@ -60,6 +60,11 @@ def generate_run_id() -> str:
 #: producers, the to_process filter, and --list-runs display all agree.
 RETRO_LANGUAGE_FAILED = "retro_language_failed"
 RETRO_ANCHOR_FAILED = "retro_anchor_failed"
+#: In-band policy-gate decision (skipped_policy / skipped_circuit_open).
+#: Distinct from adapter failures — the adapter was never called.
+#: --resume excludes these items (the gate decision must be re-evaluated at
+#: dispatch time, not retried blindly).
+POLICY_SKIP = "policy_skip"
 
 
 def create_checkpoint(
@@ -191,6 +196,51 @@ def list_incomplete() -> list[dict[str, Any]]:
 
     results.sort(key=lambda d: d.get("started_at", ""), reverse=True)
     return results
+
+
+def list_all_runs() -> list[dict[str, Any]]:
+    """Return ALL checkpoint runs (regardless of status), newest-first.
+
+    Unlike ``list_incomplete``, this includes completed runs. Skips
+    ``.tmp`` orphan files from interrupted writes. Bound scan to 100
+    most-recently-modified files to keep I/O bounded.
+    """
+    ckpt_dir = _checkpoint_dir()
+    if not ckpt_dir.exists():
+        return []
+    candidates = sorted(
+        ckpt_dir.glob("*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:100]
+    results = []
+    for path in candidates:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        results.append(data)
+    results.sort(key=lambda d: d.get("started_at", ""), reverse=True)
+    return results
+
+
+def list_failed_items() -> list[dict[str, Any]]:
+    """Return all checkpoint items with status 'pending' or 'failed',
+    across all runs. Each item is tagged with its parent run's ``run_id``.
+
+    Used by the reconciler to find items that may need auto-fixing or
+    quarantine.
+    """
+    items: list[dict[str, Any]] = []
+    for run in list_all_runs():
+        run_id = run.get("run_id", "")
+        for item in run.get("items", []):
+            status = item.get("status")
+            if status in ("pending", "failed"):
+                tagged = dict(item)
+                tagged["_run_id"] = run_id
+                items.append(tagged)
+    return items
 
 
 def delete(run_id: str) -> None:

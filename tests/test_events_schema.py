@@ -136,6 +136,7 @@ def test_quarantine_log_columns_match_plan(tmp_path):
         "reason",
         "raw_payload_json",
         "dedup_key",
+        "row_id",
     ]
 
 
@@ -143,7 +144,9 @@ def test_schema_version_initialized_to_two(tmp_path):
     store = EventStore()
     with store.connect() as conn:
         rows = list(conn.execute("SELECT version FROM schema_version"))
-    assert rows == [(2,)]
+    # Bumped to 3 when quarantine_log.row_id was added
+    # (Plan 2026-05-28-004).
+    assert rows == [(3,)]
 
 
 def test_events_kind_is_not_null(tmp_path):

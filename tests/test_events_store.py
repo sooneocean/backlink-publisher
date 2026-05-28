@@ -150,7 +150,7 @@ def test_connect_rebuilds_schema_after_db_deletion(tmp_path):
     )
     assert event_id == 1, "fresh DB should restart AUTOINCREMENT at 1"
     rows = store.query("SELECT version FROM schema_version")
-    assert rows[0]["version"] == 2
+    assert rows[0]["version"] == 3
 
 
 def test_schema_version_zero_upgrades_to_two(tmp_path):
@@ -160,10 +160,10 @@ def test_schema_version_zero_upgrades_to_two(tmp_path):
     with store.connect() as conn:
         conn.execute("DELETE FROM schema_version")
 
-    # Next connect should bring it back to v2.
+    # Next connect should bring it to the current version.
     with store.connect() as conn:
         version = conn.execute("SELECT MAX(version) FROM schema_version").fetchone()[0]
-    assert version == 2
+    assert version == 3
 
 
 def test_wal_mode_is_enabled(tmp_path):

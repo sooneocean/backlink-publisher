@@ -12,7 +12,7 @@ from __future__ import annotations
 import sqlite3
 
 #: Current schema version. Bump when adding a migration step.
-SCHEMA_VERSION: int = 2
+SCHEMA_VERSION: int = 3
 
 
 class SchemaTooNewError(RuntimeError):
@@ -79,7 +79,8 @@ _DDL_STATEMENTS: tuple[str, ...] = (
         run_id TEXT,
         reason TEXT NOT NULL,
         raw_payload_json TEXT,
-        dedup_key TEXT
+        dedup_key TEXT,
+        row_id TEXT
     )
     """,
     # Single NOT-NULL-safe dedupe key. ``quarantine()`` writes a non-null hash
@@ -150,9 +151,13 @@ def maybe_upgrade_schema(conn: sqlite3.Connection) -> None:
             "`bp-events-rebuild --force`."
         )
     if version < SCHEMA_VERSION:
+        # For v1/v2 databases, add columns BEFORE running DDL that
+        # references them (e.g. idx_quarantine_dedup on dedup_key).
+        if version in (1, 2):
+            _ensure_quarantine_dedup_key(conn)
+            _ensure_quarantine_row_id(conn)
         initialize_schema(conn)
-        if version == 1:
-            conn.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+        conn.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
     # Additive, idempotent, version-independent migrations. These MUST run even
     # when ``version == SCHEMA_VERSION`` — an existing v2 DB never re-enters the
     # ``version < SCHEMA_VERSION`` branch, so a new index/column placed only in
@@ -186,6 +191,22 @@ def _ensure_quarantine_dedup_key(conn: sqlite3.Connection) -> None:
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_quarantine_dedup "
         "ON quarantine_log(dedup_key)"
     )
+
+
+def _ensure_quarantine_row_id(conn: sqlite3.Connection) -> None:
+    """Add ``quarantine_log.row_id`` if missing.
+
+    V3 migration: nullable, so existing rows get ``NULL``. Idempotent —
+    guarded by ``PRAGMA table_info`` check. Concurrency-safe: duplicate
+    column name from a concurrent writer is a benign race.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(quarantine_log)")}
+    if "row_id" not in cols:
+        try:
+            conn.execute("ALTER TABLE quarantine_log ADD COLUMN row_id TEXT")
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
 
 
 def maybe_create_fts5(conn: sqlite3.Connection) -> None:  # pragma: no cover - v1 stub

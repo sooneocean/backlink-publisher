@@ -460,6 +460,21 @@ def _build_parser() -> Any:
             "--no-validate-url-check; setting one does not affect the other."
         ),
     )
+    parser.add_argument(
+        "--reconcile",
+        default=None,
+        metavar="RUN_ID",
+        help=(
+            "Output reconciliation gap report for a specific run (JSONL "
+            "on stdout after publish output)"
+        ),
+    )
+    parser.add_argument(
+        "--reconcile-all",
+        action="store_true",
+        default=False,
+        help="Output reconciliation gap report for all runs (JSONL on stdout)",
+    )
     return parser
 
 
@@ -620,6 +635,44 @@ def _medium_throttle_sleep(
     _sleep_with_throttle(throttle_min, throttle_max, "next Medium post")
 
 
+def _run_reconciler(args: Any) -> dict[str, Any] | None:
+    if args.dry_run:
+        return None
+    if not args.reconcile and not args.reconcile_all:
+        return None
+
+    try:
+        from ..events.reconciler import reconcile_all
+
+        summary = reconcile_all()
+
+        return {
+            "event": "reconciler_summary",
+            "auto_fixed": summary.auto_fixed,
+            "quarantined": summary.quarantined,
+            "cleared": summary.cleared,
+            "history_gaps": summary.history_gaps,
+            "history_checked": summary.history_checked,
+            "total_checkpoints": summary.total_checkpoints,
+            "skipped_quarantined": summary.skipped_quarantined,
+        }
+    except Exception as exc:
+        from backlink_publisher._util.logger import publish_logger
+        publish_logger.warning("reconciler pass failed: %s", exc)
+        return None
+
+
+def _write_reconciler_report(summary: dict[str, Any] | None) -> None:
+    if summary is None:
+        return
+    try:
+        import json as _json
+        print(_json.dumps(summary, sort_keys=True))
+    except Exception as exc:
+        from backlink_publisher._util.logger import publish_logger
+        publish_logger.warning("reconciler report write failed: %s", exc)
+
+
 def _publish_epilogue(
     outputs: list[dict[str, Any]],
     rows: list[dict[str, Any]],
@@ -633,9 +686,13 @@ def _publish_epilogue(
     dedup_skip_count: int = 0,
     dedup_hold_count: int = 0,
 ) -> None:
+    # Phase 1: projection.
     if run_id is not None:
         from ..events import project_run_safe as _project_run_safe
         _project_run_safe(run_id)
+
+    # Phase 2: reconciler (always runs, RECON.log always written).
+    reconciler_summary = _run_reconciler(args)
 
     # R18/U7 dedup reconciliation line — counts only, no campaign URLs. Always
     # emitted (zeros in observe) so the signal is uniform; RECON level per
@@ -672,6 +729,8 @@ def _publish_epilogue(
     if successful:
         from backlink_publisher._util.jsonl import write_jsonl
         write_jsonl(successful)
+
+    _write_reconciler_report(reconciler_summary)
 
     from backlink_publisher._util.errors import emit_envelope_and_exit, emit_error
 

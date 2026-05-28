@@ -59,22 +59,23 @@ def _run_publish(
 
 
 def _make_payload(platform="blogger", item_id="r0"):
+    target_url = f"https://example.com/{item_id}"
     return {
         "id": item_id,
         "platform": platform,
         "language": "en",
         "publish_mode": "draft",
-        "target_url": "https://example.com/article",
+        "target_url": target_url,
         "main_domain": "https://example.com",
         "url_mode": "A",
         "title": f"Test Article {item_id}",
         "slug": "test-article",
         "excerpt": "A test excerpt.",
         "tags": ["tag1", "tag2"],
-        "content_markdown": "This is a test article about https://example.com.",
+        "content_markdown": f"This is a test article about {target_url}.",
         "links": [
             {"url": "https://example.com", "anchor": "Example", "kind": "main_domain", "required": True},
-            {"url": "https://example.com/article", "anchor": "Article", "kind": "target", "required": True},
+            {"url": target_url, "anchor": "Article", "kind": "target", "required": True},
             {"url": "https://wikipedia.org", "anchor": "Wiki", "kind": "supporting", "required": False},
             {"url": "https://mdn.dev", "anchor": "MDN", "kind": "supporting", "required": False},
             {"url": "https://stackoverflow.com", "anchor": "SO", "kind": "supporting", "required": False},
@@ -83,7 +84,7 @@ def _make_payload(platform="blogger", item_id="r0"):
         "seo": {
             "title": "Test SEO",
             "description": "SEO description",
-            "canonical_url": "https://example.com/article",
+            "canonical_url": target_url,
         },
     }
 
@@ -482,7 +483,6 @@ def test_fresh_run_then_resume_full_flow(
     )
     assert code == 4
     assert "run_id=" in stderr
-
     run_id = stderr.split("run_id=")[1].split('"')[0].strip()
 
     # Resume: r2 now succeeds

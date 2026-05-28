@@ -58,8 +58,8 @@ ceiling = 120
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): main() split into two engine calls (report_from_profile + report_from_rows) extracted to _report_engine.py so the in-process PipelineAPI.report_anchors path shares it. report_anchors.py stayed at 89 SLOC — holds argparse + load_config + config_echo banner + engine call + stdout print + stderr breach lines + emit_envelope_and_exit shell only. Ceiling 120 = round_up_to_10(89+30) per policy."
 
 [files."src/backlink_publisher/cli/_publish_helpers.py"]
-ceiling = 580
-rationale = "Canary Phase 2 Unit 3 (2026-05-27) added _record_publish_path (~50 SLOC) and publish_path_drift_count param. Cross-run idempotency (#279) added drift_count param + dedup fields. Rebase merge brought all changes together; SLOC = 571. Ceiling 580 = round_up_to_10(571) per policy; lease/throttle cluster remains the extraction candidate."
+ceiling = 660
+rationale = "Plan 2026-05-28-004 reconciled hub integration added _run_reconciler / _write_reconciler_report (~50 SLOC), --reconcile / --reconcile-all argparse args, and _recon_reconcile_checkpoints. At 622 SLOC; ceiling 660 = round_up_to_10(622+30) per policy; lease/throttle cluster remains the extraction candidate."
 
 [files."src/backlink_publisher/cli/generate_backlink_text.py"]
 ceiling = 560

@@ -395,11 +395,27 @@ def test_checkpoint_not_created_on_preflight_failure(mock_verify, mock_cache, tm
 @patch("backlink_publisher.cli.publish_backlinks.verify_adapter_setup")
 @patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
 def test_checkpoint_first_fails_second_succeeds(mock_pub, mock_verify, mock_cache, tmp_path):
-    """First row ExternalServiceError → failed in checkpoint, second done."""
+    """First row ExternalServiceError → failed in checkpoint, second done.
+
+    Note: each row MUST have a distinct target_url so the reconciler
+    (which cross-references checkpoints against the dedup store)
+    does not auto-fix r0's "failed" checkpoint to "done" when r1's
+    same-URL dedup record is in ``done`` state (Plan 2026-05-28-004).
+    """
     mock_cache.return_value = tmp_path / "cache"
-    payloads = [_make_valid_payload(platform="blogger") for _ in range(2)]
-    payloads[0]["id"] = "r0"
-    payloads[1]["id"] = "r1"
+    r0 = _make_valid_payload(platform="blogger")
+    r0["id"] = "r0"
+    r0["target_url"] = "https://example.com/r0"
+    # Update links to reference r0's distinct target_url.
+    for link in r0.get("links", []):
+        if link["url"] == "https://example.com/article":
+            link["url"] = r0["target_url"]
+    r1 = _make_valid_payload(platform="blogger")
+    r1["id"] = "r1"
+    r1["target_url"] = "https://example.com/r1"
+    for link in r1.get("links", []):
+        if link["url"] == "https://example.com/article":
+            link["url"] = r1["target_url"]
     mock_pub.side_effect = [
         ExternalServiceError("upstream down"),
         AdapterResult(status="drafted", adapter="blogger-api", platform="blogger",
@@ -407,7 +423,7 @@ def test_checkpoint_first_fails_second_succeeds(mock_pub, mock_verify, mock_cach
     ]
 
     stdout, stderr, code = _run_publish(
-        "\n".join(json.dumps(p) for p in payloads), ["--mode", "draft"]
+        "\n".join(json.dumps(p) for p in [r0, r1]), ["--mode", "draft"]
     )
 
     assert code == 4
@@ -481,6 +497,10 @@ def test_checkpoint_3_rows_2_done_1_failed(mock_pub, mock_verify, mock_cache, tm
     payloads = [_make_valid_payload(platform="blogger") for _ in range(3)]
     for i, p in enumerate(payloads):
         p["id"] = f"r{i}"
+        p["target_url"] = f"https://example.com/r{i}"
+        for link in p.get("links", []):
+            if link["url"] == "https://example.com/article":
+                link["url"] = p["target_url"]
     mock_pub.side_effect = [
         AdapterResult(status="drafted", adapter="blogger-api", platform="blogger",
                       draft_url="https://blogger.example.com/p/1"),
