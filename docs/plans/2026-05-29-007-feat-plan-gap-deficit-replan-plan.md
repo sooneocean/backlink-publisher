@@ -1,7 +1,7 @@
 ---
 title: "feat: plan-gap — deficit-driven re-plan verb"
 type: feat
-status: active
+status: completed
 date: 2026-05-29
 deepened: 2026-05-29
 origin: docs/brainstorms/2026-05-29-deficit-driven-replan-requirements.md
