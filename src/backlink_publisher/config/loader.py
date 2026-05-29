@@ -28,7 +28,7 @@ from .parsers.alarm import _parse_anchor_alarm
 from .parsers.anchor import _parse_anchor_proportions
 from .parsers.cells import _parse_cell_assignments
 from .parsers.image_gen import _parse_image_gen
-from .parsers.llm import _parse_llm_anchor_provider
+from .parsers.llm import _llm_provider_from_sidecar, _parse_llm_anchor_provider
 from .parsers.target import (
     _parse_target_anchor_keywords,
     _parse_target_anchor_pools_v2,
@@ -129,7 +129,13 @@ def load_config(path: Path | None = None) -> Config:
     """Load config from TOML file. Missing file → empty Config (not an error)."""
     config_path = path or (_resolve_config_dir() / "config.toml")
     if not config_path.exists():
-        return Config()
+        # No config.toml, but a WebUI-saved llm-settings.json sidecar (or
+        # BACKLINK_LLM_* env) can still configure the provider. Same precedence
+        # as the full path: env > (no TOML here) > sidecar.
+        llm = _parse_llm_anchor_provider({}, config_path=config_path)
+        if llm is None:
+            llm = _llm_provider_from_sidecar(config_path.parent)
+        return Config(llm_anchor_provider=llm)
 
     try:
         with open(config_path, "rb") as f:
@@ -195,6 +201,13 @@ def load_config(path: Path | None = None) -> Config:
         data.get("llm", {}).get("anchor_provider", {}),
         config_path=config_path,
     )
+    # Fallback: when neither env vars nor the TOML section configured a provider
+    # (so the parser returned None), use the WebUI's ``llm-settings.json`` sidecar
+    # next to config.toml. This is what makes the WebUI "Pro Mode" toggle drive
+    # real publish runs. Precedence: env > TOML > sidecar (the parser already
+    # consumed env/TOML, so reaching here means both were empty).
+    if llm_anchor_provider is None:
+        llm_anchor_provider = _llm_provider_from_sidecar(config_path.parent)
 
     anchor_alarm = _parse_anchor_alarm(data.get("anchor_alarm"))
 

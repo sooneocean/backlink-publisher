@@ -96,8 +96,18 @@ def settings_save_llm_config():
     new_api_key = request.form.get('api_key', '').strip()
     new_image_key = request.form.get('image_gen_api_key', '').strip()
 
+    # Reject a non-empty non-https endpoint up front. The pipeline bridge
+    # (_llm_provider_from_sidecar) requires https — saving an http endpoint
+    # would leave Pro Mode silently inactive at publish time. A blank endpoint
+    # is a partial edit, not a violation, so it passes through unchanged.
+    new_endpoint = request.form.get('endpoint', '').strip().rstrip('/')
+    if new_endpoint and not new_endpoint.startswith('https://'):
+        return _safe_flash_redirect(
+            '/settings', flash_type='danger',
+            msg='Endpoint 必须以 https:// 开头', fragment='sect-ai')
+
     existing.update({
-        'endpoint': request.form.get('endpoint', '').strip().rstrip('/'),
+        'endpoint': new_endpoint,
         'api_key': new_api_key or existing.get('api_key', ''),
         'model': request.form.get('model', '').strip(),
         'temperature': temperature,
