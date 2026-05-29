@@ -9,7 +9,6 @@ from pathlib import Path
 from backlink_publisher._util.logger import plan_logger
 from .types import (
     Config,
-    DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
     MastodonConfig,
     ThreeUrlConfig,
@@ -25,6 +24,7 @@ from ._config_io import _resolve_config_dir, _snapshot_config, _atomic_write_tex
 from .tokens import save_medium_integration_token
 from ._toml_utils import (
     _SAVE_CONFIG_KNOWN_ROOTS,
+    _emit_target_section,
     _preserve_unknown_sections,
     _toml_str,
     _toml_list,
@@ -142,36 +142,15 @@ def save_config(
         | set(brand_aliases_by_domain)
     )
     for domain in all_target_domains:
-        lines.append(f"[targets.{_toml_str(domain)}]")
-        if domain in kws_by_domain:
-            kws = kws_by_domain[domain]
-            lines.append(f"anchor_keywords = {_toml_list(kws)}")
-        if domain in probe_queries_by_domain:
-            lines.append(
-                f"probe_queries = {_toml_list(probe_queries_by_domain[domain])}"
+        lines.extend(
+            _emit_target_section(
+                domain,
+                kws_by_domain,
+                probe_queries_by_domain,
+                brand_aliases_by_domain,
+                three_url_by_domain,
             )
-        if domain in brand_aliases_by_domain:
-            lines.append(
-                f"brand_aliases = {_toml_list(brand_aliases_by_domain[domain])}"
-            )
-        if domain in three_url_by_domain:
-            tu = three_url_by_domain[domain]
-            lines.append(f"main_url = {_toml_str(tu.main_url)}")
-            lines.append(f"list_url = {_toml_str(tu.list_url)}")
-            lines.append(f"work_urls = {_toml_list(tu.work_urls)}")
-            lines.append(f"branded_pool = {_toml_list(tu.branded_pool)}")
-            lines.append(f"partial_pool = {_toml_list(tu.partial_pool)}")
-            lines.append(f"exact_pool = {_toml_list(tu.exact_pool)}")
-            if tu.work_anchor_templates != list(DEFAULT_WORK_TEMPLATES):
-                lines.append(
-                    f"work_anchor_templates = {_toml_list(tu.work_anchor_templates)}"
-                )
-            if tu.list_path_blocklist is not None:
-                lines.append(
-                    f"list_path_blocklist = {_toml_list(tu.list_path_blocklist)}"
-                )
-            if tu.insecure_tls:
-                lines.append("insecure_tls = true")
+        )
         lines.append("")
 
     if ghpages_cfg is not None:

@@ -177,15 +177,25 @@ def test_llm_key_never_fills_geo_api_key(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_loose_permission_warning_fires_for_geo_key(
     tmp_path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """When config.toml carries a GEO api_key but is not 0600, the shared
-    ``_warn_if_loose_config_permissions`` warning fires (S4)."""
+    """When config.toml carries a GEO api_key but is not 0600, the centralized
+    ``load_config`` permission warning fires (S4). The warning is emitted once,
+    centrally, by load_config — not by the parser (matches the LLM provider)."""
     config_path = tmp_path / "config.toml"
-    config_path.write_text("# placeholder\n", encoding="utf-8")
+    config_path.write_text(
+        "[geo.probe_provider]\n"
+        'base_url = "https://api.perplexity.ai"\n'
+        'model = "sonar"\n'
+        f'api_key = "{_GEO_KEY}"\n',
+        encoding="utf-8",
+    )
     config_path.chmod(0o644)  # deliberately loose
     with caplog.at_level(logging.WARNING):
-        cfg = _parse_geo_probe_provider(_full_section(), config_path=config_path)
-    assert cfg is not None
-    assert any("0600" in rec.getMessage() for rec in caplog.records)
+        cfg = load_config(config_path)
+    assert cfg.geo_probe_provider is not None
+    assert any(
+        "0600" in rec.getMessage() and "geo.probe_provider" in rec.getMessage()
+        for rec in caplog.records
+    )
 
 
 # ── End-to-end via load_config ───────────────────────────────────────────────

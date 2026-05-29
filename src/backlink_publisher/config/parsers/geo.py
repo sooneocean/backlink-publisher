@@ -48,9 +48,9 @@ def _parse_geo_probe_provider(
     toml_api_key_raw = section.get("api_key")
     toml_has_api_key = isinstance(toml_api_key_raw, str) and bool(toml_api_key_raw)
 
-    if toml_has_api_key and config_path is not None and config_path.exists():
-        from ..loader import _warn_if_loose_config_permissions
-        _warn_if_loose_config_permissions(config_path)
+    # Loose-permission warning for the GEO api_key is emitted centrally by
+    # ``load_config`` via ``_warn_if_loose_config_permissions(config_path, data)``
+    # (same as the LLM provider), so this parser does not call it directly.
 
     base_url = env_base_url or section.get("base_url")
     model = env_model or section.get("model")

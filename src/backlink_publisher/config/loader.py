@@ -302,7 +302,8 @@ def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None =
     """Emit a warning if config.toml contains credentials but isn't 0600.
 
     Checks all credential-bearing sections: ``[llm].anchor_provider.api_key``,
-    ``[blogger.oauth]``, ``[medium.oauth]``, and ``[medium].integration_token``.
+    ``[geo.probe_provider].api_key``, ``[blogger.oauth]``, ``[medium.oauth]``,
+    and ``[medium].integration_token``.
     No-op on Windows where POSIX permission bits aren't meaningful.
     """
     if os.name == "nt":
@@ -314,6 +315,8 @@ def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None =
         _llm = raw_data.get("llm", {})
         if _llm.get("anchor_provider", {}).get("api_key"):
             sections.append("[llm].api_key")
+        if raw_data.get("geo", {}).get("probe_provider", {}).get("api_key"):
+            sections.append("[geo.probe_provider].api_key")
         if raw_data.get("blogger", {}).get("oauth", {}).get("client_id"):
             sections.append("[blogger.oauth]")
         if raw_data.get("medium", {}).get("oauth", {}).get("client_id"):

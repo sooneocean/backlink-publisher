@@ -335,13 +335,17 @@ def _build_reports(config: Config) -> list[TargetReport]:
     Returns a per-target report. A target whose query list is empty still gets a
     report (with zero outcomes) so the table/verdict can flag "no probes".
     """
+    # main() exits 2 before calling this when the provider is unset, so it is
+    # non-None here; assert to document the invariant and narrow for mypy.
+    cfg = config.geo_probe_provider
+    assert cfg is not None
     reports: list[TargetReport] = []
     for target, queries in sorted(config.target_probe_queries.items()):
         report = TargetReport(target=target)
         target_host = _canonical_host(target)
         for query in queries:
             report.outcomes.append(
-                _run_one(target, query, target_host, config.geo_probe_provider)
+                _run_one(target, query, target_host, cfg)
             )
         reports.append(report)
     return reports
