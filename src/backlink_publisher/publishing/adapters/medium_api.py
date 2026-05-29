@@ -57,12 +57,16 @@ class MediumAPIAdapter(Publisher):
         config: Config,
     ) -> AdapterResult:
         from backlink_publisher.config import load_medium_token
+        from backlink_publisher.config.tokens import load_medium_integration_token
 
-        # 优先使用 OAuth token，其次 Integration Token
+        # 优先使用 OAuth token，其次 Integration Token（从 0600 文件加载）
         medium_token_data = load_medium_token()
         token = medium_token_data.get("access_token") if medium_token_data else None
         if not token:
-            token = config.medium_integration_token
+            it_data = load_medium_integration_token()
+            token = (it_data or {}).get("integration_token", "").strip() or None
+        if not token:
+            token = config.medium_integration_token  # 向后兼容 TOML 配置
 
         if not token:
             raise DependencyError("medium access token or integration token not configured"

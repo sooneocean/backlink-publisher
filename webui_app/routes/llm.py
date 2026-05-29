@@ -215,8 +215,8 @@ def settings_preview_llm():
 
         if settings.get('use_article_gen'):
             result = provider.generate_article_body(
-                domain_label='example.com',
-                main_domain='https://example.com',
+                domain_label='51acgs.com',
+                main_domain='https://51acgs.com',
                 anchors=['示例锚点', '更多资源'],
                 topic=test_title
             )
@@ -224,7 +224,7 @@ def settings_preview_llm():
         else:
             # Fallback to anchor candidate generation
             from backlink_publisher.publishing.adapters.llm_anchor_provider import LLMAnchorRequest
-            req = LLMAnchorRequest(keyword=test_title, domain="example.com", target_url="https://example.com")
+            req = LLMAnchorRequest(keyword=test_title, domain="51acgs.com", target_url="https://51acgs.com")
             result = provider.generate_candidates(req)
             return jsonify({'status': 'ok', 'result': f"生成的锚点候选: {', '.join(result)}"}), 200
 

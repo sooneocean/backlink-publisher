@@ -135,11 +135,15 @@ def active_platforms(config: Config) -> list[str]:
         out.append("blogger")
 
     from backlink_publisher.config import load_medium_token
+    from backlink_publisher.config.tokens import load_medium_integration_token
     from backlink_publisher.publishing.adapters.medium_browser import (
         sync_playwright as _spw,
     )
+    it_data = load_medium_integration_token()
+    has_it = bool(it_data and it_data.get("integration_token", "").strip())
     medium_ready = bool(
-        config.medium_integration_token
+        has_it
+        or config.medium_integration_token
         or load_medium_token()
         or _spw is not None
     )

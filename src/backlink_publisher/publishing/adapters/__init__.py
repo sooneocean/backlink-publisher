@@ -309,12 +309,15 @@ def verify_adapter_setup(
 
 
 def _check_medium_setup(config: Config) -> str | None:
-    has_token = bool(config.medium_integration_token)
     from backlink_publisher.config import load_medium_token
+    from backlink_publisher.config.tokens import load_medium_integration_token
     has_oauth = bool(load_medium_token())
+    it_data = load_medium_integration_token()
+    has_it = bool(it_data and it_data.get("integration_token", "").strip())
+    has_toml_it = bool(config.medium_integration_token)
     from .medium_browser import sync_playwright as _spw
     has_playwright = _spw is not None
-    if not (has_token or has_oauth or has_playwright):
+    if not (has_it or has_toml_it or has_oauth or has_playwright):
         return (
             "Medium adapter not ready: no integration_token, no OAuth token file, "
             "and Playwright is not installed. "

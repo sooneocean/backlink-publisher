@@ -110,15 +110,15 @@ class TestCheckpointDismissFalseSuccess:
 
     def test_file_not_found_is_success(self, client):
         """FileNotFoundError is idempotent dismiss — checkpoint already gone.
-        Must redirect to '/' without danger flash (prior correct behavior)."""
+        Must redirect with success flash, NOT danger."""
         csrf = _seed_csrf(client)
         with patch("backlink_publisher.checkpoint.delete",
                    side_effect=FileNotFoundError()):
             resp = _post(client, self.PATH, {"run_id": self._VALID_RUN_ID}, csrf=csrf)
         assert resp.status_code == 302
         loc = _location(resp)
-        # Must NOT have danger
-        assert "danger" not in loc, f"FileNotFoundError should be idempotent, got: {loc!r}"
+        assert "success" in loc, f"FileNotFoundError should show success flash, got: {loc!r}"
+        assert "danger" not in loc, f"FileNotFoundError should not have danger, got: {loc!r}"
 
 
 # ---------------------------------------------------------------------------

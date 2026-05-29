@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from backlink_publisher._util.errors import DependencyError
+from .tokens import load_medium_integration_token
 from .types import (
     BloggerOAuthConfig,
     Config,
@@ -232,7 +233,9 @@ def load_config(path: Path | None = None) -> Config:
         blogger_blog_ids=blog_ids,
         blogger_oauth=blogger_oauth,
         medium_oauth=medium_oauth,
-        medium_integration_token=medium_section.get("integration_token") or None,
+        medium_integration_token=_resolve_medium_integration_token(
+            medium_section.get("integration_token")
+        ),
         medium_user_data_dir=user_data_dir,
         target_anchor_keywords=target_anchor_keywords,
         site_url_categories=site_url_categories,
@@ -247,6 +250,21 @@ def load_config(path: Path | None = None) -> Config:
         image_gen=image_gen,
         cell_assignments=cell_assignments,
     )
+
+
+def _resolve_medium_integration_token(toml_value: str | None) -> str | None:
+    """Resolve Medium integration token: token file (0600) wins over TOML.
+
+    SEC-3 migration: the integration token is being moved out of config.toml
+    into ``medium-integration-token.json`` (0600). For backward compat, the
+    TOML value still works but the token file takes precedence when present.
+    """
+    token_data = load_medium_integration_token()
+    if token_data:
+        token = token_data.get("integration_token", "").strip()
+        if token:
+            return token
+    return toml_value
 
 
 def _warn_if_loose_config_permissions(config_path: Path) -> None:

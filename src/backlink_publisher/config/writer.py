@@ -22,6 +22,7 @@ else:
 
 from .loader import load_config
 from ._config_io import _resolve_config_dir, _snapshot_config, _atomic_write_text
+from .tokens import save_medium_integration_token
 from ._toml_utils import (
     _SAVE_CONFIG_KNOWN_ROOTS,
     _preserve_unknown_sections,
@@ -30,6 +31,21 @@ from ._toml_utils import (
 )
 
 _log = logging.getLogger(__name__)
+
+
+def _sync_medium_integration_token(token: str) -> None:
+    """Persist Medium integration token to 0600 JSON file (SEC-3).
+    Writes only when the new token differs from the stored value.
+    Empty tokens silently preserve any existing file.
+    """
+    stripped = token.strip()
+    if not stripped:
+        return
+    from .tokens import load_medium_integration_token
+    current = load_medium_integration_token()
+    if current and current.get("integration_token", "").strip() == stripped:
+        return
+    save_medium_integration_token({"integration_token": stripped})
 
 
 def save_config(
@@ -71,6 +87,8 @@ def save_config(
     token = medium_token if medium_token is not None else (
         existing.medium_integration_token or ""
     )
+    # SEC-3: persist integration token to 0600 file instead of TOML
+    _sync_medium_integration_token(token)
 
     if target_anchor_keywords is None:
         kws_by_domain = dict(existing.target_anchor_keywords)
@@ -99,10 +117,10 @@ def save_config(
         lines.append("")
 
     lines.append("[medium]")
-    if token:
-        lines.append(f"integration_token = {_toml_str(token)}")
-    else:
-        lines.append('# integration_token = "your-medium-integration-token"')
+    # SEC-3: integration token is now written to medium-integration-token.json (0600).
+    # The TOML field is kept as a commented placeholder for backward compat discovery.
+    lines.append('# integration_token = "your-medium-integration-token"')
+    lines.append("# Token persisted via save_medium_integration_token() to 0600 JSON file")
     lines.append("")
 
     all_target_domains = sorted(

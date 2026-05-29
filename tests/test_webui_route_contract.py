@@ -999,7 +999,7 @@ class TestCheckpointRoutes:
         run_id = "20260518T000000-deadbeef"
         resp = client.post("/checkpoint/dismiss", data={"run_id": run_id})
         assert resp.status_code == 302
-        assert resp.headers["Location"] == "/"
+        assert resp.headers["Location"].startswith("/?flash_type=success&flash_msg=")
 
 
 # ═════════════════════════════════════════════════════════════════════════════

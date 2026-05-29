@@ -191,3 +191,22 @@ def save_linkedin_token(data: dict[str, Any], path: Path | None = None) -> None:
     Expected keys: token (str), person_id (str).
     """
     _save_token(data, path, "linkedin-token.json")
+
+
+def load_medium_integration_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Medium integration token JSON ({integration_token: "..."}).
+
+    SEC-3: integration token now lives in a dedicated 0600 file
+    instead of config.toml. Returns None if the file is absent.
+    """
+    return _load_token(path, "medium-integration-token.json")
+
+
+def save_medium_integration_token(
+    data: dict[str, Any], path: Path | None = None
+) -> None:
+    """Save Medium integration token dict to JSON file with mode 0600.
+
+    Expected keys: integration_token (str).
+    """
+    _save_token(data, path, "medium-integration-token.json")

@@ -279,7 +279,10 @@ def _settings_context(flash=None):
     notion_config_summary: list[tuple[str, str]] = []
     devto_config_summary: list[tuple[str, str]] = []
 
-    token = cfg.medium_integration_token or ""
+    from backlink_publisher.config.tokens import load_medium_integration_token as _load_it
+    _it_data = _load_it()
+    _it_val = (_it_data or {}).get("integration_token", "").strip()
+    token = _it_val or cfg.medium_integration_token or ""
     masked = ("*" * 8 + token[-4:]) if len(token) > 4 else ("*" * len(token))
 
     all_targets = sorted(

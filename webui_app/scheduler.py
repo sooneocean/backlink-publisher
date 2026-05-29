@@ -171,8 +171,27 @@ def _schedule_draft_job(item_id: str, run_date: datetime) -> None:
     )
 
 
+def _restore_processing_tasks() -> None:
+    """Reset queue tasks left in 'processing' back to 'pending'.
+
+    If the WebUI was killed (SIGKILL / power loss / OOM) while a queue
+    processor was mid-flight, the task sits permanently in 'processing'
+    and never gets picked up again because the queue processor only reads
+    'pending' and 'failed' statuses.  Resetting them on every startup is
+    the simplest recovery — the next interval tick re-processes the task.
+
+    This call is idempotent: no 'processing' tasks at startup = no-op.
+    """
+    _queue_store.update(lambda tasks: [
+        {**t, 'status': 'pending'} if t.get('status') == 'processing' else t
+        for t in tasks
+    ])
+
+
 def _restore_scheduled_jobs() -> None:
     """On startup, re-register any 'scheduled' draft items into APScheduler."""
+    _restore_processing_tasks()
+
     _scheduler.add_job(
         _process_queue_job,
         trigger='interval',

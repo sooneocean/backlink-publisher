@@ -61,21 +61,21 @@
                     <div class="url-input-group">
                         <div class="url-item">
                             <span class="url-badge main">主</span>
-                            <input type="url" class="form-control" name="main_url" placeholder="https://example.com/" value="{{ target_url }}" aria-describedby="status-main" required>
+                            <input type="url" class="form-control" name="main_url" placeholder="https://51acgs.com/" value="{{ target_url }}" aria-describedby="status-main" required>
                         </div>
                         <span class="verify-status text-muted" id="status-main" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">主网域 — 要做反向链接的根目标 (必填)</div>
 
                         <div class="url-item">
                             <span class="url-badge cat">类</span>
-                            <input type="url" class="form-control" name="category_url" placeholder="https://example.com/category" value="{{ category_url|default('') }}" aria-describedby="status-category">
+                            <input type="url" class="form-control" name="category_url" placeholder="https://51acgs.com/comic/hot" value="{{ category_url|default('') }}" aria-describedby="status-category">
                         </div>
                         <span class="verify-status text-muted" id="status-category" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">分类页 — 站内分类/列表页 (可选；填了会自动写入 config)</div>
 
                         <div class="url-item">
                             <span class="url-badge work">漫</span>
-                            <input type="url" class="form-control" name="work_url" placeholder="https://example.com/article/1" value="{{ work_url|default('') }}" aria-describedby="status-work">
+                            <input type="url" class="form-control" name="work_url" placeholder="https://51acgs.com/comic/6" value="{{ work_url|default('') }}" aria-describedby="status-work">
                         </div>
                         <span class="verify-status text-muted" id="status-work" role="status" aria-live="polite" aria-atomic="true"></span>
                         <div class="url-field-help">漫画页 — 站内具体作品/内容页 (可选；填了会触发自动升级到 ThreeUrlConfig)</div>

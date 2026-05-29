@@ -94,4 +94,4 @@ def checkpoint_dismiss():
         plan_logger.warn("checkpoint_dismiss_failed", run_id=run_id,
                          reason=type(exc).__name__)
         return redirect("/?flash_type=danger&flash_msg=删除检查点失败，该检查点仍然存在")
-    return redirect("/")
+    return redirect('/?flash_type=success&flash_msg=检查点已删除')
