@@ -221,10 +221,11 @@ def test_concurrent_bootstrap_and_rotation_no_torn_write(isolated_config_dir):
 # ── registry integration ─────────────────────────────────────────────────────
 
 
-def test_registered_uncertain_with_referral_and_rationale():
+def test_registered_false_with_referral_and_rationale():
+    # Canary 2026-05-29: nofollow confirmed; flipped from "uncertain" to False.
     from backlink_publisher.publishing import registry as R
 
     assert "livejournal" in R.registered_platforms()
-    assert R.dofollow_status("livejournal") == "uncertain"
+    assert R.dofollow_status("livejournal") is False
     assert R.referral_value("livejournal") == "high"
     assert len((R.dofollow_rationale("livejournal") or "").strip()) >= 80

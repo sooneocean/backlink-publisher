@@ -253,3 +253,27 @@ class TestSyntheticRedPaths:
         )
         assert dofollow_status("_audit_reject") is False
         assert "_audit_reject" not in _REJECTED_PLATFORMS
+
+
+class TestLivejournalDofollow:
+    """Pin the livejournal canary verdict so it cannot silently regress to 'uncertain'.
+
+    Canary date: 2026-05-29. Verdict: nofollow (LJ platform-wide rel=nofollow on
+    external body links). Registered dofollow=False, referral_value="high".
+    """
+
+    def test_livejournal_dofollow_is_false(self) -> None:
+        assert dofollow_status("livejournal") is False, (
+            "livejournal must be dofollow=False after 2026-05-29 canary; "
+            "do not revert to 'uncertain' without a new pipeline canary"
+        )
+
+    def test_livejournal_not_uncertain(self) -> None:
+        assert dofollow_status("livejournal") != "uncertain"
+
+    def test_livejournal_referral_value_high(self) -> None:
+        assert referral_value("livejournal") == "high"
+
+    def test_livejournal_carries_rationale(self) -> None:
+        rat = dofollow_rationale("livejournal")
+        assert rat is not None and len(rat) >= 80

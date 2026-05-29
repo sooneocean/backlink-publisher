@@ -303,8 +303,7 @@ MASTODON_MANIFEST: dict[str, Any] = dict(
 # stored ``hpassword`` is a password-equivalent authenticator — see
 # the livejournal_api module docstring: THROWAWAY accounts only.
 # Persisted at ``<config_dir>/livejournal-credentials.json`` (0o600);
-# shape is ``{username, hpassword}``. No settings card today; binding
-# lives in CLI.
+# shape is ``{username, hpassword}``.
 
 LIVEJOURNAL_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(

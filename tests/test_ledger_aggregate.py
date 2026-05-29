@@ -1,7 +1,7 @@
 """Unit 3 — dimension computation (build_ledger).
 
 Real registry values used: medium=dofollow, devto=nofollow(high),
-livejournal=uncertain, an unregistered platform → unknown.
+livejournal=nofollow(high), an unregistered platform → unknown.
 """
 
 import json
@@ -51,7 +51,7 @@ def _hist(stat_live=None, error=None):
 def test_classify_real_platforms():
     assert _classify("medium") == ("dofollow", None)
     assert _classify("devto") == ("nofollow", "high")
-    assert _classify("livejournal") == ("uncertain", None)
+    assert _classify("livejournal") == ("nofollow", "high")
 
 
 def test_classify_unknown_distinct_from_nofollow():

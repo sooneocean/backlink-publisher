@@ -185,7 +185,7 @@ register(
 register(
     "livejournal",
     LivejournalAPIAdapter,
-    dofollow="uncertain",
+    dofollow=False,
     rationale=_R["livejournal"],
     referral_value="high",
     **LIVEJOURNAL_MANIFEST,

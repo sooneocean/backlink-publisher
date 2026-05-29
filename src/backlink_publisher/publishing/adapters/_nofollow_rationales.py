@@ -135,12 +135,9 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "frequent noindex, so equity is weak even if dofollow holds."
     ),
     "livejournal": (
-        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
-        "2026-05 third-party live check of a published LiveJournal post found "
-        "external body <a> carry no rel attribute (= dofollow), but a "
-        "third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). Confirm by publishing a canary and "
-        "reading verify_link_attributes on the live post, then amend to "
-        "dofollow=True. referral_value=\"high\": high-DA blogging platform."
+        "Pipeline canary 2026-05-29: link_attr_verification target_nofollow=True — "
+        "LiveJournal platform-wide injects rel=nofollow on external body links. "
+        "Registered dofollow=False. Kept as referral channel: referral_value=\"high\" — "
+        "high-DA legacy blogging platform; nofollow does not eliminate referral or brand value."
     ),
 }
