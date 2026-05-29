@@ -348,6 +348,33 @@ class TestTierGroupingDom:
         assert 'tier-divider' not in tier2, "homogeneous (all-unready) tier needs no divider"
 
 
+class TestTierPersistenceContract:
+    """Plan 2026-05-29-003 Unit 4 — structural proxy for the JS that persists
+    tier collapse state across verify/dry-run re-renders (R10). JS behavior
+    itself is exercised by manual smoke (recorded in the PR); here we assert
+    the DOM contract the JS depends on, and that the JS is actually wired.
+    """
+
+    def test_each_tier_has_a_collapse_toggle(self, client):
+        body = client.get("/settings").get_data(as_text=True)
+        for key in ("tier-1", "tier-2", "tier-3"):
+            assert re.search(
+                rf'data-bs-toggle="collapse"\s+data-bs-target="#{key}"', body
+            ), f"missing collapse toggle for {key}"
+            assert re.search(rf'id="{key}"\s+class="collapse', body)
+
+    def test_settings_js_generalizes_persistence_to_tiers(self):
+        from pathlib import Path
+
+        js = (
+            Path(__file__).resolve().parents[1]
+            / "webui_app" / "static" / "js" / "settings_main.js"
+        ).read_text(encoding="utf-8")
+        # Per-tier key namespace + tier-scoped selector.
+        assert "settings:collapse:" in js
+        assert '[id^="tier-"]' in js
+
+
 class TestGracefulDegradation:
     """If status dispatch raises, /settings must still render (dashboard
     section omitted) — solution lesson: dashboard is summary, not load-bearing.

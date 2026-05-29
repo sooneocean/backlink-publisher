@@ -154,7 +154,7 @@ settings.html #overview-panel: {% for g in dashboard_channel_tiers %}
 
 **Verification:** `tests/test_channel_tiers.py` 全绿;函数对全渠道集合输出与 origin 分层表一一对应。
 
-- [ ] **Unit 2: 上下文接线**
+- [x] **Unit 2: 上下文接线**
 
 **Goal:** 在 `_settings_context()` 用 Unit 1 函数产出 `dashboard_channel_tiers` 上下文键,供模板消费;`dashboard_channels` 保留(`_settings_cardless_channels.html` 仍用)。
 
@@ -216,7 +216,7 @@ settings.html #overview-panel: {% for g in dashboard_channel_tiers %}
 
 **Verification:** `/settings` GET 200;3 组折叠正常、可同时多开(无 `data-bs-parent`);展开总览面板后 Tier 1 即展开;现有渠道卡功能与回归清单不变。
 
-- [ ] **Unit 4: tier 折叠态会话内持久化(JS)**
+- [x] **Unit 4: tier 折叠态会话内持久化(JS)**
 
 **Goal:** 把现有仅覆盖 `#overview-panel` 的硬编码持久化,泛化到 tier 面板,使 verify/dry-run 重渲染后用户的展开/折叠选择保持(R10)。
 
