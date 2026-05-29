@@ -53,8 +53,10 @@ flowchart TB
 **[复查引擎 —— 复用既有 service]**
 
 - R1. 新增复查 CLI verb(如 `recheck-backlinks`):**复用 `webui_app/services/recheck.py` 的复查能力**
-  (不重造 liveness 逻辑),提供 cron 安全、非交互的批量入口。读取待复查链接、逐条复查、发出
-  生命周期事件。**显式以现有 service 为单一复查实现**,避免两个 writer 对 `history_store` 语义打架。
+  (`recheck_one`@70 / `recheck_many`@142,已核实存在),不重造 liveness 逻辑,提供 cron 安全、
+  非交互的批量入口。读取待复查链接、逐条复查、发出生命周期事件。**显式以现有 service 为单一复查实现**,
+  避免两个 writer 对状态语义打架。**注意**:该 service 当前返回 mutation 经 `history_store.update_item`
+  回写(见 `history_api.py:154/169`);plan-007 U3 要把这条回写改道到 events.db kind(见 R6/D7)。
 - R2. **龄期选择 + 限速 + oldest-first**:只复查"距上次检查 > N 天"的链接,按**最老优先**排序,
   每次封顶 M 条。N/M 用合理默认值内置(暂不外暴配置,scope-guardian P3);plan 阶段须给出
   corpus 规模 × N × cron 频率 × M 的覆盖关系,保证语料增长时最老链接不被饿死。
@@ -74,10 +76,13 @@ flowchart TB
 
 - R5. 新增 events.db 生命周期 event kind,记录每次复查结果,形成纵向衰减时间序列。新 kind 进 `KINDS`
   白名单 + 定义 required-field floor(满足 R8a CI gate)。**events.db 是时间序列 sink,不是 ledger 列的刷新源。**
-- R6. **确定性死链回写**:复用 service 的 `history_store` 回写,但**收紧 downgrade 语义**——
-  只有确定性死链(R4 的 `failed`)才 downgrade;`unknown` 绝不 downgrade。**新增升级守护**:
-  同一链接**连续 K 次 unknown(跨 D 天)→ 标记 `suspected_dead`**,防止持续不可达的真死链
-  永远停在 unknown、从不浮现(对抗 adversarial 指出的永久假阴性)。
+- R6. **确定性死链回写(改:经 events.db,非 history_store)**:复查结果通过 plan-007 U3 的
+  events.db 生命周期 kind(`publish.verified` / `publish.verify_failed`)发出,由 projector 更新
+  `articles` 列;ledger/读路径从 events.db 投影读取 liveness。**不再直接回写 history_store**
+  ——迁移计划 plan-007(active)将 history_store 降级为 no-op shim(U6),直接回写会与之冲突。
+  **收紧 downgrade 语义**:只有确定性死链(R4 的 `failed`)才 downgrade;`unknown` 绝不 downgrade。
+  **新增升级守护**:同一链接**连续 K 次 unknown(跨 D 天)→ 标记 `suspected_dead`**,防止持续
+  不可达的真死链永远停在 unknown、从不浮现(对抗 adversarial 指出的永久假阴性)。
 - R7. **复查不触发发布动作**:复查绝不重发、不补偿、不创建新内容。状态回写仅限 R6 的 liveness
   downgrade / suspected_dead 标记;不做任何 publish 侧写动作。
 
@@ -91,6 +96,23 @@ flowchart TB
 - R10. **行动闭环说明(product 要求)**:文档须写明 observability 之后的人工动作回路——
   谁看 `/health` 横幅、什么 cadence 看、看到衰减后做什么手动补救——使"看得见"不被误当成"已解决"。
   自动补救仍是非目标(D3),但人工回路要显式定义,否则死链被检测到却无人行动 = 零回收价值。
+
+**[CLI 契约 —— 2026-05-29 brainstorm 补充]**
+
+- R11. **选取模型(两者皆有)**:默认读 events.db `articles` 表(配 `--since` / `--host` /
+  `--run-id` / `--limit` 过滤,与 R2 龄期选择一致);**有 stdin JSONL 时改读 stdin**(live_url 列表
+  或上游生成器子命令产出),保 Unix-pipe 本色。两条输入路径走同一复查核心。
+- R12. **网络门控与默认行为**:网络经显式 `--probe` 开启(对齐 validate 阶段 opt-in-network 边界,
+  复查引擎不进纯 plan/validate kernel)。**不带 `--probe` = 干跑清单预览**:零网络列出"将要复查哪些"
+  (live_url / host / 发布龄期 / 条数 / 按平台聚合),操作者先看范围再加 `--probe`。
+- R13. **退出码语义**:默认 **exit 0**(纯诊断,判定走 JSONL/stderr summary,对齐项目 advisory
+  network diagnostic 惯例);`--fail-on-dead` 让 cron 可选拿非零退出告警。**`--fail-on-dead` 触发集
+  = host_gone + link_stripped(确定性死链)**;`dofollow_lost` 属退化非死亡、`probe_error` 属不确定,
+  默认不触发(如需另立 `--fail-on-degraded`,plan 阶段定)。
+- R14. **5 类判定集**(均有现成原语支撑):`alive` / `host_gone`(非 200 或 fetch 报错) /
+  `link_stripped`(200 但目标链接缺失) / `dofollow_lost`(200 + 目标在场但 rel=nofollow,复用
+  `link_attr_verifier`) / `probe_error`(超时、无效 URL)。映射到 R4 的 failed/unknown:
+  host_gone+link_stripped → `failed`;probe_error → `unknown`;dofollow_lost 仅落 events.db(R3,不改 R4 状态)。
 
 ## Success Criteria
 
@@ -127,6 +149,13 @@ flowchart TB
 - **D5 — 区分 unknown vs failed + 升级守护**:抖动→unknown 不降级、不推进龄期游标;确定性死链→failed 回写;
   连续 K 次 unknown→suspected_dead,既不误降级也不永久假阴性。
 - **D6 — 名实对齐**:本版只声称验证"存活 + 可跟随",不声称验证"SEO 价值"。
+- **D7 — 复查写 events.db 是 plan-007 的计划内单元,非抢跑(2026-05-29 调和)**:迁移计划 plan-007
+  (R10 #1,active)的 **U3 = "Recheck liveness write → new event kinds → EventStore"**,kind 为
+  `publish.verified` / `publish.verify_failed`,projector 更新 `articles` 列。故复查的状态回写**目标是
+  events.db,不是 history_store**(D4 已对,R6 据此改正)。**排序依赖**:本复查 CLI 依赖 plan-007 的
+  U1(schema v4 新 kind)+ U3 先落地,应排在其后或与之协同——非并行于其前。
+  (此决策推翻了 round11-ideation #1 的"stdout-only、不写 events.db"重切前提:那个前提基于对 plan-007
+  的不完整认识;事实是写 events.db recheck kind 才是被批准的 sink。)
 
 ## Dependencies / Assumptions
 
@@ -136,7 +165,10 @@ flowchart TB
 - **已核实**:ledger liveness 源自 history_store;dofollow 源自 registry 静态表;`stale` 按龄期算。
 - **已核实**:`publish.confirmed` floor = `{live_url}`;锚文本在 articles 行 `anchors_json`。
 - **假设**:cadence 由 remote-trigger routine / cron 驱动,与现有运维模式一致。
-- **假设**:本版周期内 events.db schema 与 history_store / ledger 契约不变。
+- **依赖(2026-05-29 调和补)**:**plan-007(history_store→events.db 迁移,active)的 U1 + U3** 是本版
+  前置——U1 提供 schema v4 的复查 event kind,U3 提供复查写 events.db 路径。本版排在其后或协同推进。
+- **已核实**:`webui_app/services/recheck.py`(`recheck_one`/`recheck_many`)存在;当前经
+  `history_store.update_item` 回写,plan-007 U3 改道 events.db kind。
 
 ## Outstanding Questions
 
@@ -146,8 +178,10 @@ flowchart TB
 
 ### Deferred to Planning
 
-- [Affects R6][Technical] `suspected_dead` 用 history_store 新状态值,还是仅 events.db 标记 + dashboard 推导?
-  K / D 阈值取多少?plan 阶段定。
+- [Affects R1][Technical] CLI 复用 `recheck.py` 的 `recheck_one`/`recheck_many` 时,确认 plan-007 U3
+  已把其回写从 `history_store.update_item`(`history_api.py:154/169`)改道到 events.db kind,避免双 writer。
+- [Affects R6/R13][Technical] `suspected_dead` 用 events.db 标记 + dashboard 推导(history_store 已转
+  no-op,不再新增其状态值)。K / D 阈值取多少?plan 阶段定。
 - [Affects R5][Technical] 生命周期 kind 用单 kind 带 `verdict` 字段,还是 `link.rechecked` + `link.decayed` 两个?
   floor 含哪些字段(链接、verdict、reason)?
 - [Affects R3][Technical] 锚文本 diff 的 baseline join 路径:`target_url` + articles `anchors_json` 如何取;

@@ -49,9 +49,22 @@ replacement planning. The verify primitive already exists, so cost is moderate.
 **Downsides:** Network-touching (must stay strictly a `--probe`-gated CLI, never invoked by plan/validate).
 Full survival history (event stream, portfolio view, attrition→replacement planner) deliberately deferred
 to avoid colliding with the events.db-authoritative migration.
+**⚠️ 2026-05-29 update — re-scope premise retracted:** During brainstorm this idea was found to be
+already covered, more completely, by `docs/brainstorms/2026-05-29-backlink-lifecycle-closed-loop-requirements.md`
+(full closed-loop survival monitoring). The "stdout-only, do NOT write events.db (to avoid front-running
+Round-10 #1)" re-scope above is **wrong**: the active migration plan
+`docs/plans/2026-05-28-007-refactor-history-store-events-db-migration-plan.md` includes recheck as its
+**Unit 3** ("Recheck liveness write → new event kinds → EventStore"), so writing recheck results to
+events.db is the *sanctioned, planned* target — not front-running. The correct sink is events.db
+lifecycle kinds (`publish.verified` / `publish.verify_failed`); what must be avoided is direct
+history_store writeback (history_store is being demoted to a no-op shim). Real relationship to Round-10 #1
+is a **sequencing dependency** (recheck CLI depends on plan-007 U1+U3), not an architectural conflict.
+The brainstorm decisions (CLI selection model, exit-code, no-probe dry preview, 5-verdict set) were folded
+into the closed-loop doc (R11-R14, D7). Proceed via that doc, not a separate narrow slice.
+
 **Confidence:** 80%
 **Complexity:** Medium
-**Status:** Explored — brainstorm 2026-05-29
+**Status:** Explored — brainstorm 2026-05-29 (reconciled into closed-loop-requirements doc)
 
 ### 2. Manifest Drift-Proof Property Test
 **Description:** A property test asserting, for every registered adapter, that the runtime-used constant
@@ -141,3 +154,8 @@ fixture maintenance required.
   `recheck-backlinks --probe` flat report (event stream + portfolio view deferred behind Round-10 #1).
   4 survivors reported honestly rather than padding to 5-7.
 - 2026-05-29: #1 `recheck-backlinks --probe` (re-scoped Survival Loop) selected for brainstorm → ce:brainstorm.
+- 2026-05-29: Brainstorm found #1 already covered (more completely) by the same-day
+  `2026-05-29-backlink-lifecycle-closed-loop-requirements.md`, and surfaced active migration plan-007
+  whose Unit 3 already plans the recheck→events.db write. Re-scope premise ("no events.db") retracted;
+  conflict reconciled to a sequencing dependency. Brainstorm CLI decisions folded into the closed-loop doc
+  (R11-R14, D7); R6 re-targeted from history_store writeback to events.db kinds. No separate narrow doc created.
