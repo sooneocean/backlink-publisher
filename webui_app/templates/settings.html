@@ -72,9 +72,38 @@
                         (Unit 3/4). live_browser channels other than the three carded ones
                         (mastodon) have a deferred stub — no "Configure ↓" anchor needed. #}
                     {% set _carded_channels = ['blogger', 'medium', 'velog', 'ghpages', 'devto', 'notion'] %}
-                    {% for name, status in dashboard_channels %}
-                        {{ dashboard_channel_card(name, status, bindable=(name in binding_channels),
-                           has_card=(name in _carded_channels or status.auth_type not in ('live_browser', 'oauth', None))) }}
+                    {#- Plan 2026-05-29-003 Unit 3: group the overview into 3 automation
+                        tiers (independent collapses, no data-bs-parent so multiple can
+                        stay open). ``show`` and ``aria-expanded`` derive from the same
+                        ``g.open`` so Bootstrap's first click never inverts. The ``ready``
+                        flag is attached by the helper — the template only reads it,
+                        never re-derives anon/bound. #}
+                    {% for g in dashboard_channel_tiers %}
+                    <div class="channel-tier">
+                        <button type="button" class="tier-toggle"
+                                data-bs-toggle="collapse" data-bs-target="#{{ g.key }}"
+                                aria-expanded="{{ 'true' if g.open else 'false' }}" aria-controls="{{ g.key }}">
+                            <span class="tier-title">
+                                <span class="tier-label">{{ g.label }}</span>
+                                <span class="tier-count">就緒 {{ g.ready }}/{{ g.total }}</span>
+                            </span>
+                            <span class="tier-subtitle">{{ g.subtitle }}</span>
+                            <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>
+                        </button>
+                        <div id="{{ g.key }}" class="collapse{% if g.open %} show{% endif %}">
+                            {% for name, status, ready in g.channels if ready %}
+                                {{ dashboard_channel_card(name, status, bindable=(name in binding_channels),
+                                   has_card=(name in _carded_channels or status.auth_type not in ('live_browser', 'oauth', None))) }}
+                            {% endfor %}
+                            {% if g.ready > 0 and g.ready < g.total %}
+                            <div class="tier-divider"><span>未配置</span></div>
+                            {% endif %}
+                            {% for name, status, ready in g.channels if not ready %}
+                                {{ dashboard_channel_card(name, status, bindable=(name in binding_channels),
+                                   has_card=(name in _carded_channels or status.auth_type not in ('live_browser', 'oauth', None))) }}
+                            {% endfor %}
+                        </div>
+                    </div>
                     {% endfor %}
                 </div>
             </div>

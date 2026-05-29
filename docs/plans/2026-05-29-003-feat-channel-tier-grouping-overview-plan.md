@@ -180,7 +180,7 @@ settings.html #overview-panel: {% for g in dashboard_channel_tiers %}
 
 **Verification:** `/settings` GET 200;新键存在且结构正确;现有 dashboard 渲染测试不回归。
 
-- [ ] **Unit 3: 总览面板模板分组 + CSS**
+- [x] **Unit 3: 总览面板模板分组 + CSS**
 
 **Goal:** 把 `#overview-panel` 内的平铺循环改为嵌套分层折叠;每组折叠头含计数与副文案;组内已绑定/未绑定分段;Tier 1 默认展开;CSS 加分组 toggle 的 chevron 旋转选择器。
 
