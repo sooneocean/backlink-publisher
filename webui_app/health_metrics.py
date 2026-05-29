@@ -192,6 +192,19 @@ def error_distribution(store: EventStore, *, since_utc: str) -> list[ErrorBucket
     ]
 
 
+def decay_counts(store: EventStore | None = None) -> dict[str, int]:
+    """Backlink decay counts by latest recheck verdict (Plan 2026-05-29-004 U6).
+
+    Thin wrapper over ``recheck.events_io.derive_decay_counts`` so the /ce:health
+    route reads decay state through the same health-metrics surface as the other
+    aggregations. Reports current state (latest verdict per link, no age window —
+    an old un-rechecked dead link still counts).
+    """
+    from backlink_publisher.recheck.events_io import derive_decay_counts
+
+    return derive_decay_counts(store if store is not None else EventStore())
+
+
 def broken_channels() -> list[BrokenChannel]:
     """Channels currently flagged expired / identity_mismatch (display-only).
 

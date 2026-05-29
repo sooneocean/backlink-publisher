@@ -18,6 +18,11 @@ from urllib.request import Request
 from backlink_publisher import http as _http
 
 _A_TAG_RE = re.compile(r"<a\s[^>]*>", re.IGNORECASE)
+# Full <a ...>inner</a> element — used only when a caller opts into anchor-text
+# capture (recheck anchor-drift). Kept separate from _A_TAG_RE so the default
+# opening-tag scan (and its 6 positional callers) is byte-for-byte unchanged.
+_A_ELEMENT_RE = re.compile(r"<a\s([^>]*)>(.*?)</a>", re.IGNORECASE | re.DOTALL)
+_INNER_TAG_RE = re.compile(r"<[^>]+>")
 _BLANK_RE = re.compile(r'\btarget\s*=\s*["\']?_blank["\']?', re.IGNORECASE)
 # Capture the value of the rel attribute on a single <a> tag, single or
 # double quoted. Used per-tag to tokenise and look for the "nofollow" keyword.
@@ -300,6 +305,7 @@ def inspect_target_anchor(
     *,
     expected_marker: Optional[str] = None,
     timeout: Optional[float] = None,
+    capture_anchor_text: bool = False,
 ) -> dict:
     """Fetch ``url`` (SSRF-guarded) and inspect the anchor pointing at
     ``target_url``.
@@ -320,8 +326,15 @@ def inspect_target_anchor(
             "target_anchor_found": bool,
             "target_rel": str|None,       # raw rel of the matched anchor
             "target_is_nofollow": bool,   # matched anchor strips dofollow weight
+            "target_anchor_text": str|None,  # inner text of matched anchor; only
+                                          # populated when capture_anchor_text=True
             "reason": str|None,           # taxonomy string on any non-OK path
         }
+
+    ``capture_anchor_text`` (default False) opts into returning the matched
+    anchor's normalized inner text for anchor-drift comparison (recheck). It
+    switches the scan to the full ``<a>...</a>`` element regex; default callers
+    keep the unchanged opening-tag scan.
 
     Honest limitation (R13): the preflight UA is distinct so the target can rate
     limit it separately, but a platform could UA-cloak (serve dofollow to the
@@ -338,6 +351,7 @@ def inspect_target_anchor(
         "target_anchor_found": False,
         "target_rel": None,
         "target_is_nofollow": False,
+        "target_anchor_text": None,
         "reason": None,
     }
 
@@ -360,8 +374,21 @@ def inspect_target_anchor(
     except Exception:  # noqa: BLE001 — never-raise contract
         canonical_target = None
 
+    # Distinguish "target_url itself is malformed/uncanonicalizable" from
+    # "target anchor genuinely absent": a non-empty target that won't canonicalize
+    # is indeterminate (the recheck maps it to probe_error), not a stripped link.
+    if target_url and not canonical_target:
+        result["reason"] = "target_uncanonicalizable"
+
     if canonical_target:
-        for tag in _A_TAG_RE.findall(text):
+        if capture_anchor_text:
+            tag_iter = (
+                ("<a " + m.group(1) + ">", m.group(2))
+                for m in _A_ELEMENT_RE.finditer(text)
+            )
+        else:
+            tag_iter = ((tag, None) for tag in _A_TAG_RE.findall(text))
+        for tag, inner in tag_iter:
             href = _tag_href(tag)
             if not href:
                 continue
@@ -375,11 +402,18 @@ def inspect_target_anchor(
             result["target_anchor_found"] = True
             result["target_rel"] = rel
             result["target_is_nofollow"] = _rel_is_nofollow(rel)
+            if capture_anchor_text and inner is not None:
+                result["target_anchor_text"] = _normalize_anchor_text(inner)
             # First match wins — deterministic and "at least one dofollow exists"
             # when the matched anchor is dofollow.
             break
 
     return result
+
+
+def _normalize_anchor_text(inner_html: str) -> str:
+    """Strip nested tags and collapse whitespace for anchor-text comparison."""
+    return " ".join(_INNER_TAG_RE.sub(" ", inner_html).split())
 
 
 def _canonicalize_for_match(href: str) -> Optional[str]:

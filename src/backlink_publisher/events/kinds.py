@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Final
 
-# --- Seam A: the event-kind vocabulary (14 kinds; do NOT rename) ---------
+# --- Seam A: the event-kind vocabulary (15 kinds; do NOT rename) ---------
 
 PUBLISH_INTENT: Final = "publish.intent"
 PUBLISH_CONFIRMED: Final = "publish.confirmed"
@@ -49,6 +49,11 @@ BANNER_SKIPPED_NO_ARTIFACT: Final = "banner.skipped_no_artifact"
 IMAGE_GEN_INVOKED: Final = "image_gen_invoked"
 IMAGE_GEN_CAPPED: Final = "image_gen_capped"
 IMAGE_GEN_DISABLED_AUTO: Final = "image_gen_disabled_auto"
+#: Post-publish backlink re-verification verdict (Plan 2026-05-29-004). Written
+#: directly by the ``recheck-backlinks`` CLI via ``EventStore.append`` — NOT
+#: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
+#: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
+LINK_RECHECKED: Final = "link.rechecked"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -68,6 +73,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_INVOKED,
         IMAGE_GEN_CAPPED,
         IMAGE_GEN_DISABLED_AUTO,
+        LINK_RECHECKED,
     }
 )
 
@@ -113,6 +119,10 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     IMAGE_GEN_INVOKED: frozenset({"prompt_sha"}),
     IMAGE_GEN_CAPPED: frozenset({"reason"}),
     IMAGE_GEN_DISABLED_AUTO: frozenset({"threshold"}),
+    # The verdict is the load-bearing field every reader (decay counts, age
+    # cursor) needs; target identity travels in the events.db first-class
+    # columns (target_url/host/article_id), not the floor.
+    LINK_RECHECKED: frozenset({"verdict"}),
 }
 
 

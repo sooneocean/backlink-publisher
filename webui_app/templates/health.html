@@ -64,6 +64,25 @@
     </span>
   </div>
   {% endif %}
+  {% if recheck_decay and (recheck_decay.host_gone or recheck_decay.link_stripped or recheck_decay.dofollow_lost) %}
+  <div class="alert alert-warning py-2 small" role="alert">
+    {% if recheck_decay.host_gone or recheck_decay.link_stripped %}
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-exclamation-diamond-fill"></i>
+      <span>
+        Backlink decay detected —
+        {% if recheck_decay.host_gone %}{{ recheck_decay.host_gone }} host gone{% endif %}{% if recheck_decay.host_gone and recheck_decay.link_stripped %}, {% endif %}{% if recheck_decay.link_stripped %}{{ recheck_decay.link_stripped }} link{{ '' if recheck_decay.link_stripped == 1 else 's' }} stripped{% endif %}.
+        Run <code>recheck-backlinks --probe</code> (add <code>--host=&lt;host&gt;</code> to scope) to investigate; see the recheck runbook.
+      </span>
+    </div>
+    {% endif %}
+    {% if recheck_decay.dofollow_lost %}
+    <div class="text-muted mt-1 ms-4">
+      Advisory: {{ recheck_decay.dofollow_lost }} link{{ '' if recheck_decay.dofollow_lost == 1 else 's' }} may have lost dofollow — needs manual confirmation (the verifier may be cloaked).
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   {# ── 1. Hero success rate (R6, R10) ───────────────────────────────────── #}
   <div class="card shadow-sm mb-4">

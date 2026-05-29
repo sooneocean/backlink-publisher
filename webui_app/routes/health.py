@@ -56,6 +56,20 @@ def _reconciliation_gaps():
         return {}
 
 
+def _decay_counts():
+    """Read-only backlink decay counts for the dashboard banner (Plan
+    2026-05-29-004 U6). Returns ``{host_gone, link_stripped, dofollow_lost,
+    alive, probe_error}`` or ``{}`` on any read error so the page never 500s.
+    """
+    try:
+        from ..health_metrics import decay_counts
+
+        return decay_counts()
+    except Exception as exc:  # noqa: BLE001 — never 500 the page
+        _log.warning("health: decay count read failed: %s", exc)
+        return {}
+
+
 @bp.route("/ce:health", methods=["GET"])
 def ce_health():
     def _build():
@@ -149,6 +163,7 @@ def ce_health():
         canary = _g_cache("canary_health", _canary_rows)
         forward_path = _g_cache("forward_path_health", _forward_path_rows)
         reconciliation_gaps = _g_cache("reconciliation_gaps", _reconciliation_gaps)
+        recheck_decay = _g_cache("recheck_decay", _decay_counts)
         return _render(
             "health.html",
             health=health,
@@ -156,6 +171,7 @@ def ce_health():
             canary=canary,
             forward_path=forward_path,
             reconciliation_gaps=reconciliation_gaps,
+            recheck_decay=recheck_decay,
         )
     except Exception as exc:  # noqa: BLE001 — R5: even a render/context error must not 500
         _log.error("health: dashboard render failed, serving minimal fallback: %s", exc)
