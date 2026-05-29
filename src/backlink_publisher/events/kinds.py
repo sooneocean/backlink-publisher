@@ -54,6 +54,7 @@ IMAGE_GEN_DISABLED_AUTO: Final = "image_gen_disabled_auto"
 #: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
 #: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
 LINK_RECHECKED: Final = "link.rechecked"
+CITATION_OBSERVED: Final = "citation.observed"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -74,6 +75,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_CAPPED,
         IMAGE_GEN_DISABLED_AUTO,
         LINK_RECHECKED,
+        CITATION_OBSERVED,
     }
 )
 
@@ -123,6 +125,11 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # cursor) needs; target identity travels in the events.db first-class
     # columns (target_url/host/article_id), not the floor.
     LINK_RECHECKED: frozenset({"verdict"}),
+    # citation.observed carries only parsed, bounded fields (D8): the raw
+    # LLM/HTTP trace is never persisted. The floor is the load-bearing triple a
+    # share/dashboard reader needs to make sense of the row — the citation
+    # verdict tier, the engine that produced it, and the query that was probed.
+    CITATION_OBSERVED: frozenset({"verdict", "engine", "query"}),
 }
 
 
