@@ -90,7 +90,9 @@ from backlink_publisher._util.url import (  # noqa: E402
     canonicalize_url,
     safe_hostname,
 )
+from backlink_publisher._util.errors import PipelineError  # noqa: E402
 from backlink_publisher.config import load_config  # noqa: E402
+from backlink_publisher.config.types import Config, GeoProbeConfig  # noqa: E402
 from backlink_publisher.geo import dispatch_probe  # noqa: E402
 
 # v1 ships a single engine; the dispatch seam (U3) routes by name.
@@ -116,10 +118,12 @@ def _canonical_host(url: str) -> str | None:
     host = safe_hostname(canonicalize_url(url))
     if not host:
         return None
-    host = host.lower()
-    if host.startswith("www."):
-        host = host[4:]
-    return host
+    # Explicit str binding so mypy doesn't widen the Any from safe_hostname
+    # back through the return (no-any-return).
+    normalized: str = host.lower()
+    if normalized.startswith("www."):
+        normalized = normalized[4:]
+    return normalized
 
 
 @dataclass
@@ -222,7 +226,7 @@ def _classify(
 
 
 def _run_one(
-    target: str, query: str, target_host: str | None, cfg
+    target: str, query: str, target_host: str | None, cfg: GeoProbeConfig
 ) -> ProbeOutcome:
     """Issue one probe and classify it. NEVER raises — an adapter exception for
     one (target, query) is counted as ``refused`` so the spike completes all
@@ -325,7 +329,7 @@ def _print_results(
     return 0 if has_viable_set else 1
 
 
-def _build_reports(config) -> list[TargetReport]:
+def _build_reports(config: Config) -> list[TargetReport]:
     """Probe every configured target that has ``probe_queries`` and aggregate.
 
     Returns a per-target report. A target whose query list is empty still gets a
@@ -377,7 +381,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except PipelineError as exc:
+        # Honor the documented 0-6 exit-code contract instead of crashing with a
+        # traceback on a malformed/invalid config (e.g. bad TOML -> exit 3,
+        # invalid [geo.probe_provider] -> exit 2).
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return int(exc.exit_code)
     if config.geo_probe_provider is None:
         print(
             "ERROR: no GEO probe provider configured. Set [geo.probe_provider] "

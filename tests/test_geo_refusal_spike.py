@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pytest
 
+from backlink_publisher._util.errors import DependencyError, InputValidationError
 from backlink_publisher.config import Config
 from backlink_publisher.config.types import GeoProbeConfig
 from backlink_publisher.geo import ProbeResult
@@ -313,3 +314,22 @@ def test_no_target_probe_queries_exits_2(monkeypatch, script):
 
     code, out = _run(script)
     assert code == 2
+
+
+@pytest.mark.parametrize(
+    "exc, expected_code",
+    [
+        (InputValidationError("bad geo section"), 2),
+        (DependencyError("bad toml"), 3),
+    ],
+)
+def test_load_config_error_honors_exit_contract(monkeypatch, script, exc, expected_code):
+    """A malformed/invalid config must exit with the documented 0-6 code, not
+    crash with an uncaught traceback (ce:review reliability fix)."""
+    def _raise(_path):
+        raise exc
+
+    monkeypatch.setattr(script, "load_config", _raise, raising=True)
+
+    code, out = _run(script)
+    assert code == expected_code
