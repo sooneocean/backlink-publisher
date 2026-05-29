@@ -8,7 +8,7 @@ import backlink_publisher.config.tokens as tokens_mod
 from backlink_publisher.cli._publish_helpers import _check_token_drift
 from backlink_publisher.cli.publish_backlinks import _run_resume
 from backlink_publisher.config import snapshot_token_revs
-from backlink_publisher.config.tokens import save_blogger_token, save_medium_token
+from backlink_publisher.config.tokens import save_blogger_token
 
 
 def _spy_load_token(monkeypatch):
