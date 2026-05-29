@@ -345,7 +345,7 @@ flowchart TB
 
 ### Phase A — Foundations
 
-- [ ] **Unit 1: GEO config (`[geo.probe_provider]` + per-target queries/brand-aliases)**
+- [x] **Unit 1: GEO config (`[geo.probe_provider]` + per-target queries/brand-aliases)**
 
 **Goal:** Parse and expose GEO config without breaking no-credential installs or `save_config`.
 
@@ -391,7 +391,7 @@ target loop, loader three-state handling `loader.py:201-228`.
 **Verification:** Config loads with/without GEO; round-trip preserves all sections incl. per-target GEO
 keys; non-https rejected; LLM key alone never enables probing.
 
-- [ ] **Unit 2: `citation.observed` event kind (parsed fields only)**
+- [x] **Unit 2: `citation.observed` event kind (parsed fields only)**
 
 **Goal:** Register the new kind through the events contract; persist only bounded, non-sensitive fields.
 
@@ -424,7 +424,7 @@ no secret can land in a row.
 
 ### Phase B — Measurement core *(gated by D12 — build only if the eligible target set is non-empty)*
 
-- [ ] **Unit 3: Probe engine dispatch + Perplexity adapter (+ credential guard chain)**
+- [x] **Unit 3: Probe engine dispatch + Perplexity adapter (+ credential guard chain)**
 
 **Goal:** A dispatch-by-name engine seam and a v1 Perplexity adapter that gates the endpoint, never
 raises mid-batch, and never persists secrets.
@@ -469,7 +469,7 @@ typical payload size** before hardening the parser; pin with a fixture-backed te
 **Verification:** Endpoint gated before send; all response shapes yield structured outcomes without
 raising; no secret persisted/sent to a non-allowlisted host.
 
-- [ ] **Unit 4: Refusal-spike value gate + authorized-exception log**
+- [x] **Unit 4: Refusal-spike value gate + authorized-exception log**
 
 **Goal:** Decide go/no-go for the *whole measurement half* and per target, measuring **citation**
 behavior (not generation), before any production probing.
