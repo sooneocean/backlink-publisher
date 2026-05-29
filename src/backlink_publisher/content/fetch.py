@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 import socket  # noqa: F401 — kept for test patch backward compat
 import ssl
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional
@@ -39,7 +40,11 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
 from backlink_publisher._util.logger import opencli_logger
-from backlink_publisher._util.url import normalize_url_for_fetch, safe_urlparse
+from backlink_publisher._util.url import (
+    canonicalize_url,
+    normalize_url_for_fetch,
+    safe_urlparse,
+)
 from backlink_publisher._util.net_safety import (
     _check_url_for_ssrf,
     _make_ssrf_opener,
@@ -100,6 +105,17 @@ CheckResult = tuple[bool, Optional[str], Optional[str]]
 _CacheEntry = tuple[CheckResult, float]
 _CACHE: dict[str, _CacheEntry] = {}
 
+#: Canonical "unreachable / unexpected failure" verdict used as a fail-closed
+#: fallback in the batch path.
+_NETWORK_ERROR: CheckResult = (False, "network_error", None)
+
+#: Thread lock guarding the ``_CACHE`` dict structure and ``_evict_lru``.
+#: It protects dict integrity only — the network fetch runs OUTSIDE the lock,
+#: so two threads missing the same key may both fetch (last write wins). This
+#: is intentional: holding the lock across a blocking GET would serialize all
+#: fetches. ``_STATS`` counters are advisory and updated outside the lock.
+_CACHE_LOCK = threading.Lock()
+
 #: Maximum cache entries (LRU eviction). Prevents unbounded growth in
 #: long-running processes like the WebUI daemon. Set via
 #: ``BACKLINK_FETCH_CACHE_MAX_ENTRIES`` (default 256).
@@ -114,6 +130,29 @@ def _evict_lru() -> None:
     to_remove = len(_CACHE) - (_MAX_CACHE_ENTRIES - _MAX_CACHE_ENTRIES // 4)
     for _ in range(to_remove):
         _CACHE.pop(next(iter(_CACHE)), None)
+
+
+def _cache_key(url: object) -> str:
+    """Canonical cache key for ``url`` (collapses utm params, default ports,
+    trailing slash, fragment — see :func:`canonicalize_url`).
+
+    Declared ``-> str`` for the happy path, but defensively accepts ``object``
+    and passes non-canonicalizable input through unchanged so the fail-closed
+    contract of :func:`verify_url_has_content` holds: a malformed or non-string
+    URL must still reach ``_is_valid_http_url`` and resolve as ``invalid_url``
+    rather than crashing the fetch gate. Two cases:
+
+    - non-``str`` scalar input (``int``, ``bool`` …) — ``urlsplit`` would raise
+      ``AttributeError``/``TypeError``; we short-circuit on the type.
+    - malformed strings such as ``http://[invalid`` — ``urlsplit`` raises
+      ``ValueError`` (``Invalid IPv6 URL``); we catch and fall back.
+    """
+    if not isinstance(url, str):
+        return url  # type: ignore[return-value]  # fail-closed passthrough
+    try:
+        return canonicalize_url(url)
+    except ValueError:
+        return url
 
 
 # Initialize max cache entries from environment (allows tuning without code change)
@@ -348,21 +387,27 @@ def verify_url_has_content(
         on ``ok=False`` and is ``None`` on success. ``title`` is the
         extracted string on success and ``None`` otherwise.
     """
+    # Normalize URL for cache key to collapse equivalent representations.
+    canonical_url = _cache_key(url)
     effective_ttl = max_age_seconds if max_age_seconds is not None else _DEFAULT_MAX_AGE_S
 
-    cached = _CACHE.get(url)
-    if cached is not None:
-        result, written_at = cached
-        if effective_ttl is None or (time.monotonic() - written_at) < effective_ttl:
-            _STATS["cache_hits"] += 1
-            return result
-        # Expired — fall through to refetch and overwrite the entry.
+    # Fast path: check cache under lock to avoid duplicate fetches.
+    with _CACHE_LOCK:
+        cached = _CACHE.get(canonical_url)
+        if cached is not None:
+            result, written_at = cached
+            if effective_ttl is None or (time.monotonic() - written_at) < effective_ttl:
+                _STATS["cache_hits"] += 1
+                return result
+            # Expired — fall through to refetch (will overwrite under lock later).
 
     _STATS["cache_misses"] += 1
 
     if not _is_valid_http_url(url):
         result = (False, "invalid_url", None)
-        _CACHE[url] = (result, time.monotonic())
+        with _CACHE_LOCK:
+            _CACHE[canonical_url] = (result, time.monotonic())
+            _evict_lru()
         _record_reason("invalid_url", ok=False)
         return result
 
@@ -385,8 +430,9 @@ def verify_url_has_content(
     _STATS["fetches"] += 1
     _STATS["total_latency_ms"] += elapsed_ms
     _record_reason(last_result[1], ok=last_result[0])
-    _CACHE[url] = (last_result, time.monotonic())
-    _evict_lru()
+    with _CACHE_LOCK:
+        _CACHE[canonical_url] = (last_result, time.monotonic())
+        _evict_lru()
     return last_result
 
 
@@ -420,34 +466,62 @@ def verify_urls_batch(
     if not urls:
         return {}
 
-    distinct = list(dict.fromkeys(urls))
-    # Treat URLs whose cached entry has expired (per process default TTL) as
-    # misses so the prefetch path re-fetches them too. Bare `not in` ignored
-    # TTL and surfaced stale results.
+    # Build mapping: canonical URL -> list of original URLs that map to it
+    canonical_to_originals: dict[str, list[str]] = {}
+    for u in urls:
+        c = _cache_key(u)
+        canonical_to_originals.setdefault(c, []).append(u)
+
+    distinct_canonical = list(canonical_to_originals.keys())
+
+    # Determine cache misses (respect TTL)
     now = time.monotonic()
     def _fresh(entry: _CacheEntry) -> bool:
         if _DEFAULT_MAX_AGE_S is None:
             return True
         return (now - entry[1]) < _DEFAULT_MAX_AGE_S
 
-    misses = [
-        u for u in distinct
-        if u not in _CACHE or not _fresh(_CACHE[u])
-    ]
-    if misses:
-        workers = min(max_workers, max(1, len(misses)))
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {pool.submit(verify_url_has_content, u): u for u in misses}
-            for fut in as_completed(futures):
-                # verify_url_has_content writes to _CACHE; we just need to
-                # drain the future so exceptions (which shouldn't escape)
-                # surface in tests rather than swallow.
-                try:
-                    fut.result()
-                except Exception:  # noqa: BLE001
-                    url = futures[fut]
-                    _CACHE.setdefault(
-                        url, ((False, "network_error", None), time.monotonic())
-                    )
+    # Snapshot fresh cache hits and collect misses atomically under the lock.
+    # We capture the hit *value* now rather than re-reading _CACHE after the
+    # fetch phase: a large batch (more distinct URLs than _MAX_CACHE_ENTRIES)
+    # would otherwise let _evict_lru drop an early result before we read it,
+    # turning a genuine success into a spurious "network_error".
+    results_by_canonical: dict[str, CheckResult] = {}
+    misses_canonical: list[str] = []
+    with _CACHE_LOCK:
+        for c in distinct_canonical:
+            entry = _CACHE.get(c)
+            if entry is not None and _fresh(entry):
+                results_by_canonical[c] = entry[0]
+            else:
+                misses_canonical.append(c)
 
-    return {u: _CACHE[u][0] for u in distinct}
+    if misses_canonical:
+        workers = min(max_workers, max(1, len(misses_canonical)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {}
+            for c in misses_canonical:
+                # Pick any original URL that maps to this canonical to preserve logging context
+                representative_url = canonical_to_originals[c][0]
+                fut = pool.submit(verify_url_has_content, representative_url)
+                futures[fut] = c
+            for fut in as_completed(futures):
+                c = futures[fut]
+                try:
+                    # verify_url_has_content caches internally; we keep the
+                    # returned value too so eviction can't lose it before the
+                    # result dict is built.
+                    results_by_canonical[c] = fut.result()
+                except Exception:  # noqa: BLE001
+                    results_by_canonical[c] = _NETWORK_ERROR
+                    # Cache the failure so a repeat call doesn't re-raise.
+                    with _CACHE_LOCK:
+                        _CACHE.setdefault(c, (_NETWORK_ERROR, time.monotonic()))
+
+    # Build result dict for every original URL from the captured values.
+    result: dict[str, CheckResult] = {}
+    for c, originals in canonical_to_originals.items():
+        res = results_by_canonical.get(c, _NETWORK_ERROR)
+        for orig in originals:
+            result[orig] = res
+    return result

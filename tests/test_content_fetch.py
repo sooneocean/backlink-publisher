@@ -399,6 +399,135 @@ def test_batch_worker_exception_records_failure_not_crash():
     assert reason == "network_error"
 
 
+# ── canonical cache key (collapses equivalent URL representations) ─────────
+
+
+def test_cache_key_collapses_utm_params():
+    """Two URLs differing only by utm_* tracking params share one cache entry,
+    so the second call is served from cache instead of re-fetching."""
+    body = b"<html><head><title>X</title></head><body>x</body></html>"
+    call_count = {"n": 0}
+
+    def _once(*args, **kwargs):
+        call_count["n"] += 1
+        return _mock_response(200, body)
+
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", side_effect=_once):
+        verify_url_has_content("https://example.com/post?utm_source=newsletter")
+        ok, _, title = verify_url_has_content("https://example.com/post")
+
+    assert (ok, title) == (True, "X")
+    assert call_count["n"] == 1, "utm-only variant must hit the canonical cache key"
+
+
+def test_cache_key_collapses_fragment_and_trailing_slash():
+    """Fragment and trailing slash are dropped by canonicalization, so these
+    representations collapse to a single cache entry."""
+    body = b"<html><head><title>X</title></head><body>x</body></html>"
+    call_count = {"n": 0}
+
+    def _once(*args, **kwargs):
+        call_count["n"] += 1
+        return _mock_response(200, body)
+
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", side_effect=_once):
+        verify_url_has_content("https://example.com/page/#section")
+        verify_url_has_content("https://example.com/page")
+
+    assert call_count["n"] == 1, "fragment/trailing-slash variants share a cache key"
+
+
+def test_batch_collapses_equivalent_urls_to_single_fetch():
+    """A batch containing equivalent representations fetches once but returns a
+    result entry keyed by every original input URL."""
+    body = b"<html><head><title>X</title></head><body>x</body></html>"
+    call_count = {"n": 0}
+
+    def _once(*args, **kwargs):
+        call_count["n"] += 1
+        return _mock_response(200, body)
+
+    originals = [
+        "https://a.example/p?utm_source=x",
+        "https://a.example/p",
+        "https://a.example/p#frag",
+    ]
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", side_effect=_once):
+        results = verify_urls_batch(originals)
+
+    assert set(results) == set(originals), "every original URL must get its own entry"
+    assert all(results[u][0] is True for u in originals)
+    assert call_count["n"] == 1, "equivalent URLs collapse to a single fetch"
+
+
+def test_cache_key_falls_back_on_malformed_url_without_raising():
+    """``_cache_key`` must never raise — malformed input that breaks ``urlsplit``
+    falls back to the raw string so the fail-closed invalid_url path is reached
+    instead of a bare ValueError crashing the gate."""
+    from backlink_publisher.content.fetch import _cache_key
+
+    assert _cache_key("http://[invalid") == "http://[invalid"
+    # End-to-end: the malformed URL still resolves as invalid_url, no network.
+    ok, reason, _ = verify_url_has_content("http://[invalid")
+    assert (ok, reason) == (False, "invalid_url")
+
+
+def test_concurrent_verify_writes_cache_without_corruption():
+    """Many threads writing distinct cache entries concurrently must not raise
+    or corrupt the shared dict — the ``_CACHE_LOCK`` serializes mutation."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from backlink_publisher.content.fetch import _CACHE
+
+    body = b"<html><head><title>X</title></head><body>x</body></html>"
+    urls = [f"https://host{i}.example/p" for i in range(48)]
+
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
+        with ThreadPoolExecutor(max_workers=12) as pool:
+            futures = [pool.submit(verify_url_has_content, u) for u in urls]
+            results = [f.result() for f in as_completed(futures)]
+
+    assert all(ok for ok, _, _ in results)
+    assert len(_CACHE) == len(urls), "each distinct URL cached exactly once, no lost writes"
+
+
+def test_batch_larger_than_cache_cap_keeps_true_results(monkeypatch):
+    """A batch with more distinct URLs than the LRU cap must still report every
+    succeeding URL as live. Regression: results were built by re-reading the
+    cache *after* per-write eviction, so early successes surfaced as a spurious
+    'network_error'."""
+    monkeypatch.setattr("backlink_publisher.content.fetch._MAX_CACHE_ENTRIES", 8)
+    body = b"<html><head><title>X</title></head><body>x</body></html>"
+    urls = [f"https://host{i}.example/p" for i in range(20)]  # 20 > cap 8
+
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
+        results = verify_urls_batch(urls)
+
+    assert set(results) == set(urls)
+    bad = {u: r for u, r in results.items() if r != (True, None, "X")}
+    assert not bad, f"evicted successes must not become network_error: {bad}"
+
+
+@pytest.mark.parametrize("bad", [123, 1.5, True])
+def test_non_str_url_returns_invalid_without_crash(bad):
+    """A non-string *scalar* (the realistic accidental input — e.g. a numeric ID
+    or bool read from a payload) must resolve as invalid_url (fail-closed), never
+    crash. ``_cache_key`` runs before the type guard and ``canonicalize_url``
+    would raise AttributeError/TypeError on non-str. (Unhashable inputs like
+    ``list`` are out of contract and crash at the dict lookup, same as before.)"""
+    ok, reason, _ = verify_url_has_content(bad)
+    assert (ok, reason) == (False, "invalid_url")
+
+
+def test_batch_with_non_str_element_does_not_crash_whole_batch():
+    """One bad (non-str) element must not take down results for the valid URLs."""
+    body = b"<html><head><title>OK</title></head><body>x</body></html>"
+    with patch("backlink_publisher.content.fetch._SSRF_OPENER.open", return_value=_mock_response(200, body)):
+        results = verify_urls_batch(["https://ok.example/", 123])
+    assert results["https://ok.example/"][0] is True
+    assert results[123] == (False, "invalid_url", None)
+
+
 # ── redirect handling (urllib follows 301/302 automatically) ──────────────
 
 
