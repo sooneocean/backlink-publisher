@@ -56,6 +56,7 @@ cat seeds.jsonl | plan-backlinks | validate-backlinks | publish-backlinks --mode
 | `preflight-targets` | `cli/preflight_targets.py` | Destination-page health check before publish |
 | `cull-channels` | `cli/cull_channels.py` | Read-only channel-quality cull advisory (Blast-radius R9) |
 | `canary-targets` | `cli/canary_targets.py` | Read-only adapter-contract canary: re-fetch dofollow-tier canary posts, assert target backlink still dofollow (advisory; config-driven; exit 0). Runbook: `docs/runbooks/2026-05-27-canary-targets-operations.md` |
+| `plan-gap` | `cli/plan_gap.py` (engine `gap/engine.py`) | Deficit-driven re-plan (read-only, pure): reads `equity-ledger` JSONL on stdin, emits `plan-backlinks` seed JSONL fanning each under-linked target across the active dofollow platforms it lacks a live-dofollow link on. Compose: `equity-ledger \| plan-gap --desired N --language LANG \| plan-backlinks`. Suppresses stale/unverified/failed by default (loud per-reason stderr counts); exit 0 advisory. |
 
 ### Publish-path forward-path drift (Plan 2026-05-27-006)
 

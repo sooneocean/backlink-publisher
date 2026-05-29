@@ -73,6 +73,11 @@ class LedgerRow:
     live_dofollow: int = 0
     platform_count: int = 0
     platforms: list[str] = field(default_factory=list)
+    # Platforms where this target has a link that is BOTH live AND dofollow.
+    # A strict subset of ``platforms`` (which counts any link, incl. nofollow /
+    # dead). Consumed by ``plan-gap`` so its fan-out subtracts the live-dofollow
+    # set (not ``platforms``), letting a nofollow/dead platform be re-proposed.
+    live_dofollow_platforms: list[str] = field(default_factory=list)
     exact_match_pct: float = 0.0
     # False when the target has no per-target anchor entries — U5 renders "—"
     # rather than a misleading 0.0% (plan U3 / silent-0.0 guard).

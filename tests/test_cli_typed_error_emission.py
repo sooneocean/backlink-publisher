@@ -41,6 +41,7 @@ _IN_SCOPE_CLI_FILES = [
     _SRC / "cli" / "report_anchors.py",
     _SRC / "cli" / "equity_ledger.py",
     _SRC / "cli" / "plan_check.py",
+    _SRC / "cli" / "plan_gap.py",
 ]
 
 

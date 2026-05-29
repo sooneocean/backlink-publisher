@@ -172,3 +172,46 @@ def test_default_sort_weak_targets_first(tmp_path):
     # weak target (0 live-dofollow, nofollow) sorts before strong (1 live-dofollow).
     assert rows[0].target_url == "https://t.com/weak"
     assert rows[1].target_url == "https://t.com/strong"
+
+
+# ── live_dofollow_platforms (plan-gap fan-out subtrahend) ───────────────────
+
+def _hist_all_live(fresh):
+    """All three links fresh-verified: medium=dofollow, devto=nofollow, fakeplat=unknown."""
+    return [
+        {"id": "h1", "platform": "medium", "target_url": T,
+         "article_urls": ["https://medium.com/l1"], "status": "published",
+         "verified_at": fresh},
+        {"id": "h2", "platform": "devto", "target_url": T,
+         "article_urls": ["https://devto.example/l2"], "status": "published",
+         "verified_at": fresh},
+        {"id": "h3", "platform": "fakeplat", "target_url": T,
+         "article_urls": ["https://unreg.example/l3"], "status": "published",
+         "verified_at": fresh},
+    ]
+
+
+def test_live_dofollow_platforms_is_live_dofollow_subset(store):
+    fresh = (datetime.now() - timedelta(days=3)).isoformat(timespec="seconds")
+    row = build_ledger(store=store, history=_hist_all_live(fresh))[0]
+    # All three platforms have a LIVE link, but only medium is dofollow.
+    assert row.platforms == ["devto", "fakeplat", "medium"]
+    # P0 regression guard: a live-but-nofollow (devto) / live-but-unknown
+    # (fakeplat) platform is in ``platforms`` but NOT in live_dofollow_platforms,
+    # so plan-gap can still re-propose it to earn a real dofollow link there.
+    assert row.live_dofollow_platforms == ["medium"]
+
+
+def test_live_dofollow_platforms_empty_when_none_live_dofollow(store):
+    # Nothing verified → no live links → empty live-dofollow platform set.
+    row = build_ledger(store=store, history=_hist())[0]
+    assert row.live_dofollow_platforms == []
+
+
+def test_live_dofollow_platforms_serialized(store):
+    fresh = (datetime.now() - timedelta(days=3)).isoformat(timespec="seconds")
+    row = build_ledger(store=store, history=_hist_all_live(fresh))[0]
+    d = row.to_jsonl_dict()
+    assert d["live_dofollow_platforms"] == ["medium"]
+    # round-trips through JSON (the CLI emits it one-per-line on stdout).
+    assert json.loads(json.dumps(d))["live_dofollow_platforms"] == ["medium"]

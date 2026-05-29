@@ -50,6 +50,7 @@ cull-channels = "backlink_publisher.cli.cull_channels:main"
 canary-targets = "backlink_publisher.cli.canary_targets:main"
 comment = "backlink_publisher.cli.comment:main"
 generate-backlink-text = "backlink_publisher.cli.generate_backlink_text:main"
+plan-gap = "backlink_publisher.cli.plan_gap:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

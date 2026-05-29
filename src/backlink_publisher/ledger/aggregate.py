@@ -83,6 +83,7 @@ def build_ledger(
     for target, bucket in buckets.items():
         breakdown = DofollowBreakdown()
         platforms: set[str] = set()
+        live_dofollow_platforms: set[str] = set()
         statuses: list[str] = []
         live_links = 0
         live_dofollow = 0
@@ -117,6 +118,8 @@ def build_ledger(
                 live_links += 1
                 if cls == "dofollow":
                     live_dofollow += 1
+                    if link.platform:
+                        live_dofollow_platforms.add(link.platform)
 
             if link.history_item_id and item_link_counts[link.history_item_id] > 1:
                 row_level = True
@@ -136,6 +139,7 @@ def build_ledger(
             live_dofollow=live_dofollow,
             platform_count=len(platforms),
             platforms=sorted(platforms),
+            live_dofollow_platforms=sorted(live_dofollow_platforms),
             exact_match_pct=(
                 exact_match_ratio(bucket.profile_entries)
                 if bucket.has_anchor_data else 0.0
