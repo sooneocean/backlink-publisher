@@ -5,11 +5,16 @@ from __future__ import annotations
 import ssl
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
 from urllib.request import Request, urlopen
 
 from backlink_publisher._util.errors import ExternalServiceError
 from backlink_publisher._util.logger import opencli_logger
-from backlink_publisher._util.url import normalize_url_for_fetch, safe_urlparse
+from backlink_publisher._util.url import (
+    canonicalize_url,
+    normalize_url_for_fetch,
+    safe_urlparse,
+)
 
 REQUEST_TIMEOUT = 10  # seconds
 MAX_CONCURRENT = 10
@@ -98,27 +103,72 @@ def check_url(url: str) -> tuple[bool, str | None]:
     return reachable, error
 
 
+def _dedup_key(url: object) -> str:
+    """Canonical dedup key for ``url`` (utm params, default ports, trailing
+    slash, fragment collapsed — see :func:`canonicalize_url`).
+
+    Declared ``-> str`` for the happy path but defensively accepts ``object``
+    and passes non-canonicalizable input through unchanged, so a malformed
+    string (``http://[invalid`` — ``urlsplit`` raises ``ValueError``) or a
+    non-str *scalar* (``int``/``bool`` — caller contract violation) gets its
+    own key and flows through ``_check_url_with_retry`` rather than crashing
+    the whole batch. Unhashable inputs (``list``/``dict``) remain out of
+    contract (``urls: list[str]``) and would raise at the dict-key step, same
+    as the prior ``dict.fromkeys`` dedup — they are not supported here.
+    """
+    if not isinstance(url, str):
+        return url  # type: ignore[return-value]  # fail-soft passthrough
+    try:
+        return canonicalize_url(url)
+    except ValueError:
+        return url
+
+
 def check_urls(urls: list[str]) -> dict[str, tuple[bool, str | None]]:
     """Check reachability of multiple URLs concurrently with retries.
 
     Returns a dict mapping URL -> (reachable, error_message).
     """
     results: dict[str, tuple[bool, str | None]] = {}
-    deduplicated = list(dict.fromkeys(urls))  # preserve order, deduplicate
-
-    if not deduplicated:
+    if not urls:
         return results
 
-    if len(deduplicated) == 1:
-        url, reachable, error = _check_url_with_retry(deduplicated[0])
-        results[url] = (reachable, error)
+    # Build mapping: canonical URL -> list of original URLs that map to it
+    canonical_to_originals: dict[str, list[str]] = {}
+    for u in urls:
+        c = _dedup_key(u)
+        canonical_to_originals.setdefault(c, []).append(u)
+
+    distinct_canonical = list(canonical_to_originals.keys())
+
+    if not distinct_canonical:
         return results
 
-    with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT, len(deduplicated))) as pool:
-        futures = {pool.submit(_check_url_with_retry, url): url for url in deduplicated}
-        for future in as_completed(futures):
-            url, reachable, error = future.result()
-            results[url] = (reachable, error)
+    if len(distinct_canonical) == 1:
+        c = distinct_canonical[0]
+        rep = canonical_to_originals[c][0]
+        _, reachable, error = _check_url_with_retry(rep)
+        for orig in canonical_to_originals[c]:
+            results[orig] = (reachable, error)
+        return results
+
+    with ThreadPoolExecutor(max_workers=min(MAX_CONCURRENT, len(distinct_canonical))) as pool:
+        futures: dict[Any, str] = {}  # future -> canonical
+        for c in distinct_canonical:
+            rep = canonical_to_originals[c][0]
+            fut = pool.submit(_check_url_with_retry, rep)
+            futures[fut] = c
+        for fut in as_completed(futures):
+            c = futures[fut]
+            try:
+                _, reachable, error = fut.result()
+            except Exception as e:  # noqa: BLE001
+                # _check_url_with_retry shouldn't raise, but treat any escape
+                # as unreachable for this canonical rather than dropping it.
+                reachable, error = False, str(e)
+            # Populate results for all originals mapping to this canonical
+            for orig in canonical_to_originals[c]:
+                results[orig] = (reachable, error)
     return results
 
 

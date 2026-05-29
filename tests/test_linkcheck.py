@@ -128,3 +128,80 @@ def test_check_url_once_malformed_ipv6_returns_invalid_not_raises(bad) -> None:
     ok, err = linkcheck._check_url_once(bad)
     assert ok is False
     assert err is not None and "invalid URL" in err
+
+
+# ── check_urls canonical-key dedup (mirrors content/fetch verify_urls_batch) ──
+
+
+def test_check_urls_dedups_equivalent_canonical_urls() -> None:
+    """utm/fragment variants collapse to ONE reachability check, but every
+    original input URL still gets its own result entry."""
+    from backlink_publisher.linkcheck.http import check_urls
+
+    calls: list[str] = []
+
+    def fake_once(url: str) -> tuple[bool, str | None]:
+        calls.append(url)
+        return (True, None)
+
+    originals = [
+        "https://a.example/p?utm_source=x",
+        "https://a.example/p",
+        "https://a.example/p#frag",
+    ]
+    with patch("backlink_publisher.linkcheck._check_url_once", side_effect=fake_once):
+        results = check_urls(originals)
+
+    assert set(results) == set(originals)
+    assert all(results[u] == (True, None) for u in originals)
+    assert len(calls) == 1, "equivalent URLs collapse to a single check"
+
+
+def test_check_urls_fans_out_canonical_results_to_all_originals() -> None:
+    """Two distinct canonicals (each with an equivalent variant) → two checks,
+    with the per-canonical verdict fanned out to all four original URLs."""
+    from backlink_publisher.linkcheck.http import check_urls
+
+    calls: list[str] = []
+
+    def fake_once(url: str) -> tuple[bool, str | None]:
+        calls.append(url)
+        return (True, None)
+
+    originals = [
+        "https://a.example/p?utm_source=x",
+        "https://a.example/p",
+        "https://b.example/q#frag",
+        "https://b.example/q",
+    ]
+    with patch("backlink_publisher.linkcheck._check_url_once", side_effect=fake_once):
+        results = check_urls(originals)
+
+    assert set(results) == set(originals)
+    assert all(v == (True, None) for v in results.values())
+    assert len(calls) == 2, "two distinct canonicals → two checks"
+
+
+@pytest.mark.parametrize("bad", ["http://[invalid", "http://[::1"])
+def test_check_urls_malformed_url_does_not_crash_batch(bad: str) -> None:
+    """A malformed URL whose urlsplit raises must not crash the batch — it falls
+    back to its raw dedup key (via _dedup_key) and still yields a result."""
+    from backlink_publisher.linkcheck.http import check_urls
+
+    with patch("backlink_publisher.linkcheck._check_url_once", return_value=(True, None)):
+        results = check_urls(["https://ok.example/", bad])
+
+    assert results["https://ok.example/"] == (True, None)
+    assert bad in results
+
+
+def test_check_urls_non_str_element_does_not_crash_batch() -> None:
+    """A non-str element (contract violation, but defensively handled) must not
+    take down results for the valid URLs in the same batch."""
+    from backlink_publisher.linkcheck.http import check_urls
+
+    with patch("backlink_publisher.linkcheck._check_url_once", return_value=(True, None)):
+        results = check_urls(["https://ok.example/", 123])  # type: ignore[list-item]
+
+    assert results["https://ok.example/"] == (True, None)
+    assert 123 in results
