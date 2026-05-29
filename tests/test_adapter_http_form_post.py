@@ -165,21 +165,27 @@ def test_submit_form_http_error_raises_external_service_no_body_leak() -> None:
     assert "HTTP 500" in msg
 
 
-def test_submit_form_retries_transient_network_error_then_succeeds() -> None:
-    resp = _Resp(status_code=200, text="ok")
+@pytest.mark.parametrize("exc_name", ["Timeout", "ConnectionError"])
+def test_submit_form_does_not_retry_nonidempotent_post(exc_name: str) -> None:
+    # The create-POST has no idempotency key (txt.fyi and similar form
+    # platforms): a Timeout or ConnectionError can mean the request reached the
+    # server and the post was ALREADY created, so retrying would publish a
+    # DUPLICATE live backlink. The POST must therefore be a single attempt —
+    # mirrors rentry_api's "create exactly ONCE" P2 fix and retry.py's
+    # 5xx-not-retried policy. The transient network error surfaces as
+    # ExternalServiceError (body-free), never silently retried.
     calls = {"n": 0}
+    err = getattr(hfp.requests.exceptions, exc_name)("transient to 10.0.0.1")
 
     def _post(*a, **k):
         calls["n"] += 1
-        if calls["n"] == 1:
-            raise hfp.requests.exceptions.ConnectionError("transient")
-        return resp
+        raise err
 
     with mock.patch.object(hfp.requests, "post", side_effect=_post):
-        with mock.patch("backlink_publisher.publishing.adapters.retry.time.sleep"):
-            out = hfp.submit_form("https://txt.fyi/edit.php", {"txt": "hi"})
-    assert out is resp
-    assert calls["n"] == 2
+        with pytest.raises(ExternalServiceError) as exc:
+            hfp.submit_form("https://txt.fyi/edit.php", {"txt": "hi"})
+    assert calls["n"] == 1  # single attempt — non-idempotent POST never retried
+    assert "10.0.0.1" not in str(exc.value)  # no body/host-detail leak
 
 
 # --------------------------------------------------------------------------- #

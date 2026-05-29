@@ -13,8 +13,9 @@ Transport contract:
   blocking interstitial, ``ExternalServiceError`` on transport/HTTP failure.
 - ``extract_hidden_fields`` pulls named input values (CSRF nonce, timestamps)
   out of the fetched HTML so the POST can echo them back.
-- ``submit_form`` POSTs form data with transient-network retry; same challenge
-  / error mapping as ``fetch_form``.
+- ``submit_form`` POSTs form data EXACTLY ONCE — the create-POST is
+  non-idempotent, so it is never retried (see the function docstring); same
+  challenge / error mapping as ``fetch_form``.
 - ``detect_challenge`` is the shared classifier — deliberately ignores the
   Cloudflare ``challenge-platform`` *beacon* script (CF injects it on normally
   served 200 pages, e.g. txt.fyi's live form) so a real publish form is not
@@ -40,7 +41,6 @@ import requests
 from backlink_publisher._util.errors import AntiBotChallengeError, ExternalServiceError
 
 from .link_attr_verifier import verify_link_attributes
-from .retry import retry_transient_call
 
 DEFAULT_TIMEOUT: float = 15.0
 _USER_AGENT = (
@@ -149,16 +149,21 @@ def submit_form(
     *,
     timeout: float = DEFAULT_TIMEOUT,
 ) -> requests.Response:
-    """POST ``data`` to ``url`` with transient-network retry.
+    """POST ``data`` to ``url`` EXACTLY ONCE — the create-POST is never retried.
 
-    Retries only raw ``requests`` network errors (timeout / connection). A
-    challenge raises ``AntiBotChallengeError`` (propagates, never retried); a
-    non-2xx/3xx status raises ``ExternalServiceError``. 5xx is intentionally not
-    retried — credential-less form endpoints document no idempotency, so a retry
-    after a server-side timeout could duplicate the post (see ``retry.py``).
+    Credential-less form endpoints (txt.fyi and similar) document no idempotency
+    key, and a ``Timeout`` / ``ConnectionError`` on a POST is ambiguous: the
+    request may already have reached the server and created the post. Retrying
+    would publish a DUPLICATE live backlink, so the POST is a single attempt —
+    mirroring ``rentry_api``'s "create exactly ONCE" P2 fix and ``retry.py``'s
+    5xx-not-retried policy. Any raw network error surfaces as
+    ``ExternalServiceError`` (body-free); the resume/dedup machinery then
+    decides safely rather than this layer risking a duplicate.
+
+    A challenge raises ``AntiBotChallengeError``; a non-2xx/3xx status raises
+    ``ExternalServiceError``.
     """
-
-    def _execute() -> requests.Response:
+    try:
         resp = requests.post(
             url,
             data=data,
@@ -166,30 +171,17 @@ def submit_form(
             headers={"User-Agent": _USER_AGENT},
             allow_redirects=True,
         )
-        if detect_challenge(resp):
-            raise AntiBotChallengeError(f"anti-bot challenge on POST {_host(url)}")
-        if not (200 <= resp.status_code < 400):
-            raise ExternalServiceError(
-                f"form submit to {_host(url)} returned HTTP {resp.status_code}"
-            )
-        return resp
-
-    try:
-        return retry_transient_call(
-            _execute,
-            is_retryable=lambda exc: isinstance(
-                exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
-            ),
-            adapter="http-form-post",
-        )
-    except ExternalServiceError:
-        # AntiBotChallengeError is an ExternalServiceError subclass, so the
-        # service-rejection family (challenge, non-2xx) propagates unchanged.
-        raise
     except Exception as exc:
         raise ExternalServiceError(
             f"form submit to {_host(url)} failed ({type(exc).__name__})"
         ) from exc
+    if detect_challenge(resp):
+        raise AntiBotChallengeError(f"anti-bot challenge on POST {_host(url)}")
+    if not (200 <= resp.status_code < 400):
+        raise ExternalServiceError(
+            f"form submit to {_host(url)} returned HTTP {resp.status_code}"
+        )
+    return resp
 
 
 def attach_link_verification(
