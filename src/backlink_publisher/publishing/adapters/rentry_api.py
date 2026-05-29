@@ -124,14 +124,33 @@ class RentryAPIAdapter(Publisher):
                 raise ExternalServiceError(
                     f"Rentry returned non-JSON response: {exc}"
                 )
-            if result.get("status") != "created":
-                msg = result.get("message", post_resp.text[:200])
+            # Rentry's /api/new success status is the HTTP code as a string
+            # ("200") in the current API; older responses used "created".
+            # Accept both. Errors carry status "error"/"400"/etc.
+            status = str(result.get("status", ""))
+            if status not in ("created", "200"):
+                msg = (
+                    result.get("errors")
+                    or result.get("message")
+                    or result.get("content")
+                    or post_resp.text[:200]
+                )
                 raise ExternalServiceError(f"Rentry API error: {msg}")
             edit_code = result.get("edit_code", "")
-            url_id = result.get("url_id", result.get("id", edit_code))
-            if not url_id:
-                raise ExternalServiceError("Rentry create returned no ID")
-            published_url = f"{RENTRY_BASE}/{url_id}"
+            # Current API returns the full public URL directly in ``url``
+            # (plus ``url_short``). Legacy responses used ``url_id``/``id``;
+            # fall back to those and construct from the base URL.
+            published_url = result.get("url")
+            if not published_url:
+                url_id = (
+                    result.get("url_short")
+                    or result.get("url_id")
+                    or result.get("id")
+                    or edit_code
+                )
+                if not url_id:
+                    raise ExternalServiceError("Rentry create returned no ID")
+                published_url = f"{RENTRY_BASE}/{url_id}"
         except (ExternalServiceError):
             raise
         except Exception as exc:
