@@ -59,6 +59,8 @@ def save_config(
     target_three_url: dict[str, ThreeUrlConfig] | None = None,
     ghpages_config: GhpagesConfig | None = None,
     mastodon_config: MastodonConfig | None = None,
+    target_probe_queries: dict[str, list[str]] | None = None,
+    target_brand_aliases: dict[str, list[str]] | None = None,
 ) -> None:
     config_path = path or (_resolve_config_dir() / "config.toml")
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -100,6 +102,16 @@ def save_config(
     else:
         three_url_by_domain = dict(target_three_url)
 
+    if target_probe_queries is None:
+        probe_queries_by_domain = dict(existing.target_probe_queries)
+    else:
+        probe_queries_by_domain = dict(target_probe_queries)
+
+    if target_brand_aliases is None:
+        brand_aliases_by_domain = dict(existing.target_brand_aliases)
+    else:
+        brand_aliases_by_domain = dict(target_brand_aliases)
+
     ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
     mastodon_cfg = mastodon_config if mastodon_config is not None else existing.mastodon
 
@@ -124,13 +136,24 @@ def save_config(
     lines.append("")
 
     all_target_domains = sorted(
-        set(kws_by_domain) | set(three_url_by_domain)
+        set(kws_by_domain)
+        | set(three_url_by_domain)
+        | set(probe_queries_by_domain)
+        | set(brand_aliases_by_domain)
     )
     for domain in all_target_domains:
         lines.append(f"[targets.{_toml_str(domain)}]")
         if domain in kws_by_domain:
             kws = kws_by_domain[domain]
             lines.append(f"anchor_keywords = {_toml_list(kws)}")
+        if domain in probe_queries_by_domain:
+            lines.append(
+                f"probe_queries = {_toml_list(probe_queries_by_domain[domain])}"
+            )
+        if domain in brand_aliases_by_domain:
+            lines.append(
+                f"brand_aliases = {_toml_list(brand_aliases_by_domain[domain])}"
+            )
         if domain in three_url_by_domain:
             tu = three_url_by_domain[domain]
             lines.append(f"main_url = {_toml_str(tu.main_url)}")
@@ -169,7 +192,10 @@ def save_config(
     for domain in all_target_domains:
         known_subsections.add(("targets", _toml_str(domain)))
     on_disk_target_domains = (
-        set(existing.target_anchor_keywords) | set(existing.target_three_url)
+        set(existing.target_anchor_keywords)
+        | set(existing.target_three_url)
+        | set(existing.target_probe_queries)
+        | set(existing.target_brand_aliases)
     )
     for domain in on_disk_target_domains - set(all_target_domains):
         known_subsections.add(("targets", _toml_str(domain)))

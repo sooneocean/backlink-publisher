@@ -114,6 +114,26 @@ class LLMProviderConfig:
     image_gen_api_key: str | None = None
 
 
+@dataclass
+class GeoProbeConfig:
+    """OpenAI-compatible AI-engine endpoint used to probe AI-answer citations.
+
+    The provider is optional — GEO citation probing is an operator-invoked
+    capability and the tool is fully runnable without it. ``base_url`` MUST be
+    ``https://`` (enforced at load time); ``api_key`` is preferentially loaded
+    from the ``BACKLINK_GEO_API_KEY`` env var with the toml value as fallback.
+
+    There is **no** fallback to the LLM provider credential
+    (``BACKLINK_LLM_API_KEY``) — a populated LLM key with no
+    ``[geo.probe_provider]`` section never enables GEO probing (D0).
+    """
+
+    base_url: str
+    api_key: str
+    model: str
+    timeout_s: float = 30.0
+
+
 @dataclass(frozen=True)
 class ImageGenConfig:
     """FRW image-gen (OpenAI-compatible ``/images/generations``) settings.
@@ -323,6 +343,34 @@ class Config:
     Populated from ``[targets."<main_domain>"]`` entries that carry the
     required three-URL schema (``main_url`` + ``list_url`` + three non-empty
     pools). Round-tripped by ``save_config(target_three_url=...)``."""
+
+    geo_probe_provider: "GeoProbeConfig | None" = None
+    """Optional OpenAI-compatible AI-engine provider used by the GEO citation
+    probe (Plan 2026-05-29-006 Unit 1). ``None`` when the section is absent —
+    GEO probing is operator-invoked and the tool is fully runnable without it.
+
+    Populated from ``[geo.probe_provider]`` in config.toml. ``api_key`` is
+    loaded with priority ``BACKLINK_GEO_API_KEY`` env var > toml value (there is
+    **no** fallback to the LLM key — D0). ``base_url`` is required to use
+    ``https://`` — ``http://`` raises ``InputValidationError`` at load time.
+    Operator-edit-only; not modeled in ``Config`` for rewrite. Preserved
+    verbatim by ``save_config`` (unmanaged root)."""
+
+    target_probe_queries: dict[str, list[str]] = field(default_factory=dict)
+    """Per-target GEO probe-query overrides, keyed by main_domain (trailing
+    slash stripped). Populated from ``[targets."<main_domain>"].probe_queries``
+    in config.toml. Empty / missing entry means the probe derives queries from
+    ``seed_keywords`` / ``topic`` instead (R3). Round-tripped by
+    ``save_config(target_probe_queries=...)`` — emitted inside the writer's
+    ``[targets.*]`` regeneration loop."""
+
+    target_brand_aliases: dict[str, list[str]] = field(default_factory=dict)
+    """Per-target brand aliases for the ``brand_mentioned`` GEO signal tier,
+    keyed by main_domain (trailing slash stripped). Populated from
+    ``[targets."<main_domain>"].brand_aliases`` in config.toml. Empty / missing
+    entry renders the brand-mention tier inert for that target. Round-tripped by
+    ``save_config(target_brand_aliases=...)`` — emitted inside the writer's
+    ``[targets.*]`` regeneration loop."""
 
     anchor_alarm: AnchorAlarmConfig = field(default_factory=AnchorAlarmConfig)
     """Operator-tunable thresholds for ``report-anchors`` distribution alarm.

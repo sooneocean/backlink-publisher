@@ -27,11 +27,13 @@ else:
 from .parsers.alarm import _parse_anchor_alarm
 from .parsers.anchor import _parse_anchor_proportions
 from .parsers.cells import _parse_cell_assignments
+from .parsers.geo import _parse_geo_probe_provider
 from .parsers.image_gen import _parse_image_gen
 from .parsers.llm import _llm_provider_from_sidecar, _parse_llm_anchor_provider
 from .parsers.target import (
     _parse_target_anchor_keywords,
     _parse_target_anchor_pools_v2,
+    _parse_target_string_list_field,
 )
 from .parsers.three_url import (
     _normalize_domain_key,
@@ -179,6 +181,12 @@ def load_config(path: Path | None = None) -> Config:
     targets_section = data.get("targets", {})
     target_anchor_keywords = _parse_target_anchor_keywords(targets_section)
     target_three_url = _parse_target_three_url(targets_section)
+    target_probe_queries = _parse_target_string_list_field(
+        targets_section, "probe_queries"
+    )
+    target_brand_aliases = _parse_target_string_list_field(
+        targets_section, "brand_aliases"
+    )
 
     sites_section = data.get("sites", {})
     site_url_categories = _parse_site_url_categories(sites_section)
@@ -208,6 +216,11 @@ def load_config(path: Path | None = None) -> Config:
     # consumed env/TOML, so reaching here means both were empty).
     if llm_anchor_provider is None:
         llm_anchor_provider = _llm_provider_from_sidecar(config_path.parent)
+
+    geo_probe_provider = _parse_geo_probe_provider(
+        data.get("geo", {}).get("probe_provider", {}),
+        config_path=config_path,
+    )
 
     anchor_alarm = _parse_anchor_alarm(data.get("anchor_alarm"))
 
@@ -258,6 +271,9 @@ def load_config(path: Path | None = None) -> Config:
         anchor_proportions=anchor_proportions,
         llm_anchor_provider=llm_anchor_provider,
         target_three_url=target_three_url,
+        geo_probe_provider=geo_probe_provider,
+        target_probe_queries=target_probe_queries,
+        target_brand_aliases=target_brand_aliases,
         anchor_alarm=anchor_alarm,
         velog=velog,
         ghpages=ghpages,
