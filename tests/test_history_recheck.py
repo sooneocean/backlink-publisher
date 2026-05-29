@@ -200,9 +200,15 @@ class TestRecheckRoute:
             "target_url": "https://t.example/",
             "article_urls": ["https://medium.com/p/zzz"],
         }])
+        # Default verify_fn now routes through the shared probe_liveness engine
+        # (Plan 2026-05-29-004 U2), so patch the underlying inspect_target_anchor.
         with patch(
-            "backlink_publisher.linkcheck.verify.verify_published",
-            return_value=VerificationResult(ok=True, reason=""),
+            "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+            return_value={
+                "page_readable": True, "target_anchor_found": True,
+                "target_is_nofollow": False, "target_rel": None,
+                "target_anchor_text": None, "reason": None, "marker_present": None,
+            },
         ):
             resp = client.post("/ce:history/recheck", data={"id": "x"})
         assert resp.status_code == 302
@@ -228,13 +234,25 @@ class TestBulkRecheckRoute:
             {"id": "b", "status": "published", "title": "tb",
              "target_url": "https://t/", "article_urls": ["https://u2/"]},
         ])
-        # `a` succeeds, `b` fails on verify
-        def _verify(url, **kw):
-            return VerificationResult(ok=(url == "https://u1/"), reason="404")
+        # `a` (article https://u1/) stays alive; `b` (https://u2/) is host_gone.
+        # Default verify_fn routes through probe_liveness → patch the shared
+        # inspect_target_anchor engine (Plan 2026-05-29-004 U2).
+        def _inspect(url, target, **kw):
+            if url == "https://u1/":
+                return {
+                    "page_readable": True, "target_anchor_found": True,
+                    "target_is_nofollow": False, "target_rel": None,
+                    "target_anchor_text": None, "reason": None, "marker_present": None,
+                }
+            return {
+                "page_readable": False, "target_anchor_found": False,
+                "target_is_nofollow": False, "target_rel": None,
+                "target_anchor_text": None, "reason": "http_404", "marker_present": None,
+            }
 
         with patch(
-            "backlink_publisher.linkcheck.verify.verify_published",
-            side_effect=_verify,
+            "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+            side_effect=_inspect,
         ):
             resp = client.post(
                 "/ce:history/bulk-recheck",
@@ -246,7 +264,7 @@ class TestBulkRecheckRoute:
         items = {it["id"]: it for it in isolated_history.load()}
         assert items["a"]["status"] == "published"
         assert items["b"]["status"] == "failed"
-        assert items["b"]["verify_error"] == "404"
+        assert items["b"]["verify_error"] == "http_404"
 
     def test_empty_ids(self, client, isolated_history):
         resp = client.post("/ce:history/bulk-recheck", data={})

@@ -5,10 +5,13 @@ Plan 2026-05-19-006 Unit 5. The publish pipeline already records
 older history entries may have been recorded under the old "hard-write
 status='published'" code path even though the article never appeared.
 
-This service re-fetches each entry's ``article_urls`` and updates the
-real status via :func:`backlink_publisher.linkcheck.verify.verify_published`.
-``verify_fn`` is parameterised so tests can inject a fake without going
-out to the real network (which the autouse conftest fixtures block).
+This service re-fetches each entry's ``article_urls`` and updates the real
+status. The default ``verify_fn`` routes through the shared
+:func:`backlink_publisher.recheck.probe.probe_liveness` engine (Plan
+2026-05-29-004 U2) so the WebUI recheck and the ``recheck-backlinks`` CLI share
+one liveness implementation and can never disagree about the same URL.
+``verify_fn`` is parameterised so tests can inject a fake without going out to
+the real network (which the autouse conftest fixtures block).
 """
 
 from __future__ import annotations
@@ -24,12 +27,33 @@ from backlink_publisher.linkcheck.verify import VerificationResult
 VerifyFn = Callable[..., VerificationResult]
 
 
-def _default_verify(*args, **kwargs) -> VerificationResult:
-    """Lazy indirection so ``unittest.mock.patch`` against
-    ``backlink_publisher.linkcheck.verify.verify_published`` takes effect
-    even after this module has been imported."""
-    from backlink_publisher.linkcheck.verify import verify_published as _vp
-    return _vp(*args, **kwargs)
+def _default_verify(
+    url: str,
+    *,
+    title: str = "",
+    required_link_urls: Sequence[str] = (),
+    max_wait: int = 10,
+    **_kwargs,
+) -> VerificationResult:
+    """Route the WebUI recheck through the shared ``probe_liveness`` engine so
+    the WebUI manual recheck and the ``recheck-backlinks`` CLI can never give
+    contradictory liveness judgments about the same URL (Plan 2026-05-29-004 U2
+    / origin R1 — single recheck engine).
+
+    Maps the 5-verdict taxonomy back to the ``(ok, reason)`` contract
+    ``recheck_one`` consumes: a present backlink (``alive``/``dofollow_lost``)
+    -> ``ok=True``; ``host_gone``/``link_stripped``/``probe_error`` ->
+    ``ok=False``. ``title`` is accepted for signature compatibility; the anchor
+    inspection (target present + its own ``rel``) is a stronger liveness signal
+    than the old title-substring check.
+    """
+    from backlink_publisher.recheck import verdicts
+    from backlink_publisher.recheck.probe import probe_liveness
+
+    target = required_link_urls[0] if required_link_urls else ""
+    out = probe_liveness(url, target, timeout=max_wait)
+    ok = out["verdict"] in (verdicts.ALIVE, verdicts.DOFOLLOW_LOST)
+    return VerificationResult(ok=ok, reason=out.get("reason") or out["verdict"])
 
 
 @dataclass
