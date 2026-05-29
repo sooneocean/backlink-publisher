@@ -402,6 +402,39 @@
         });
     });
 
+    // ── 分层折叠面板 折叠状态持久化 (Plan 2026-05-29-003 Unit 4) ──────
+    // Generalizes the #overview-panel persistence above to the tier panels.
+    // Tri-state per tier: '1' = open, '0' = collapsed, absent = keep the
+    // server-rendered default (tier-1 open, tier-2/3 collapsed) — so the
+    // default is decided only on first visit; afterwards the operator's
+    // choice sticks across verify/dry-run re-renders (R10).
+    document.addEventListener('DOMContentLoaded', function() {
+        var overview = document.getElementById('overview-panel');
+        if (!overview) return;
+        var panels = overview.querySelectorAll('.collapse[id^="tier-"]');
+        panels.forEach(function(panel) {
+            var key = 'settings:collapse:' + panel.id;
+            // Attach listeners BEFORE the programmatic restore so the restore's
+            // own show/hide is observed (writes back the same value, idempotent)
+            // and later user toggles are always captured.
+            panel.addEventListener('show.bs.collapse', function() {
+                try { localStorage.setItem(key, '1'); } catch (e) {}
+            });
+            panel.addEventListener('hide.bs.collapse', function() {
+                try { localStorage.setItem(key, '0'); } catch (e) {}
+            });
+            var saved = null;
+            try { saved = localStorage.getItem(key); } catch (e) {}
+            // No record → leave the server-rendered default untouched (default
+            // is decided only on first visit).
+            if (saved === '1' && !panel.classList.contains('show')) {
+                try { bootstrap.Collapse.getOrCreateInstance(panel).show(); } catch (e) {}
+            } else if (saved === '0' && panel.classList.contains('show')) {
+                try { bootstrap.Collapse.getOrCreateInstance(panel).hide(); } catch (e) {}
+            }
+        });
+    });
+
     // ── Loading Overlay ──────────────────────────────────────────
     (function() {
         const MSGS = {

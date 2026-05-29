@@ -325,10 +325,20 @@ def _settings_context(flash=None):
     except Exception:
         dashboard_channels = []
 
+    # Plan 2026-05-29-003 Unit 2 — pre-group the overview channels into
+    # automation tiers for the settings overview panel. Rendering must never
+    # fail because grouping failed: fall back to [] (template renders no groups).
+    try:
+        from .channel_tiers import group_channels_by_tier
+        dashboard_channel_tiers = group_channels_by_tier(dashboard_channels)
+    except Exception:
+        dashboard_channel_tiers = []
+
     return dict(
         flash=flash,
         csrf_token=csrf_token,
         dashboard_channels=dashboard_channels,
+        dashboard_channel_tiers=dashboard_channel_tiers,
         medium_browser_status=_get_medium_browser_status(cfg, session=_flask_session),
         blogger_token=bool(token_data),
         blogger_client_id=cfg.blogger_oauth.client_id if cfg.blogger_oauth else "",

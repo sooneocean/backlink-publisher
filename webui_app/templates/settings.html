@@ -43,7 +43,6 @@
         </div>
         {% endif %}
 
-        {% from '_channel_card_macro.html' import dashboard_channel_card %}
         <div id="section-dashboard"></div>
         {% if dashboard_channels %}
         <h2 class="section-heading overview-heading">
@@ -63,19 +62,7 @@
         <div id="overview-panel" class="collapse">
             <div class="card mb-4">
                 <div class="card-body">
-                    {#- Channels with a per-channel partial in #section-channels below.
-                        Plan 2026-05-26-002 Unit 3: gates the "Configure ↓" anchor so
-                        the ~18 cardless channels no longer render a dead link.
-                        Cardless channels get inline forms with the Unit 4 save route. #}
-                    {#- Carded: explicit per-channel partials with bespoke UI exist below.
-                        All other auth-type channels get auto-rendered inline forms
-                        (Unit 3/4). live_browser channels other than the three carded ones
-                        (mastodon) have a deferred stub — no "Configure ↓" anchor needed. #}
-                    {% set _carded_channels = ['blogger', 'medium', 'velog', 'ghpages', 'devto', 'notion'] %}
-                    {% for name, status in dashboard_channels %}
-                        {{ dashboard_channel_card(name, status, bindable=(name in binding_channels),
-                           has_card=(name in _carded_channels or status.auth_type not in ('live_browser', 'oauth', None))) }}
-                    {% endfor %}
+                    {% include '_settings_overview_tiers.html' %}
                 </div>
             </div>
         </div>
