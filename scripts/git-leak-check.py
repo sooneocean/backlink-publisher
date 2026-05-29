@@ -20,6 +20,7 @@ LEAK_PATTERNS = [
 _LEAK_EXEMPT_PATHS = frozenset({
     "tests/test_net_safety.py",
     "tests/test_sanitize_exception.py",
+    "tests/test_config_credential_redaction.py",
 })
 
 def _is_exempt(path: str) -> bool:

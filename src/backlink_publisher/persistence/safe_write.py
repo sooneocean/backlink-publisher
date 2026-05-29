@@ -71,15 +71,23 @@ def rotate_snapshots(
     snapshot_dir: Path,
     file_suffix: str = ".toml",
     max_history: int = 20,
+    content: str | None = None,
 ) -> None:
     """Best-effort: copy current file to snapshot_dir with UTC timestamp.
+
+    When *content* is provided, write that text instead of reading from
+    *path* (used by SEC-1 credential redaction).  Otherwise read the file
+    verbatim.
 
     Rotates oldest snapshots so that snapshot_dir does not grow unbounded.
     Failure to snapshot does not raise an exception, to ensure the main write path
     remains operational.
     """
-    if not path.exists():
+    if content is None and not path.exists():
         return
+    if content is not None and not path.parent.exists():
+        # content mode: ensure config dir exists for consistent snapshot naming
+        path.parent.mkdir(parents=True, exist_ok=True)
     try:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
         try:
@@ -96,7 +104,10 @@ def rotate_snapshots(
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S.%fZ")
     snap_path = snapshot_dir / f"{ts}{file_suffix}"
     try:
-        snap_path.write_bytes(path.read_bytes())
+        if content is not None:
+            snap_path.write_text(content, encoding="utf-8")
+        else:
+            snap_path.write_bytes(path.read_bytes())
         try:
             os.chmod(snap_path, stat.S_IRUSR | stat.S_IWUSR)  # 0600
         except OSError:
