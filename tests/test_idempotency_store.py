@@ -303,3 +303,18 @@ def test_get_many_opens_one_connection_for_many_keys(store, monkeypatch):
 
     assert len(out) == 5
     assert calls["n"] == 1
+
+
+def test_get_many_distinguishes_account_dimension(store):
+    """Same platform+target but different account are distinct keys — the batch
+    SELECT must include the account column, not collapse the two."""
+    a = _key(account="acct-1")
+    b = _key(account="acct-2")
+    store.seed(a, "done")
+    store.intent_write(b)  # attempting
+
+    out = store.get_many([a, b])
+
+    assert out[a.as_tuple()].state == "done"
+    assert out[b.as_tuple()].state == "attempting"
+    assert a.as_tuple() != b.as_tuple()  # account is part of the dict key

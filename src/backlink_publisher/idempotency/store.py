@@ -332,12 +332,15 @@ class DedupStore:
         EXISTS`` DDL, and the WAL/SHM sidecar re-chmod — dominated that pass.
         Batching collapses N connect/teardown cycles into one.
 
-        Returns a dict keyed by ``key.as_tuple()``; keys with no row are simply
-        absent from the result (mirroring :meth:`get` returning ``None``).
+        Returns a dict keyed by ``key.as_tuple()`` — a ``(platform, account,
+        target_url)`` tuple; build lookups with ``key.as_tuple()`` rather than a
+        hand-rolled tuple so the field order can never drift. Keys with no row are
+        simply absent from the result (mirroring :meth:`get` returning ``None``).
         Duplicate keys collapse to a single lookup. An empty ``keys`` opens no
-        connection and returns ``{}``. The whole batch shares one
-        ``_retry_sqlite`` wrapper, so a ``database is locked`` retries the batch
-        (reads are idempotent — re-running already-fetched SELECTs is harmless).
+        connection and returns ``{}``. The input iterable is materialized into a
+        set BEFORE the ``_retry_sqlite`` wrapper, so a retried batch (on
+        ``database is locked``) re-reads from that set, never an exhausted
+        generator; reads are idempotent so re-running SELECTs is harmless.
         """
         wanted = {k.as_tuple() for k in keys}
         if not wanted:

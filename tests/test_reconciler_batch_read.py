@@ -9,13 +9,17 @@ batching (``get`` called 0x, ``get_many`` once).
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 import backlink_publisher.events.reconcile as reconcile_mod
 import backlink_publisher.events.reconciler as recon
-from backlink_publisher.events.reconciler import _reconcile_checkpoints
+from backlink_publisher.events.reconciler import (
+    _reconcile_checkpoints,
+    _reconcile_history,
+)
 from backlink_publisher.events.store import EventStore
 from backlink_publisher.idempotency.store import DedupKey, DedupStore
 
@@ -167,3 +171,98 @@ def test_batch_read_failure_leaves_items_for_next_pass(stores, monkeypatch):
     assert summary.total_checkpoints == 1
     assert summary.auto_fixed == 0
     assert summary.quarantined == 0  # not quarantined despite being stale
+
+
+def test_only_done_state_auto_fixes_others_quarantine_if_stale(stores, monkeypatch):
+    """Only a ``done`` dedup record auto-fixes (R2). A non-done record
+    (attempting/failed/uncertain) is treated like a gap — quarantined if stale —
+    exactly as the original `record.state == "done"` branch did."""
+    event_store, dedup_store = stores
+    old = (datetime.now(timezone.utc) - timedelta(days=2)).isoformat()
+    # 'failed' is a real non-done state; an old item with it must NOT auto-fix.
+    dedup_store.seed(
+        DedupKey(platform="blogger", target_url="https://money.example/h"), "failed"
+    )
+    items = [_item("H", "https://money.example/h", created_at=old)]
+    monkeypatch.setattr(recon, "list_failed_items", lambda: items)
+    update_calls = _spy_update(monkeypatch)
+
+    summary = _reconcile_checkpoints(event_store, dedup_store)
+
+    assert summary.auto_fixed == 0       # non-done record never auto-fixes
+    assert update_calls == []
+    assert summary.quarantined == 1      # stale + no done record -> quarantine
+
+
+# --------------------------------------------------------------------------- #
+# _reconcile_history: the second batched pass (report-only gap check, R4)
+# --------------------------------------------------------------------------- #
+def _write_history(tmp_path, monkeypatch, entries):
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    (tmp_path / "publish-history.json").write_text(json.dumps(entries), encoding="utf-8")
+
+
+def _published(entry_id, urls, platform="blogger"):
+    return {"id": entry_id, "status": "published", "platform": platform, "article_urls": urls}
+
+
+def test_history_reports_gap_for_url_without_done_record(stores, tmp_path, monkeypatch):
+    event_store, dedup_store = stores
+    _write_history(tmp_path, monkeypatch, [_published("e1", ["https://money.example/x"])])
+
+    gaps, checked = _reconcile_history(event_store, dedup_store)
+
+    assert checked == 1
+    assert gaps == 1  # no done dedup record -> a published URL is an unverified gap
+
+
+def test_history_no_gap_when_done_record_exists(stores, tmp_path, monkeypatch):
+    event_store, dedup_store = stores
+    dedup_store.seed(
+        DedupKey(platform="blogger", target_url="https://money.example/x"), "done"
+    )
+    _write_history(tmp_path, monkeypatch, [_published("e1", ["https://money.example/x"])])
+
+    gaps, checked = _reconcile_history(event_store, dedup_store)
+
+    assert (gaps, checked) == (0, 1)
+
+
+def test_history_duplicate_url_counts_each_occurrence(stores, tmp_path, monkeypatch):
+    """get_many de-dups the SELECT, but per-occurrence checked/gaps counting must
+    be preserved (the dict de-dup only bounds the read, not the iteration)."""
+    event_store, dedup_store = stores
+    _write_history(
+        tmp_path, monkeypatch,
+        [_published("e1", ["https://money.example/x", "https://money.example/x"])],
+    )
+
+    gaps, checked = _reconcile_history(event_store, dedup_store)
+
+    assert (gaps, checked) == (2, 2)
+
+
+def test_history_missing_file_returns_zero(stores, tmp_path, monkeypatch):
+    event_store, dedup_store = stores
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))  # no file written
+    assert _reconcile_history(event_store, dedup_store) == (0, 0)
+
+
+def test_history_batch_read_failure_reports_zero_gaps(stores, tmp_path, monkeypatch):
+    """On a batch dedup read failure the history pass reports zero gaps (not one
+    per checked URL) — the documented safe degradation."""
+    event_store, dedup_store = stores
+    _write_history(
+        tmp_path, monkeypatch,
+        [_published("e1", ["https://money.example/x", "https://money.example/y"])],
+    )
+
+    def boom(keys):
+        raise RuntimeError("dedup db unavailable")
+
+    monkeypatch.setattr(dedup_store, "get_many", boom)
+
+    gaps, checked = _reconcile_history(event_store, dedup_store)
+
+    assert gaps == 0       # not over-reported as 2 gaps
+    assert checked == 2    # but the URLs were still counted as checked
