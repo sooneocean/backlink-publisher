@@ -17,16 +17,20 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from backlink_publisher.events._project_helpers import write_quarantines
 from backlink_publisher.events.kinds import LINK_RECHECKED
 from backlink_publisher.recheck import verdicts
 from backlink_publisher.recheck.selection import _parse_ts
 
+if TYPE_CHECKING:
+    from backlink_publisher.events.store import EventStore
+
 log = logging.getLogger(__name__)
 
 
-def emit_recheck(store, results: list[dict]) -> int:
+def emit_recheck(store: "EventStore", results: list[dict]) -> int:
     """Append one ``link.rechecked`` event per probed result. Returns the number
     of events written (floor-misses are quarantined, not counted).
 
@@ -66,7 +70,7 @@ def emit_recheck(store, results: list[dict]) -> int:
     return written
 
 
-def derive_decay_counts(store) -> dict[str, int]:
+def derive_decay_counts(store: "EventStore") -> dict[str, int]:
     """Count links by their latest ``link.rechecked`` verdict (current state).
 
     Returns a count for every verdict in :data:`verdicts.VERDICTS` (0 when

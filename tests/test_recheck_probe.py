@@ -57,6 +57,18 @@ def test_link_stripped_when_page_alive_but_anchor_absent():
     assert out["verdict"] == verdicts.LINK_STRIPPED
 
 
+def test_uncanonicalizable_target_is_probe_error_not_link_stripped():
+    # A malformed/uncanonicalizable target_url yields target_anchor_found=False
+    # with reason=target_uncanonicalizable — it must NOT be reported as a
+    # deterministic dead link (which could wrongly trip --fail-on-dead).
+    out = probe_liveness(
+        LIVE, "::not-a-url::",
+        inspect_fn=_inspect(target_anchor_found=False, reason="target_uncanonicalizable"),
+    )
+    assert out["verdict"] == verdicts.PROBE_ERROR
+    assert not verdicts.is_deterministic_dead(out["verdict"])
+
+
 def test_no_target_url_is_alive_not_link_stripped():
     # An empty target means we can only confirm page liveness — must NOT be
     # reported as link_stripped just because no anchor was searched for.

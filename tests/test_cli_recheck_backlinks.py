@@ -161,6 +161,39 @@ def test_stdin_jsonl_overrides_events_selection(isolated, monkeypatch):
     assert captured == ["https://medium.com/from-stdin"]
 
 
+# ── SEC1: concurrency guard + batch budget ───────────────────────────────────
+
+def test_concurrent_run_skipped_when_lock_held(isolated):
+    _seed_confirmed(1, "https://medium.com/a")
+    import fcntl
+
+    def _flock(fd, op):
+        if op & fcntl.LOCK_EX:
+            raise BlockingIOError("locked by another run")
+
+    with patch("fcntl.flock", side_effect=_flock):
+        with patch(
+            "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+            _inspect(),
+        ):
+            assert cli.main(["--probe"]) is None  # skipped, exit 0
+    assert _link_rechecked_rows() == []  # nothing probed/emitted while locked
+
+
+def test_batch_budget_exhaustion_defers_remaining(isolated, monkeypatch, capsys):
+    _seed_confirmed(1, "https://medium.com/a")
+    _seed_confirmed(2, "https://medium.com/b")
+    monkeypatch.setattr(cli, "_BATCH_BUDGET_S", 0.0)  # deadline already passed
+    with patch(
+        "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+        _inspect(),
+    ):
+        assert cli.main(["--probe"]) is None
+    err = capsys.readouterr().err
+    assert "budget" in err.lower()
+    assert _link_rechecked_rows() == []  # all candidates deferred to next run
+
+
 # ── usage validation (UsageError exit 1, not argparse exit 2) ────────────────
 
 def test_limit_must_be_positive(isolated):

@@ -35,10 +35,14 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from backlink_publisher.events.kinds import LINK_RECHECKED, PUBLISH_CONFIRMED
 from backlink_publisher.recheck import verdicts
+
+if TYPE_CHECKING:
+    from backlink_publisher.events.store import EventStore
 
 log = logging.getLogger(__name__)
 
@@ -76,7 +80,13 @@ def _host_of(url: str) -> str | None:
         return None
 
 
-def _confirmed_universe(store, *, since, host, run_id) -> dict[int, dict]:
+def _confirmed_universe(
+    store: "EventStore",
+    *,
+    since: datetime | None,
+    host: str | None,
+    run_id: str | None,
+) -> dict[int, dict]:
     """Latest ``publish.confirmed`` per article_id (≡ per live_url)."""
     sql = (
         "SELECT article_id, payload_json, target_url, host, ts_utc "
@@ -113,7 +123,9 @@ def _confirmed_universe(store, *, since, host, run_id) -> dict[int, dict]:
     return universe
 
 
-def _recheck_cursors(store) -> dict[int, tuple[datetime | None, datetime | None]]:
+def _recheck_cursors(
+    store: "EventStore",
+) -> dict[int, tuple[datetime | None, datetime | None]]:
     """Per article_id ``(last_definitive_at, last_attempt_at)`` from events."""
     sql = (
         "SELECT article_id, payload_json, ts_utc FROM events "
@@ -136,7 +148,7 @@ def _recheck_cursors(store) -> dict[int, tuple[datetime | None, datetime | None]
     return {aid: (v[0], v[1]) for aid, v in cursors.items()}
 
 
-def _anchor_baselines(store) -> dict[int, dict[str, str]]:
+def _anchor_baselines(store: "EventStore") -> dict[int, dict[str, str]]:
     """Per article_id map of ``{anchor_url: anchor_text}`` from anchors_json.
 
     Best-effort: history/drafts-sourced and early article rows have
@@ -161,7 +173,9 @@ def _anchor_baselines(store) -> dict[int, dict[str, str]]:
     return baselines
 
 
-def _baseline_for(baselines: dict[int, dict[str, str]], article_id, target_url):
+def _baseline_for(
+    baselines: dict[int, dict[str, str]], article_id: int, target_url: str | None
+) -> str | None:
     """Best-effort baseline anchor text for ``target_url`` on this article."""
     mapping = baselines.get(article_id)
     if not mapping or not target_url:
@@ -182,7 +196,7 @@ def _baseline_for(baselines: dict[int, dict[str, str]], article_id, target_url):
 
 
 def select_candidates(
-    store,
+    store: "EventStore",
     *,
     now: datetime,
     days: int = DEFAULT_DAYS,
@@ -278,10 +292,16 @@ def read_stdin_candidates(fh) -> list[dict] | None:
         live_url = obj.get("live_url")
         if not isinstance(live_url, str) or not _is_http(live_url):
             continue
+        # A non-http(s) target_url is a trust-boundary hazard (and never a real
+        # backlink target); drop it to None so the probe treats this as
+        # liveness-only rather than string-matching an unintended anchor (SEC3).
+        target_url = obj.get("target_url")
+        if target_url is not None and not _is_http(target_url):
+            target_url = None
         rows.append(
             {
                 "live_url": live_url,
-                "target_url": obj.get("target_url"),
+                "target_url": target_url,
                 "host": obj.get("host") or _host_of(live_url),
                 "article_id": obj.get("article_id"),
                 "platform": obj.get("platform"),

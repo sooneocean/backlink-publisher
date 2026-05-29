@@ -374,6 +374,12 @@ def inspect_target_anchor(
     except Exception:  # noqa: BLE001 — never-raise contract
         canonical_target = None
 
+    # Distinguish "target_url itself is malformed/uncanonicalizable" from
+    # "target anchor genuinely absent": a non-empty target that won't canonicalize
+    # is indeterminate (the recheck maps it to probe_error), not a stripped link.
+    if target_url and not canonical_target:
+        result["reason"] = "target_uncanonicalizable"
+
     if canonical_target:
         if capture_anchor_text:
             tag_iter = (

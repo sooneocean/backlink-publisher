@@ -27,6 +27,7 @@ supplied AND the live anchor text could be captured; it is recorded as metadata
 from __future__ import annotations
 
 import logging
+from typing import Any, Callable
 
 from backlink_publisher.publishing.adapters import link_attr_verifier
 from backlink_publisher.publishing.registry import dofollow_status
@@ -53,8 +54,8 @@ def probe_liveness(
     platform: str | None = None,
     baseline_anchor: str | None = None,
     timeout: float = 10.0,
-    inspect_fn=None,
-) -> dict:
+    inspect_fn: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Re-verify a single backlink. Returns a verdict dict; never raises.
 
     Return shape::
@@ -69,7 +70,7 @@ def probe_liveness(
         }
     """
     inspect = inspect_fn or link_attr_verifier.inspect_target_anchor
-    out: dict = {
+    out: dict[str, Any] = {
         "verdict": None,
         "reason": None,
         "target_rel": None,
@@ -108,8 +109,14 @@ def probe_liveness(
         return out
 
     if not res.get("target_anchor_found"):
-        out["verdict"] = verdicts.LINK_STRIPPED
-        out["reason"] = "target_anchor_absent"
+        # A malformed/uncanonicalizable target is indeterminate, not a confirmed
+        # stripped link — never let it count as deterministic dead (correctness).
+        if reason == "target_uncanonicalizable":
+            out["verdict"] = verdicts.PROBE_ERROR
+            out["reason"] = reason
+        else:
+            out["verdict"] = verdicts.LINK_STRIPPED
+            out["reason"] = "target_anchor_absent"
         return out
 
     out["target_rel"] = res.get("target_rel")
@@ -137,12 +144,12 @@ def probe_liveness(
 
 
 def recheck_link(
-    record: dict,
+    record: dict[str, Any],
     *,
     probe: bool,
     timeout: float = 10.0,
-    inspect_fn=None,
-) -> dict:
+    inspect_fn: Callable[..., dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Produce a recheck result for one candidate ``record``.
 
     ``record`` carries ``live_url``, ``target_url``, ``host``, ``article_id``,

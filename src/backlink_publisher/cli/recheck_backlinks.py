@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import sys
+from pathlib import Path
 
 import backlink_publisher.publishing.adapters  # noqa: F401  populate registry before config load
 from .. import config_echo
@@ -199,7 +200,7 @@ def _summary_line(checked: int, written: int, tally: dict[str, int]) -> str:
 
 
 @contextlib.contextmanager
-def _single_run_lock(config_dir):
+def _single_run_lock(config_dir: Path):
     """Non-blocking exclusive file lock so overlapping cron runs don't compound
     (SEC1). Yields True if acquired, False if another run already holds it."""
     import fcntl
