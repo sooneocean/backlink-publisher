@@ -11,6 +11,7 @@ from .types import (
     Config,
     DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
+    ImageGenConfig,
     MastodonConfig,
     ThreeUrlConfig,
 )
@@ -59,6 +60,7 @@ def save_config(
     target_three_url: dict[str, ThreeUrlConfig] | None = None,
     ghpages_config: GhpagesConfig | None = None,
     mastodon_config: MastodonConfig | None = None,
+    image_gen_config: ImageGenConfig | None = None,
 ) -> None:
     config_path = path or (_resolve_config_dir() / "config.toml")
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,6 +104,9 @@ def save_config(
 
     ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
     mastodon_cfg = mastodon_config if mastodon_config is not None else existing.mastodon
+    image_gen_cfg = (
+        image_gen_config if image_gen_config is not None else existing.image_gen
+    )
 
     lines: list[str] = []
 
@@ -161,6 +166,27 @@ def save_config(
     if mastodon_cfg is not None:
         lines.append("[mastodon]")
         lines.append(f"instance_url = {_toml_str(mastodon_cfg.instance_url)}")
+        lines.append("")
+
+    if image_gen_cfg is not None:
+        lines.append("[image_gen]")
+        lines.append(f"base_url = {_toml_str(image_gen_cfg.base_url)}")
+        lines.append(f"model = {_toml_str(image_gen_cfg.model)}")
+        lines.append(f"banner_size = {_toml_str(image_gen_cfg.banner_size)}")
+        lines.append(f"daily_cap = {image_gen_cfg.daily_cap}")
+        lines.append(f"per_run_cap = {image_gen_cfg.per_run_cap}")
+        lines.append(f"timeout_s = {image_gen_cfg.timeout_s}")
+        lines.append(f"max_retries = {image_gen_cfg.max_retries}")
+        lines.append(
+            f"strict = {'true' if image_gen_cfg.strict else 'false'}"
+        )
+        lines.append(
+            "auto_disable_threshold = "
+            f"{image_gen_cfg.auto_disable_threshold}"
+        )
+        lines.append(
+            f"use_image_gen = {'true' if image_gen_cfg.use_image_gen else 'false'}"
+        )
         lines.append("")
 
     known_subsections: set[tuple[str, str]] = set()
