@@ -5,6 +5,26 @@ status: active
 date: 2026-05-29
 origin: docs/brainstorms/2026-05-29-geo-ai-citation-closed-loop-requirements.md
 deepened: 2026-05-29
+claims:
+  paths:
+    - src/backlink_publisher/config/parsers/geo.py
+    - src/backlink_publisher/config/parsers/target.py
+    - src/backlink_publisher/config/types.py
+    - src/backlink_publisher/config/loader.py
+    - src/backlink_publisher/config/writer.py
+    - src/backlink_publisher/config/_toml_utils.py
+    - src/backlink_publisher/events/kinds.py
+    - src/backlink_publisher/geo/__init__.py
+    - src/backlink_publisher/geo/engines.py
+    - src/backlink_publisher/geo/perplexity.py
+    - scripts/geo_refusal_spike.py
+    - tests/test_config_geo_provider.py
+    - tests/test_config_geo_targets.py
+    - tests/test_citation_event_append.py
+    - tests/test_events_kinds.py
+    - tests/test_geo_engine_dispatch.py
+    - tests/test_geo_perplexity_adapter.py
+    - tests/test_geo_refusal_spike.py
 ---
 
 # feat: GEO/AI-citation closed loop (probe + citability shaping)
