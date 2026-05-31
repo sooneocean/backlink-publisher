@@ -15,6 +15,7 @@ from backlink_publisher._util.url import (
     normalize_url_for_fetch,
     safe_urlparse,
 )
+from backlink_publisher._util.http_session import head_url as session_head_url
 
 REQUEST_TIMEOUT = 10  # seconds
 MAX_CONCURRENT = 10

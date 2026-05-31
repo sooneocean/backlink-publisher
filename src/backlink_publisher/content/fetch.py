@@ -50,6 +50,7 @@ from backlink_publisher._util.net_safety import (
     _make_ssrf_opener,
     _SSRF_OPENER,
 )
+from backlink_publisher._util.http_session import fetch_url as session_fetch_url
 from ._soft404 import is_soft_404_title as _is_soft_404_title
 from ._html_utils import read_html_head_window, extract_title
 
