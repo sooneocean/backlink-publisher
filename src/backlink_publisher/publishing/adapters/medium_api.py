@@ -42,6 +42,126 @@ def _json_log(**kwargs: Any) -> str:
     return json.dumps(kwargs)
 
 
+def _resolve_medium_token_data(config: Config) -> tuple[str, dict | None]:
+    """Return (token, medium_token_data); raise DependencyError if no token found.
+
+    Priority: OAuth access_token → Integration Token file → TOML ``medium_integration_token``.
+    ``medium_token_data`` is ``None`` for non-OAuth sources (Integration Token / TOML).
+    """
+    from backlink_publisher.config import load_medium_token
+    from backlink_publisher.config.tokens import load_medium_integration_token
+
+    medium_token_data = load_medium_token()
+    token = medium_token_data.get("access_token") if medium_token_data else None
+    if not token:
+        it_data = load_medium_integration_token()
+        token = (it_data or {}).get("integration_token", "").strip() or None
+    if not token:
+        token = config.medium_integration_token
+    if not token:
+        raise DependencyError(
+            "medium access token or integration token not configured"
+            " — please authorize via Settings → Medium 授权"
+        )
+    return token, medium_token_data
+
+
+def _check_medium_token_expiry(medium_token_data: dict | None) -> None:
+    """Raise ExternalServiceError if the OAuth token expires within 5 minutes.
+
+    No-ops for non-OAuth sources (``medium_token_data`` is None) and for
+    tokens whose ``expires_at`` is 0 (the "unknown" sentinel) or absent.
+    """
+    if not medium_token_data or "expires_at" not in medium_token_data:
+        return
+    expires_at = medium_token_data["expires_at"]
+    if expires_at > 0 and time.time() >= expires_at - 300:
+        raise ExternalServiceError(
+            "Medium OAuth token expires in < 5 minutes — re-authorize via Settings → Medium 授权"
+        )
+
+
+def _fetch_medium_user_id(headers: dict) -> str:
+    """Call ``GET /me``, retrying transient errors; return ``user_id`` or raise."""
+    def _do_me() -> requests.Response:
+        resp = http_get(f"{_API_BASE}/me", headers=headers, timeout=_TIMEOUT)
+        if resp.status_code in RETRYABLE_HTTP_STATUSES:
+            raise _TransientHTTPError(resp.status_code)
+        return resp
+
+    try:
+        me_resp = retry_transient_call(
+            _do_me,
+            is_retryable=lambda exc: isinstance(
+                exc, (requests.Timeout, requests.ConnectionError, _TransientHTTPError)
+            ),
+            adapter="medium-api",
+        )
+    except requests.RequestException as exc:
+        raise ExternalServiceError(
+            f"Medium API unreachable (/me): {exc}"
+        ) from None
+    except _TransientHTTPError as exc:
+        raise ExternalServiceError(
+            f"Medium /me returned HTTP {exc.status_code} after retries"
+        ) from None
+
+    if me_resp.status_code == 401:
+        raise AuthExpiredError(channel="medium", reason="Medium /me HTTP 401")
+    if not me_resp.ok:
+        raise ExternalServiceError(f"Medium /me returned HTTP {me_resp.status_code}")
+    return me_resp.json()["data"]["id"]
+
+
+def _create_medium_post(
+    user_id: str,
+    headers: dict,
+    body: dict,
+) -> requests.Response:
+    """POST to ``/users/{user_id}/posts``; retry only on 429; raise on errors.
+
+    Non-idempotent: network errors (Timeout/ConnectionError) after the request
+    leaves the client are *not* retried — a silent duplicate would result.
+    Only a 429 rate-limit rejection (pre-create refusal) is safe to retry.
+    """
+    def _do_post() -> requests.Response:
+        resp = http_post(
+            f"{_API_BASE}/users/{user_id}/posts",
+            headers=headers,
+            json=body,
+            timeout=_TIMEOUT,
+        )
+        if resp.status_code in RETRYABLE_HTTP_STATUSES:
+            raise _TransientHTTPError(resp.status_code)
+        return resp
+
+    try:
+        post_resp = retry_transient_call(
+            _do_post,
+            is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
+            adapter="medium-api",
+        )
+    except requests.RequestException as exc:
+        raise ExternalServiceError(
+            f"Medium API unreachable (create post): {exc}"
+        ) from None
+    except _TransientHTTPError as exc:
+        raise ExternalServiceError(
+            f"Medium /posts returned HTTP {exc.status_code} after retries"
+        ) from None
+
+    if post_resp.status_code == 401:
+        raise AuthExpiredError(channel="medium", reason="Medium /posts HTTP 401")
+    if post_resp.status_code == 429:
+        raise ExternalServiceError("Medium API rate-limited (429)")
+    if not post_resp.ok:
+        raise ExternalServiceError(
+            f"Medium /posts returned HTTP {post_resp.status_code}: "
+            f"{post_resp.text[:200]}"
+        )
+    return post_resp
+
+
 class MediumAPIAdapter(Publisher):
     """Publishes to Medium via the official API v1 (Integration Token auth).
 
@@ -56,31 +176,8 @@ class MediumAPIAdapter(Publisher):
         mode: str,
         config: Config,
     ) -> AdapterResult:
-        from backlink_publisher.config import load_medium_token
-        from backlink_publisher.config.tokens import load_medium_integration_token
-
-        # 优先使用 OAuth token，其次 Integration Token（从 0600 文件加载）
-        medium_token_data = load_medium_token()
-        token = medium_token_data.get("access_token") if medium_token_data else None
-        if not token:
-            it_data = load_medium_integration_token()
-            token = (it_data or {}).get("integration_token", "").strip() or None
-        if not token:
-            token = config.medium_integration_token  # 向后兼容 TOML 配置
-
-        if not token:
-            raise DependencyError("medium access token or integration token not configured"
-                                 " — please authorize via Settings → Medium 授权")
-
-        # Pre-flight expiry check for OAuth tokens that carry an expires_at field.
-        # Integration tokens and pre-fix OAuth tokens lack expires_at — skipped (fail-open).
-        # expires_at = 0 is a sentinel meaning "unknown"; treated as absent.
-        if medium_token_data and "expires_at" in medium_token_data:
-            expires_at = medium_token_data["expires_at"]
-            if expires_at > 0 and time.time() >= expires_at - 300:
-                raise ExternalServiceError(
-                    "Medium OAuth token expires in < 5 minutes — re-authorize via Settings → Medium 授权"
-                )
+        token, medium_token_data = _resolve_medium_token_data(config)
+        _check_medium_token_expiry(medium_token_data)
 
         t0 = time.monotonic()
         article_id = payload.get("id", "")
@@ -92,41 +189,7 @@ class MediumAPIAdapter(Publisher):
             "Accept": "application/json",
         }
 
-        # One-time user_id lookup (retried on connection errors and 429/5xx)
-        def _do_me() -> requests.Response:
-            resp = http_get(f"{_API_BASE}/me", headers=headers, timeout=_TIMEOUT)
-            if resp.status_code in RETRYABLE_HTTP_STATUSES:
-                raise _TransientHTTPError(resp.status_code)
-            return resp
-
-        try:
-            me_resp = retry_transient_call(
-                _do_me,
-                is_retryable=lambda exc: isinstance(
-                    exc, (requests.Timeout, requests.ConnectionError, _TransientHTTPError)
-                ),
-                adapter="medium-api",
-            )
-        except requests.RequestException as exc:
-            raise ExternalServiceError(
-                f"Medium API unreachable (/me): {exc}"
-            ) from None
-        except _TransientHTTPError as exc:
-            raise ExternalServiceError(
-                f"Medium /me returned HTTP {exc.status_code} after retries"
-            ) from None
-
-        if me_resp.status_code == 401:
-            raise AuthExpiredError(
-                channel="medium",
-                reason="Medium /me HTTP 401",
-            )
-        if not me_resp.ok:
-            raise ExternalServiceError(
-                f"Medium /me returned HTTP {me_resp.status_code}"
-            )
-
-        user_id = me_resp.json()["data"]["id"]
+        user_id = _fetch_medium_user_id(headers)
         log.info(_json_log(adapter="medium-api", phase="lookup", id=article_id))
 
         tags = payload.get("tags", [])[:5]
@@ -152,52 +215,7 @@ class MediumAPIAdapter(Publisher):
         if canonical_url:
             body["canonicalUrl"] = canonical_url
 
-        # Create post — NON-IDEMPOTENT. Medium API v1 documents no idempotency
-        # key, so a network error (Timeout/ConnectionError) after the request
-        # left the client is ambiguous: the post may already exist server-side.
-        # Retrying would duplicate it. Only 429 (a pre-create rate-limit
-        # rejection, surfaced as _TransientHTTPError) is safe to retry — the
-        # server rejected the request before creating anything. Mirrors the
-        # http_form_post.py / rentry_api.py "create exactly once" rule and the
-        # retry.py policy that already excludes 5xx for the same reason.
-        def _do_post() -> requests.Response:
-            resp = http_post(
-                f"{_API_BASE}/users/{user_id}/posts",
-                headers=headers,
-                json=body,
-                timeout=_TIMEOUT,
-            )
-            if resp.status_code in RETRYABLE_HTTP_STATUSES:
-                raise _TransientHTTPError(resp.status_code)
-            return resp
-
-        try:
-            post_resp = retry_transient_call(
-                _do_post,
-                is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
-                adapter="medium-api",
-            )
-        except requests.RequestException as exc:
-            raise ExternalServiceError(
-                f"Medium API unreachable (create post): {exc}"
-            ) from None
-        except _TransientHTTPError as exc:
-            raise ExternalServiceError(
-                f"Medium /posts returned HTTP {exc.status_code} after retries"
-            ) from None
-
-        if post_resp.status_code == 401:
-            raise AuthExpiredError(
-                channel="medium",
-                reason="Medium /posts HTTP 401",
-            )
-        if post_resp.status_code == 429:
-            raise ExternalServiceError("Medium API rate-limited (429)")
-        if not post_resp.ok:
-            raise ExternalServiceError(
-                f"Medium /posts returned HTTP {post_resp.status_code}: "
-                f"{post_resp.text[:200]}"
-            )
+        post_resp = _create_medium_post(user_id, headers, body)
 
         data = post_resp.json().get("data", {})
         url = data.get("url", "")
