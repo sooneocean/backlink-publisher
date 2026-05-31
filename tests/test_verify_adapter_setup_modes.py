@@ -158,12 +158,12 @@ class TestDryRunIntercept:
 
     def test_intercept_raises_on_real_session_send(self):
         """Inside the context manager, any requests call must raise."""
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError, match="dry-run intercept"):
                 requests.get("https://example.com/")
 
     def test_intercept_intercepts_post_too(self):
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError):
                 requests.post("https://example.com/", json={"x": 1})
 
@@ -185,7 +185,7 @@ class TestDryRunIntercept:
         assert before is after, "Session.send not restored after exception"
 
     def test_intercept_error_message_includes_method_and_url(self):
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError) as exc_info:
                 requests.put("https://api.telegra.ph/createPage", json={"a": 1})
         msg = str(exc_info.value)
