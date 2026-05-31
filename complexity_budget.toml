@@ -48,7 +48,7 @@ rationale = "Anchor/link construction for a plan row: branches over anchor sourc
 
 [functions."src/backlink_publisher/config/writer.py::save_config"]
 ceiling = 36
-rationale = "Config TOML writer: emits [blogger]/[medium]/[targets.*] sections with conditional credential subsections while preserving unmanaged operator-added tables verbatim. Already SLOC-budget-monitored; grandfathered at current CC here, decomposed lazily if a feature next touches it (not active scope)."
+rationale = "Config TOML writer: emits [blogger]/[medium]/[targets.*] sections. Section emitters (ghpages/mastodon/image_gen) extracted to private helpers when Pro Mode image_gen was added; residual CC from blogger/targets loops and preserve-unknown-sections logic."
 
 # config/parsers/llm.py::_parse_llm_anchor_provider was seeded at CC 31, but SEC-6 (PR #308,
 # merged to main) centralized the loose-permission warning out of the parser, dropping it to
