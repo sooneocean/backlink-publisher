@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
 
 from backlink_publisher._util.logger import plan_logger
@@ -14,11 +13,6 @@ from .types import (
     MastodonConfig,
     ThreeUrlConfig,
 )
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
 
 from .loader import load_config
 from ._config_io import _resolve_config_dir, _snapshot_config, _atomic_write_text
