@@ -5,6 +5,7 @@ status: active
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/brainstorms/2026-06-01-recheck-ledger-liveness-writeback-requirements.md
+claims: {}
 ---
 
 # feat: Recheck-verdict Deficit-Overlay (close the #310 → #313 loop)
