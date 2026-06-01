@@ -486,6 +486,21 @@ class Config:
         return _cfg._config_dir() / "devto-token.json"
 
     @property
+    def hackmd_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+        return _cfg._config_dir() / "hackmd-token.json"
+
+    @property
+    def mataroa_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+        return _cfg._config_dir() / "mataroa-token.json"
+
+    @property
+    def gitlabpages_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+        return _cfg._config_dir() / "gitlabpages-token.json"
+
+    @property
     def linkedin_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
         return _cfg._config_dir() / "linkedin-token.json"

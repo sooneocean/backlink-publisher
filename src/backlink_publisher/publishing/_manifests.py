@@ -227,6 +227,112 @@ DEVTO_MANIFEST: dict[str, Any] = dict(
 )
 
 
+# ── hackmd ───────────────────────────────────────────────────────────────────
+#
+# HackMD v1 REST API (Bearer token). Token-paste backend ({"token": "<token>"})
+# at ``<config_dir>/hackmd-token.json``. dofollow="uncertain" (rationale at
+# register() call site) — third-party probe = dofollow, OUR canary pending.
+# Plan 2026-06-01-007 Wave 1.
+
+HACKMD_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="HackMD",
+        domain="hackmd.io",
+        category="docs",
+        icon="bi-markdown",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/hackmd-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "HackMD → Settings → API → Create token",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
+# ── mataroa ──────────────────────────────────────────────────────────────────
+#
+# Mataroa open REST API (Bearer token). Token-paste backend ({"token": "<token>"})
+# at ``<config_dir>/mataroa-token.json``. dofollow="uncertain" (rationale at
+# register() call site) — third-party probe = dofollow, OUR canary pending.
+# Plan 2026-06-01-007 Wave 1.
+
+MATAROA_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Mataroa",
+        domain="mataroa.blog",
+        category="blog",
+        icon="bi-journal-text",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/mataroa-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "mataroa.blog → account settings → API",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
+# ── gitlabpages ──────────────────────────────────────────────────────────────
+#
+# GitLab Pages via the Repository Files API (PRIVATE-TOKEN PAT). Token-paste
+# backend ({"token": "<pat>"}) at ``<config_dir>/gitlabpages-token.json``; the
+# project/branch/public-path live in ``[gitlabpages]`` in config.toml. Requires
+# a pre-existing ``pages`` CI job on the target project (no auto-Jekyll).
+# dofollow="uncertain" (rationale at register() call site) — rel is
+# operator-controlled but *.gitlab.io indexation is partial + publish is async,
+# so an OUR-post index,follow canary gates the flip to True. Plan 2026-06-01-007.
+
+GITLABPAGES_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="GitLab Pages",
+        domain="gitlab.io",
+        category="static-site",
+        icon="bi-gitlab",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/gitlabpages-token.json",
+            extras={
+                "secret_shape": '{"token": "<pat>"}',
+                "requires_config_section": "[gitlabpages]",
+                "precondition": "target project must have a `pages` CI job emitting public/",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
 # ── hatena ─────────────────────────────────────────────────────────────────
 #
 # Hatena Blog AtomPub + WSSE. Secret JSON shape:

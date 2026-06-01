@@ -156,6 +156,55 @@ def save_devto_token(data: dict[str, Any], path: Path | None = None) -> None:
     _save_token(data, path, "devto-token.json")
 
 
+def load_hackmd_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load HackMD API token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "hackmd-token.json")
+
+
+def save_hackmd_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save HackMD API token dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at HackMD → Settings → API → Create token.
+    """
+    _save_token(data, path, "hackmd-token.json")
+
+
+def load_mataroa_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Mataroa API key JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "mataroa-token.json")
+
+
+def save_mataroa_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Mataroa API key dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Enable at mataroa.blog → account settings → API.
+    """
+    _save_token(data, path, "mataroa-token.json")
+
+
+def load_gitlabpages_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load GitLab personal access token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "gitlabpages-token.json")
+
+
+def save_gitlabpages_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save GitLab PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). PAT needs ``api`` (or a project-scoped
+    write_repository) scope on the target Pages project.
+    """
+    _save_token(data, path, "gitlabpages-token.json")
+
+
 def save_wordpresscom_token(data: dict[str, Any], path: Path | None = None) -> None:
     """Save WordPress.com OAuth token dict to JSON file with mode 0600.
 

@@ -151,4 +151,31 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "Registered dofollow=False. Kept as referral channel: referral_value=\"high\" — "
         "high-DA legacy blogging platform; nofollow does not eliminate referral or brand value."
     ),
+    "hackmd": (
+        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
+        "2026-06-01 third-party live check (verify_link_attributes on a real public "
+        "note) sampled 188 outbound anchors with 0 nofollow and <meta robots=\"index,"
+        "follow\"> (DA ~71). A third-party spot-check does not discharge the canary "
+        "burden (hashnode/substack/hatena precedent): publish an OUR note, read "
+        "verify_link_attributes, then amend to dofollow=True. referral_value=\"high\": "
+        "well-indexed high-DA docs host with real referral traffic."
+    ),
+    "mataroa": (
+        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
+        "2026-06-01 third-party live check (verify_link_attributes on real posts) "
+        "found outbound external links carry no rel (= dofollow) and site:mataroa.blog "
+        "returns fresh indexed content. The platform currently tolerates marketing "
+        "posts, so it could tighten — confirm via an OUR canary and read "
+        "verify_link_attributes before amending to dofollow=True. referral_value="
+        "\"high\": indexed minimalist blog host with open token API."
+    ),
+    "gitlabpages": (
+        "Registered dofollow=\"uncertain\" though the rel is operator-controlled "
+        "(GitLab Pages serves our own static HTML verbatim, no nofollow injection). "
+        "The uncertainty is indexation, not rel: *.gitlab.io indexation is only "
+        "\"partial\" per the 2026-06-01 discovery run, the publish is async (CI "
+        "pages pipeline), and a shared free subdomain carries search-trust risk. "
+        "An OUR-post canary confirming the served page is index,follow gates the "
+        "flip to dofollow=True. referral_value=\"high\": high-DA operator-owned host."
+    ),
 }
