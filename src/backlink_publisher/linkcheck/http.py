@@ -15,7 +15,6 @@ from backlink_publisher._util.url import (
     normalize_url_for_fetch,
     safe_urlparse,
 )
-
 REQUEST_TIMEOUT = 10  # seconds
 MAX_CONCURRENT = 10
 ACCEPTABLE_CODES = {200, 301, 302}
