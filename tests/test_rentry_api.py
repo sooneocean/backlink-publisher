@@ -68,6 +68,7 @@ def test_post_429_not_retried_no_duplicate_paste():
 
 
 def test_happy_path_returns_adapter_result():
+    """Legacy schema: status=created + url_id (kept for backward compat)."""
     post = MagicMock()
     post.status_code = 200
     post.json.return_value = {"status": "created", "url_id": "abc", "edit_code": "e"}
@@ -76,3 +77,21 @@ def test_happy_path_returns_adapter_result():
         result = RentryAPIAdapter().publish(_payload(), "publish", MagicMock())
     assert isinstance(result, AdapterResult)
     assert "abc" in result.published_url
+
+
+def test_happy_path_current_api_schema():
+    """Current Rentry API: status="200", full URL in ``url``, no ``url_id``."""
+    post = MagicMock()
+    post.status_code = 200
+    post.json.return_value = {
+        "status": "200",
+        "content": "OK",
+        "url": "https://rentry.co/noom4zt8",
+        "url_short": "noom4zt8",
+        "edit_code": "75eymTRz",
+    }
+    post.text = ""
+    with patch(_GET, return_value=_home_ok()), patch(_POST, return_value=post):
+        result = RentryAPIAdapter().publish(_payload(), "publish", MagicMock())
+    assert isinstance(result, AdapterResult)
+    assert result.published_url == "https://rentry.co/noom4zt8"
