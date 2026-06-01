@@ -163,7 +163,7 @@ NOTE: A stale copy exists at workspace root `./.github/workflows/ci.yml` (refere
 
 The project keeps lessons in two places:
 
-- **Private auto-memory** — Claude Code automatically writes `feedback_*.md` files at `~/.claude/projects/<project-memory-slug>/memory/` during sessions. These are fast-capture, operator-private, and never committed.
+- **Private auto-memory** — Legacy assistant sessions may write `feedback_*.md` files into a user-private project memory directory. These are fast-capture, operator-private, and never committed.
 - **Public `docs/solutions/`** — High-value or recurring lessons get *promoted* into committed markdown entries under `docs/solutions/<category>/` (categories: `best-practices/`, `developer-experience/`, `integration-issues/`, `logic-errors/`, `test-failures/`, `ui-bugs/`, `workflow-issues/`). Searchable by YAML frontmatter fields (`module`, `tags`, `problem_type`). The promotion tool is `/ce:compound`.
 
 **Promotion = rewriting, not copy-paste. Strip UUIDs, domains, absolute paths, user-identifying quotes.** The grep gates check against patterns in `~/.local/share/backlink-publisher/private-tokens.txt` — populate this file before first use of `/ce:compound` or gates pass vacuously.
@@ -509,3 +509,30 @@ deciding the error class:
 The debug artifact (0600, written by `_save_null_artifact`) contains the full
 response body, response headers, and any GraphQL `errors[]` array — none of
 which appear in the 200-char-truncated log that was there before this fix.
+
+<!-- chillvibe-codex:start -->
+## ChillVibe Codex
+
+This repo uses the `chillvibe-codex` plugin.
+
+For non-trivial software work, use `chillvibe-codex:cto` as the CTO-first main-session operating layer and treat the conversation as a factory work item.
+
+Follow this chain:
+
+```text
+AGENTS.md -> CTO -> skills/plugins -> MCP -> authorized subagents -> scripts/gates -> memory
+```
+
+Rules:
+
+- This `AGENTS.md` remains the repo-local source of governance.
+- Use `ARCHITECTURE.md` as the repo-local architecture map for runtime boundaries, layers, entrypoints, state, and verification surfaces.
+- If `PERSONA.md` exists, treat it as the repo-local human-collaboration persona overlay after `AGENTS.md`; it cannot override governance, safety, or verification gates.
+- Plugin skills provide shared ChillVibe operating rules.
+- Use `chillvibe-codex:cto` for context/intent analysis, work-item normalization, routing, fan-out decisions, SOP recovery, and synthesis.
+- For non-trivial work, CTO must produce or preserve a preliminary analysis result before implementation planning: context, underlying problem, why/optimization target, evidence, unknowns, options, recommendation, and next step.
+- Use `chillvibe-codex:autopilot` only after S0 is confirmed and CTO routes the task into the S1-S7 delivery production line.
+- Large implementation work must define Commit Segments before execution: planned commit title, included scope, excluded scope, write boundary, verification, artifact links, and stop conditions.
+- Stage advancement requires explicit validation, not hooks/rules/subagent text.
+- Every non-trivial completed work item must follow `references/contracts/completion-report-contract.md` and end with a Traditional Chinese Completion Report that covers target, status, completed work, evidence, gaps/risks, current repo/plugin/SOP state, Memory Delta, next-step options, and CTO recommendation. When implementation or verification happened, report the current implementation state, user scenario, behavior/file-scope differences, risks, evidence, and next step directly in chat; SDD files are supporting detail, not a substitute.
+<!-- chillvibe-codex:end -->

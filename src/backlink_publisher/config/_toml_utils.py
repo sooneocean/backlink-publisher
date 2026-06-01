@@ -12,7 +12,7 @@ from .types import DEFAULT_WORK_TEMPLATES, ThreeUrlConfig
 
 
 _SAVE_CONFIG_KNOWN_ROOTS: frozenset[str] = frozenset(
-    {"blogger", "medium", "targets", "ghpages", "mastodon"}
+    {"blogger", "medium", "targets", "ghpages", "mastodon", "image_gen"}
 )
 
 _TOML_HEADING_RE = re.compile(

@@ -59,6 +59,9 @@ _LLM_DEFAULTS = {
     'use_article_gen': False,
     'article_system_prompt': '',
     'image_gen_api_key': '',
+    'image_gen_endpoint': '',
+    'image_gen_model': '',
+    'image_gen_banner_size': '1200x630',
     'use_image_gen': False,
 }
 
@@ -70,6 +73,62 @@ def _write_llm_settings(payload: dict) -> None:
     path = _llm_settings_file()
     text = json.dumps(payload, ensure_ascii=False, indent=2)
     atomic_write(path, text)
+
+
+def _sync_image_gen_config(*, enabled: bool, endpoint: str, model: str,
+                           banner_size: str, api_key: str) -> None:
+    """Bridge the WebUI Pro Mode image settings into the real pipeline config.
+
+    The plan/publish pipeline does NOT read ``llm-settings.json`` for banners:
+    it reads ``Config.image_gen`` plus ``frw-token.json``.  Keeping this bridge
+    in the save route makes the Settings UI's "AI 封面生成" switch mean what it
+    says without moving long-term secrets into TOML.
+    """
+    from backlink_publisher._util.secrets import write_frw_token
+    from backlink_publisher.config import ImageGenConfig, load_config, save_config
+
+    if api_key:
+        write_frw_token(api_key)
+
+    cfg = load_config()
+    existing = cfg.image_gen
+
+    if not enabled:
+        if existing is not None:
+            save_config(
+                cfg,
+                image_gen_config=ImageGenConfig(
+                    base_url=existing.base_url,
+                    model=existing.model,
+                    banner_size=existing.banner_size,
+                    daily_cap=existing.daily_cap,
+                    per_run_cap=existing.per_run_cap,
+                    timeout_s=existing.timeout_s,
+                    max_retries=existing.max_retries,
+                    strict=existing.strict,
+                    auto_disable_threshold=existing.auto_disable_threshold,
+                    use_image_gen=False,
+                ),
+            )
+        return
+
+    save_config(
+        cfg,
+        image_gen_config=ImageGenConfig(
+            base_url=endpoint,
+            model=model,
+            banner_size=banner_size or (existing.banner_size if existing else "1200x630"),
+            daily_cap=existing.daily_cap if existing else 50,
+            per_run_cap=existing.per_run_cap if existing else 10,
+            timeout_s=existing.timeout_s if existing else 30.0,
+            max_retries=existing.max_retries if existing else 3,
+            strict=existing.strict if existing else False,
+            auto_disable_threshold=(
+                existing.auto_disable_threshold if existing else 5
+            ),
+            use_image_gen=True,
+        ),
+    )
 
 
 @bp.route('/settings/save-llm-config', methods=['POST'])
@@ -106,6 +165,33 @@ def settings_save_llm_config():
             '/settings', flash_type='danger',
             msg='Endpoint 必须以 https:// 开头', fragment='sect-ai')
 
+    use_image_gen = 'use_image_gen' in request.form
+    image_endpoint = (
+        request.form.get('image_gen_endpoint', '').strip().rstrip('/')
+        or existing.get('image_gen_endpoint', '').strip().rstrip('/')
+        or new_endpoint
+    )
+    image_model = (
+        request.form.get('image_gen_model', '').strip()
+        or existing.get('image_gen_model', '').strip()
+        or request.form.get('model', '').strip()
+    )
+    image_banner_size = (
+        request.form.get('image_gen_banner_size', '').strip()
+        or existing.get('image_gen_banner_size', '1200x630')
+        or '1200x630'
+    )
+    if use_image_gen:
+        if not image_endpoint or not image_model:
+            return _safe_flash_redirect(
+                '/settings', flash_type='danger',
+                msg='启用 AI 封面生成时必须填写 Image Endpoint 和 Image Model',
+                fragment='sect-ai')
+        if not image_endpoint.startswith('https://'):
+            return _safe_flash_redirect(
+                '/settings', flash_type='danger',
+                msg='Image Endpoint 必须以 https:// 开头', fragment='sect-ai')
+
     existing.update({
         'endpoint': new_endpoint,
         'api_key': new_api_key or existing.get('api_key', ''),
@@ -114,10 +200,20 @@ def settings_save_llm_config():
         'system_prompt': request.form.get('system_prompt', ''),
         'use_article_gen': 'use_article_gen' in request.form,
         'image_gen_api_key': new_image_key or existing.get('image_gen_api_key', ''),
-        'use_image_gen': 'use_image_gen' in request.form,
+        'image_gen_endpoint': image_endpoint,
+        'image_gen_model': image_model,
+        'image_gen_banner_size': image_banner_size,
+        'use_image_gen': use_image_gen,
     })
     try:
         _write_llm_settings(existing)
+        _sync_image_gen_config(
+            enabled=use_image_gen,
+            endpoint=image_endpoint,
+            model=image_model,
+            banner_size=image_banner_size,
+            api_key=new_image_key,
+        )
         return _safe_flash_redirect(
             '/settings', flash_type='success',
             msg='LLM 设定已保存', fragment='sect-ai')

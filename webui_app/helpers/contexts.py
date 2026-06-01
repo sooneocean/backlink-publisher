@@ -57,6 +57,9 @@ def _load_llm_settings() -> dict:
         'use_article_gen': False,
         'article_system_prompt': '',
         'image_gen_api_key': '',
+        'image_gen_endpoint': '',
+        'image_gen_model': '',
+        'image_gen_banner_size': '1200x630',
         'use_image_gen': False
     }
     path = _llm_settings_file()
