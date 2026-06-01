@@ -24,6 +24,29 @@ _LLM_IMAGE_GEN_API_KEY_ENV_VAR = "BACKLINK_LLM_IMAGE_GEN_API_KEY"
 
 _log = logging.getLogger(__name__)
 
+_BOOL_TRUE_STRINGS: frozenset[str] = frozenset({"1", "true", "yes"})
+
+
+def _parse_bool_flag(env_val: str | None, section: dict, key: str) -> bool:
+    """Resolve a boolean flag with env > TOML section precedence."""
+    if env_val:
+        return env_val.lower() in _BOOL_TRUE_STRINGS
+    if key in section:
+        return bool(section[key])
+    return False
+
+
+def _parse_temperature(env_val: str | None, toml_val: object) -> float:
+    """Resolve temperature with env > TOML > default (0.7) precedence."""
+    if env_val:
+        try:
+            return float(env_val)
+        except ValueError:
+            pass
+    if isinstance(toml_val, (int, float)):
+        return float(toml_val)
+    return 0.7
+
 
 def _parse_llm_anchor_provider(
     section: Any,
@@ -60,32 +83,11 @@ def _parse_llm_anchor_provider(
     model = env_model or section.get("model")
     timeout_s = section.get("timeout_s", 30.0)
     
-    # Resolve temperature: env > toml > default
-    temperature = 0.7
-    toml_temp = section.get("temperature")
-    if env_temp:
-        try:
-            temperature = float(env_temp)
-        except ValueError:
-            pass
-    elif isinstance(toml_temp, (int, float)):
-        temperature = float(toml_temp)
-
+    temperature = _parse_temperature(env_temp, section.get("temperature"))
     system_prompt = env_system or section.get("system_prompt")
-    
-    use_article_gen = False
-    if env_use_article:
-        use_article_gen = env_use_article.lower() in ("1", "true", "yes")
-    elif "use_article_gen" in section:
-        use_article_gen = bool(section["use_article_gen"])
-        
+    use_article_gen = _parse_bool_flag(env_use_article, section, "use_article_gen")
     article_system_prompt = env_article_system or section.get("article_system_prompt")
-
-    use_image_gen = False
-    if env_use_image:
-        use_image_gen = env_use_image.lower() in ("1", "true", "yes")
-    elif "use_image_gen" in section:
-        use_image_gen = bool(section["use_image_gen"])
+    use_image_gen = _parse_bool_flag(env_use_image, section, "use_image_gen")
 
     image_gen_api_key = env_image_key or section.get("image_gen_api_key")
 
