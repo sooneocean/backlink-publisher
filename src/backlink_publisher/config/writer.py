@@ -28,6 +28,41 @@ from ._toml_utils import (
 _log = logging.getLogger(__name__)
 
 
+def _emit_ghpages_section(lines: list[str], cfg: "GhpagesConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[ghpages]")
+    lines.append(f"repo          = {_toml_str(cfg.repo)}")
+    lines.append(f"branch        = {_toml_str(cfg.branch)}")
+    lines.append(f"path_template = {_toml_str(cfg.path_template)}")
+    lines.append("")
+
+
+def _emit_mastodon_section(lines: list[str], cfg: "MastodonConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[mastodon]")
+    lines.append(f"instance_url = {_toml_str(cfg.instance_url)}")
+    lines.append("")
+
+
+def _emit_image_gen_section(lines: list[str], cfg: "ImageGenConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[image_gen]")
+    lines.append(f"base_url = {_toml_str(cfg.base_url)}")
+    lines.append(f"model = {_toml_str(cfg.model)}")
+    lines.append(f"banner_size = {_toml_str(cfg.banner_size)}")
+    lines.append(f"daily_cap = {cfg.daily_cap}")
+    lines.append(f"per_run_cap = {cfg.per_run_cap}")
+    lines.append(f"timeout_s = {cfg.timeout_s}")
+    lines.append(f"max_retries = {cfg.max_retries}")
+    lines.append(f"strict = {'true' if cfg.strict else 'false'}")
+    lines.append(f"auto_disable_threshold = {cfg.auto_disable_threshold}")
+    lines.append(f"use_image_gen = {'true' if cfg.use_image_gen else 'false'}")
+    lines.append("")
+
+
 def _sync_medium_integration_token(token: str) -> None:
     """Persist Medium integration token to 0600 JSON file (SEC-3).
     Writes only when the new token differs from the stored value.
@@ -150,17 +185,9 @@ def save_config(
                 lines.append("insecure_tls = true")
         lines.append("")
 
-    if ghpages_cfg is not None:
-        lines.append("[ghpages]")
-        lines.append(f"repo          = {_toml_str(ghpages_cfg.repo)}")
-        lines.append(f"branch        = {_toml_str(ghpages_cfg.branch)}")
-        lines.append(f"path_template = {_toml_str(ghpages_cfg.path_template)}")
-        lines.append("")
-
-    if mastodon_cfg is not None:
-        lines.append("[mastodon]")
-        lines.append(f"instance_url = {_toml_str(mastodon_cfg.instance_url)}")
-        lines.append("")
+    _emit_ghpages_section(lines, ghpages_cfg)
+    _emit_mastodon_section(lines, mastodon_cfg)
+    _emit_image_gen_section(lines, image_gen_cfg)
 
     if image_gen_cfg is not None:
         lines.append("[image_gen]")
