@@ -1240,6 +1240,16 @@ class TestCopilotRoutes:
         resp = client.post("/copilot/run-live")
         assert resp.status_code == 403
 
+    def test_post_copilot_ask_no_llm_returns_400(self, client, tmp_path):
+        """POST /copilot/ask without an LLM config returns 400 + json."""
+        resp = client.post(
+            "/copilot/ask",
+            data='{"question": "hello"}',
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.is_json
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
