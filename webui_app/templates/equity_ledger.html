@@ -1,12 +1,12 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>Backlink Equity Ledger</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+{% extends 'base.html' %}
+{# Equity ledger — base layout + ES module (Plan 2026-06-01-007 Unit 5).
+   <head>/Bootstrap/csrf-meta come from base.html. The inline data island
+   ({{ rows|tojson }} …) + render/recheck engine moved to equity.js, fed by the
+   read-once window.__equityLedgerBootstrap seam. #}
+{% block title %}Backlink Equity Ledger{% endblock %}
+{% block head_extra %}
   <style>
+    body { background-color: var(--bs-light, #f8f9fa); }
     .target-cell { max-width: 360px; font-family: ui-monospace, monospace; font-size: 13px; }
     th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
     th[data-sort]:hover { background: rgba(0,0,0,.04); }
@@ -14,8 +14,8 @@
     .matrix td, .matrix th { padding: 2px 10px; font-size: 12px; }
     .row-weak { box-shadow: inset 3px 0 0 #f59e0b; }   /* 0 live-dofollow */
   </style>
-</head>
-<body class="bg-light">
+{% endblock %}
+{% block content %}
 <nav class="navbar bg-white border-bottom px-3">
   <span class="navbar-brand mb-0 h1"><i class="bi bi-graph-up-arrow me-2"></i>Backlink Equity Ledger</span>
   <div class="d-flex align-items-center gap-2">
@@ -62,179 +62,12 @@
   </div>
   <div id="recheckStatus" class="small text-muted" aria-live="polite"></div>
 </main>
+{% endblock %}
 
-<script>
-const ROWS = {{ rows|tojson }};
-const EXACT_THRESHOLD = {{ exact_match_threshold|tojson }};
-const CSRF = document.querySelector('meta[name="csrf-token"]').content;
-const STALE_DAYS = {{ stale_days|tojson }};
-const LIVE_RANK = { failed: 3, stale: 2, live: 1, unverified: 0 };
-// HTML-escape any value-derived string before it goes into innerHTML.
-function esc(s) {
-  return String(s).replace(/[&<>"']/g, c =>
-    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-let sortKey = 'live_dofollow', sortDir = 1;  // weakest first
+{% block page_data %}
+<script>window.__equityLedgerBootstrap = {{ {'rows': rows, 'exact_match_threshold': exact_match_threshold, 'stale_days': stale_days} | tojson }};</script>
+{% endblock %}
 
-function truncMiddle(s, n = 48) {
-  if (s.length <= n) return s;
-  const head = Math.ceil(n * 0.6), tail = n - head - 1;
-  return s.slice(0, head) + '…' + s.slice(s.length - tail);
-}
-function livenessBadge(r) {
-  const map = {
-    live:       ['text-bg-success', 'bi-check-circle', 'live'],
-    stale:      ['text-bg-warning', 'bi-clock-history', 'stale'],
-    failed:     ['text-bg-danger', 'bi-x-octagon', 'failed'],
-    unverified: ['text-bg-secondary', 'bi-question-circle', 'unverified'],
-  };
-  const [cls, icon, label] = map[r.liveness] || map.unverified;
-  const date = r.liveness_verified_at ? ` <span class="text-muted">${r.liveness_verified_at.slice(0,10)}</span>` : '';
-  const qual = r.liveness_row_level ? ' <i class="bi bi-info-circle" title="row-level evidence"></i>' : '';
-  return `<span class="badge ${cls}"><i class="bi ${icon}"></i> ${label}</span>${date}${qual}`;
-}
-function exactCell(r) {
-  if (!r.has_anchor_data) return '<span class="text-muted">—</span>';
-  const pct = (r.exact_match_pct * 100).toFixed(0) + '%';
-  const over = EXACT_THRESHOLD != null && r.exact_match_pct > EXACT_THRESHOLD;
-  return over ? `<span class="text-danger fw-bold">${pct}</span>` : pct;
-}
-function liveLabel(r) {
-  // Day-one all-unverified: render "— / N" not a red 0.
-  return (r.live_links === 0 && r.liveness === 'unverified')
-    ? `<span class="text-muted">— / ${r.total_links}</span>`
-    : `${r.live_links} / ${r.total_links}`;
-}
-
-function passesFilter(r, lf, uf) {
-  if (uf && !r.target_url.toLowerCase().includes(uf)) return false;
-  if (lf === 'all') return true;
-  if (lf === 'has-failed') return r.liveness === 'failed';
-  if (lf === 'has-stale') return r.liveness === 'stale';
-  return r.liveness === lf;
-}
-
-function render() {
-  const lf = document.getElementById('livenessFilter').value;
-  const uf = document.getElementById('urlFilter').value.trim().toLowerCase();
-  let rows = ROWS.filter(r => passesFilter(r, lf, uf));
-  rows.sort((a, b) => {
-    let av = a[sortKey], bv = b[sortKey];
-    if (sortKey === 'liveness') { av = LIVE_RANK[av]; bv = LIVE_RANK[bv]; }
-    if (av < bv) return -1 * sortDir;
-    if (av > bv) return 1 * sortDir;
-    return a.target_url < b.target_url ? -1 : 1;
-  });
-
-  const body = document.getElementById('ledgerBody');
-  const empty = document.getElementById('emptyState');
-  body.innerHTML = '';
-  if (ROWS.length === 0) {
-    empty.textContent = 'No target pages yet — publish backlinks to populate the ledger.';
-    empty.classList.remove('d-none');
-    return;
-  }
-  if (rows.length === 0) {
-    empty.textContent = 'No targets match the current filter.';
-    empty.classList.remove('d-none');
-    return;
-  }
-  empty.classList.add('d-none');
-
-  for (const r of rows) {
-    const d = r.dofollow;
-    const tr = document.createElement('tr');
-    if (r.live_dofollow === 0) tr.className = 'row-weak';
-    tr.innerHTML =
-      `<td><button class="btn btn-sm btn-link p-0 expand" aria-expanded="false" title="Details"><i class="bi bi-chevron-right"></i></button></td>` +
-      `<td class="target-cell" title="${esc(r.target_url)}">${esc(truncMiddle(r.target_url))}</td>` +
-      `<td class="text-end">${liveLabel(r)}</td>` +
-      `<td class="text-end fw-semibold">${r.live_dofollow}</td>` +
-      `<td class="text-end small">${d.dofollow}<span class="text-muted">/</span>${d.uncertain}<span class="text-muted">/</span>${d.nofollow}<span class="text-muted">/</span>${d.unknown}</td>` +
-      `<td class="text-end">${exactCell(r)}</td>` +
-      `<td class="text-end">${r.platform_count}</td>` +
-      `<td>${livenessBadge(r)}</td>` +
-      `<td><button class="btn btn-sm btn-outline-primary recheck" ${r.history_item_ids.length ? '' : 'disabled'}>Recheck</button></td>`;
-    body.appendChild(tr);
-
-    const detail = document.createElement('tr');
-    detail.className = 'detail-row d-none';
-    detail.innerHTML =
-      `<td></td><td colspan="8"><table class="matrix"><tr>` +
-      `<th>dofollow</th><td>${d.dofollow}</td>` +
-      `<th>uncertain</th><td>${d.uncertain}</td>` +
-      `<th>nofollow</th><td>${d.nofollow} (high ${d.nofollow_high} / low ${d.nofollow_low})</td>` +
-      `<th>unknown</th><td>${d.unknown}</td>` +
-      `<th>platforms</th><td>${esc((r.platforms || []).join(', ')) || '—'}</td>` +
-      `</tr></table></td>`;
-    body.appendChild(detail);
-
-    tr.querySelector('.expand').addEventListener('click', (e) => {
-      const btn = e.currentTarget;
-      const open = detail.classList.toggle('d-none') === false;
-      btn.setAttribute('aria-expanded', String(open));
-      btn.querySelector('i').className = open ? 'bi bi-chevron-down' : 'bi bi-chevron-right';
-    });
-    tr.querySelector('.recheck').addEventListener('click', () => recheck(r, tr));
-  }
-}
-
-let recheckBusy = false;
-async function recheck(r, tr) {
-  if (recheckBusy) return;                 // single recheck at a time
-  recheckBusy = true;
-  const btn = tr.querySelector('.recheck');
-  const status = document.getElementById('recheckStatus');
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-  status.textContent = `Rechecking ${r.history_item_ids.length} row(s) touching ${r.target_url}…`;
-  try {
-    const resp = await fetch('/ce:equity-ledger/recheck', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
-      body: JSON.stringify({ target_url: r.target_url, stale_days: STALE_DAYS }),
-    });
-    const ct = resp.headers.get('content-type') || '';
-    if (!resp.ok || !ct.includes('application/json')) throw new Error('recheck failed (' + resp.status + ')');
-    const data = await resp.json();
-    Object.assign(r, data.row);            // refresh row data in place (no re-sort)
-    const i = ROWS.findIndex(x => x.target_url === r.target_url);
-    if (i >= 0) Object.assign(ROWS[i], data.row);
-    rerenderRowInPlace(r, tr);
-    status.textContent = `${r.target_url}: ${data.summary} (rechecked ${new Date().toLocaleTimeString()})`;
-  } catch (err) {
-    status.textContent = `${r.target_url}: ${err.message}`;
-    btn.disabled = false;
-    btn.textContent = 'Recheck';
-  } finally {
-    recheckBusy = false;
-  }
-}
-function rerenderRowInPlace(r, tr) {
-  // Update only the value cells + badge; keep row position (no re-sort).
-  const cells = tr.children;
-  cells[2].innerHTML = liveLabel(r);
-  cells[3].textContent = r.live_dofollow;
-  cells[7].innerHTML = livenessBadge(r);
-  tr.classList.toggle('row-weak', r.live_dofollow === 0);
-  const btn = tr.querySelector('.recheck');
-  btn.disabled = r.history_item_ids.length === 0;
-  btn.textContent = 'Recheck';
-}
-
-document.querySelectorAll('th[data-sort]').forEach(th => {
-  th.addEventListener('click', () => {
-    const k = th.dataset.sort;
-    sortDir = (sortKey === k) ? -sortDir : 1;
-    sortKey = k;
-    document.querySelectorAll('th[data-sort]').forEach(h => h.removeAttribute('aria-sort'));
-    th.setAttribute('aria-sort', sortDir === 1 ? 'ascending' : 'descending');
-    render();
-  });
-});
-document.getElementById('livenessFilter').addEventListener('change', render);
-document.getElementById('urlFilter').addEventListener('input', render);
-render();
-</script>
-</body>
-</html>
+{% block page_module %}
+<script type="module" src="{{ url_for('static', filename='js/equity.js', v=asset_version) }}"></script>
+{% endblock %}

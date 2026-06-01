@@ -747,7 +747,7 @@ architecture cannot silently re-rot.
 **Verification:** AGENTS.md describes the target structure, naming, and both recipes; a new page can be
 added by following it without copy-pasting an existing page.
 
-- [ ] **Unit 5: Rollout — `equity_ledger` (data-bearing page)**
+- [x] **Unit 5: Rollout — `equity_ledger` (data-bearing page)** — extends base; inline data island → `window.__equityLedgerBootstrap` seam; `equity.js` ESM (imports lib `esc()` 5-char + `readCsrf()` per-call, replacing the page's local `esc`/CSRF const). One head, one csrf-meta. Repointed the `const ROWS` route test to the seam + added an extends-base structural test. 76 frontend tests green. (health/result/sites deferred as-touched per scope decision.)
 
 **Goal:** Migrate `equity_ledger.html` to base + ESM — the one rollout page with a real pain point (a Jinja
 `tojson` data island + an `esc()` XSS engine inside an inline `<script>`). The genuinely-trivial head-only

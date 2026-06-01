@@ -46,7 +46,21 @@ def test_page_renders_with_row(client):
 def test_empty_state_embeds_no_rows(client):
     resp = client.get("/ce:equity-ledger")
     assert resp.status_code == 200
-    assert "const ROWS = []" in resp.get_data(as_text=True)
+    # Plan 007 U5: rows now flow via the window.__equityLedgerBootstrap seam
+    # (read once by equity.js) instead of an inline `const ROWS = [...]`.
+    body = resp.get_data(as_text=True)
+    assert "window.__equityLedgerBootstrap" in body
+    assert '"rows": []' in body
+
+
+def test_equity_ledger_extends_base_layout(client):
+    """Plan 007 U5: page is under base layout — one <head>, exactly one
+    base-owned csrf-meta, equity.js loaded as a module, no inline engine."""
+    body = client.get("/ce:equity-ledger").get_data(as_text=True)
+    assert body.count("<head>") == 1
+    assert body.count('name="csrf-token"') == 1
+    assert 'type="module"' in body and "js/equity.js" in body
+    assert "const ROWS = {{" not in body  # no leftover Jinja-in-JS island
 
 
 def test_stale_days_query_param_reflected(client):
