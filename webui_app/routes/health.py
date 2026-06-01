@@ -158,12 +158,30 @@ def ce_health():
             _log.warning("health: forward-path read failed: %s", exc)
             return []
 
+    def _scorecard_rows():
+        """Per-channel value scorecard card (Plan 2026-06-01-005, Unit 8 MVP).
+
+        Reads the same stores the equity-ledger reads, re-keyed by channel —
+        declared registry signals (dofollow / referral_value) beside measured
+        liveness, as a signal vector (no composite). The GA4 referral / GSC
+        discovery / AI-retrievability axes render as ``inert:not-landed``
+        (Wave-0 DESCOPE). Read-only, advisory — never gates publishing.
+        Fail-open: any read error → empty list so the dashboard never 500s."""
+        try:
+            from backlink_publisher.scorecard import build_channel_scorecard
+
+            return [r.to_jsonl_dict() for r in build_channel_scorecard()]
+        except Exception as exc:  # noqa: BLE001 — never 500 the page on scorecard
+            _log.warning("health: channel scorecard read failed: %s", exc)
+            return []
+
     try:
         projection, health = _g_cache("health_agg", _build)
         canary = _g_cache("canary_health", _canary_rows)
         forward_path = _g_cache("forward_path_health", _forward_path_rows)
         reconciliation_gaps = _g_cache("reconciliation_gaps", _reconciliation_gaps)
         recheck_decay = _g_cache("recheck_decay", _decay_counts)
+        channel_scorecard = _g_cache("channel_scorecard", _scorecard_rows)
         return _render(
             "health.html",
             health=health,
@@ -172,6 +190,7 @@ def ce_health():
             forward_path=forward_path,
             reconciliation_gaps=reconciliation_gaps,
             recheck_decay=recheck_decay,
+            channel_scorecard=channel_scorecard,
         )
     except Exception as exc:  # noqa: BLE001 — R5: even a render/context error must not 500
         _log.error("health: dashboard render failed, serving minimal fallback: %s", exc)

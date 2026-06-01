@@ -169,6 +169,56 @@
     {% endif %}
   </div>
 
+  {# ── 3a. Per-channel value scorecard (Plan 2026-06-01-005 U8, Wave-0 MVP) ─ #}
+  {% set scorecard_rows = channel_scorecard | default([]) %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Per-channel value scorecard
+      <span class="text-muted small fw-normal">— declared ‖ measured (advisory; keep/prune)</span>
+    </div>
+    {% if scorecard_rows %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Channel</th>
+            <th>Declared</th>
+            <th>Referral</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Live</th>
+            <th class="text-end">Live·df</th>
+            <th>Realized value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in scorecard_rows %}
+          <tr>
+            <td class="target-cell">
+              {{ c.channel }}
+              {% if c.small_sample %}<span class="badge text-bg-secondary" title="low sample is not zero value">insufficient data</span>{% endif %}
+              {% for d in c.divergence %}<span class="badge text-bg-warning" title="declared vs measured divergence">{{ d }}</span>{% endfor %}
+            </td>
+            <td>{{ c.declared_dofollow }}</td>
+            <td>{{ c.declared_referral_value if c.declared_referral_value is not none else '—' }}</td>
+            <td class="text-end">{{ c.total_links }}</td>
+            <td class="text-end">{{ c.live_links }}</td>
+            <td class="text-end">{{ c.live_dofollow }}</td>
+            <td><span class="text-muted small" title="GA4/GSC/AI axes deferred (Wave-0 DESCOPE)">referral / discovery / AI: inert (not landed)</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-white text-muted small py-2">
+      Signal vector — no composite score. Realized-value axes (GA4 referral, GSC discovery, AI
+      retrievability) are deferred until owned-target placement volume grows. Advisory only; nothing
+      here gates publishing.
+    </div>
+    {% else %}
+    <div class="card-body text-muted text-center py-4">No channels to score yet.</div>
+    {% endif %}
+  </div>
+
   {# ── 3b. Canary health (Plan 2026-05-27-001 U4, read-side join) ───────── #}
   {% set canary_rows = canary | default([]) %}
   {% if canary_rows %}
