@@ -4,7 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-01
+
+### Added
+
+- `POST /copilot/ask` LLM-backed Q&A route (`routes/copilot.py`). Accepts natural-language questions, calls the configured LLM via `safe_post_json`, returns answers as JSON. Returns `400` when unconfigured, `502` on LLM failure. Plan U5.
+- Q&A panel (`_copilot_panel.html`) — unlocked/locked state driven by server-side `llm_configured` context processor. Includes copilot.css (form, bubbles, loading/error states) and copilot.js (ESM module, CSRF-safe `postJson`). Plan U6.
+- `llm_configured` context processor in `webui_app/__init__.py` — checks `llm-settings.json` existence and validity to drive UI state.
+- `src/backlink_publisher/_util/ssl_ctx.py` — SSL context utility module.
+- Full test suite: 14 route tests (`test_copilot_qna_route.py`), 8 panel render tests (`test_copilot_panel_render.py`), 3 Q&A render tests (`test_copilot_qa_render.py`), 3 asset version cache tests (`test_asset_version_cache.py`), 3 SSL context tests (`test_linkcheck_ssl_ctx.py`), route contract extension (`test_webui_route_contract.py`).
+
 ### Fixed
+
+- `test_pipeline_inprocess_characterization.py` — expanded coverage for edge cases.
+- `webui_app/helpers/cli_runner.py` — adjusted for API changes.
 
 - txt.fyi adapter now clears the site's anti-spam dwell-time gate before
   submitting. `edit.php` rejects POSTs that arrive too soon after the form was
@@ -65,4 +78,5 @@ All notable changes to this project will be documented in this file.
   gated by spike) will consume the same `medium-cookies.json` +
   `medium-meta.json` for headless GraphQL publishing.
 
-[Unreleased]: https://github.com/redredchen01/backlink-publisher/compare/main...HEAD
+[Unreleased]: https://github.com/redredchen01/backlink-publisher/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/redredchen01/backlink-publisher/releases/tag/v0.3.0
