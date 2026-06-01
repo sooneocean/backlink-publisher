@@ -427,7 +427,7 @@ None of these is safe to auto-fix without human judgment. The RECON log alerts t
 
 ### Sources & References
 
-- **Requirements document:** [docs/brainstorms/2026-05-27-readtime-reconciliation-hub-requirements.md](file:///Users/dex/YDEX/INPORTANT%20WORK/%E5%A4%96%E9%93%BE/0511_backlink%20%20publisher/backlink-publisher/docs/brainstorms/2026-05-27-readtime-reconciliation-hub-requirements.md)
+- **Requirements document:** [docs/brainstorms/2026-05-27-readtime-reconciliation-hub-requirements.md](file:///Users/dex/YDEX/INPORTANT%20WORK/%E5%A4%96%E9%93%BE/backlink-publisher/backlink-publisher/docs/brainstorms/2026-05-27-readtime-reconciliation-hub-requirements.md)
 - **Related plan:** `docs/plans/2026-05-26-001-feat-dual-state-divergence-auditor-plan.md` (close architectural neighbor — same code area, complementary R3 join)
 - **Related code:** `events/reconcile.py` (`_project_all`, `_project_one`), `events/store.py` (EventStore, `_quarantine`, `_clear_quarantine`), `events/schema.py` (quarantine_log), `_util/url.py` (`canonicalize_url`), `webui_app/routes/health.py` (dashboard), `webui_app/templates/health.html`, `cli/publish_backlinks.py` (CLI entrypoint), `ledger/checkpoint.py` (checkpoint API)
 - **Institutional learnings:** `publish-history-helper-invariant-2026-05-20`, `same-pass-reconciler-lock-scope-2026-05-27`

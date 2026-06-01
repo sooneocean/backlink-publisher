@@ -13,7 +13,7 @@
 **命令**：
 
 ```bash
-cd "/Users/dex/YDEX/INPORTANT WORK/外链/0511_backlink  publisher/bp-main-validate"
+cd "/Users/dex/YDEX/INPORTANT WORK/外链/backlink-publisher/bp-main-validate"
 
 # 確保乾淨 profile（強制第一次 bind 完整走 OAuth）
 rm -rf ~/.config/backlink-publisher/browser-profile
@@ -49,7 +49,7 @@ PYTHONPATH=src python -m backlink_publisher.cli.bind_channel --channel velog
 **命令**：
 
 ```bash
-cd "/Users/dex/YDEX/INPORTANT WORK/外链/0511_backlink  publisher/backlink-publisher"
+cd "/Users/dex/YDEX/INPORTANT WORK/外链/backlink-publisher/backlink-publisher"
 
 # 準備 1 條 seed × 3 平台
 cat > /tmp/dofollow-test-seeds.jsonl <<'EOF'
@@ -100,7 +100,7 @@ curl -sL "$ARTICLE_URL" | grep -oE '<a[^>]*href="[^"]*example\.com[^"]*"[^>]*>' 
 **命令**：
 
 ```bash
-cd "/Users/dex/YDEX/INPORTANT WORK/外链/0511_backlink  publisher/backlink-publisher"
+cd "/Users/dex/YDEX/INPORTANT WORK/外链/backlink-publisher/backlink-publisher"
 
 # 確認舊格式不存在或備份（PR #88 hard-cut 不再讀 storage_state.json）
 ls -l ~/.config/backlink-publisher/medium-* 2>&1
