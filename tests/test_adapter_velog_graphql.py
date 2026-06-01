@@ -32,6 +32,7 @@ from backlink_publisher._util.errors import (
 from backlink_publisher.publishing.adapters.velog_graphql import (
     VelogGraphQLAdapter,
     _effective_cap,
+    _extract_tokens_from_origins,
     _load_cookies,
     _mask_cookies,
     _probe_session_alive,
@@ -128,6 +129,110 @@ class TestLoadCookies:
         os.chmod(p, 0o600)
         with pytest.raises(DependencyError, match="velog-login"):
             _load_cookies(p)
+
+
+# ── _extract_tokens_from_origins ─────────────────────────────────────────────
+
+
+class TestExtractTokensFromOrigins:
+    """Unit tests for the extracted localStorage-mining helper."""
+
+    def _velog_origin(self, storage_entries: list) -> dict:
+        return {"origin": "https://velog.io", "localStorage": storage_entries}
+
+    def test_non_list_origins_is_noop(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins(None, cookies)
+        assert cookies == {}
+
+    def test_non_list_origins_string_is_noop(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins("not-a-list", cookies)
+        assert cookies == {}
+
+    def test_non_dict_origin_entries_skipped(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins(["not-a-dict", 42], cookies)
+        assert cookies == {}
+
+    def test_non_velog_origin_skipped(self):
+        cookies: dict = {}
+        origin = {"origin": "https://other.com", "localStorage": [
+            {"name": "access_token", "value": "at123"},
+        ]}
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_non_list_localstorage_skipped(self):
+        cookies: dict = {}
+        origin = {"origin": "https://velog.io", "localStorage": "bad"}
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_non_dict_entry_in_localstorage_skipped(self):
+        cookies: dict = {}
+        origin = self._velog_origin(["not-a-dict", 99])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_account_key_parses_access_and_refresh_token(self):
+        cookies: dict = {}
+        account_json = json.dumps({"access_token": "at", "refresh_token": "rt"})
+        origin = self._velog_origin([{"name": "account", "value": account_json}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {"access_token": "at", "refresh_token": "rt"}
+
+    def test_account_key_with_invalid_json_skipped(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "account", "value": "{bad json"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_account_key_does_not_overwrite_existing_token(self):
+        cookies: dict = {"access_token": "existing"}
+        account_json = json.dumps({"access_token": "from-storage", "refresh_token": "rt"})
+        origin = self._velog_origin([{"name": "account", "value": account_json}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies["access_token"] == "existing"
+        assert cookies["refresh_token"] == "rt"
+
+    def test_direct_access_token_entry(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "access_token", "value": "direct-at"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {"access_token": "direct-at"}
+
+    def test_direct_token_does_not_overwrite_existing(self):
+        cookies: dict = {"access_token": "existing"}
+        origin = self._velog_origin([{"name": "access_token", "value": "new"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies["access_token"] == "existing"
+
+    def test_empty_direct_token_value_not_written(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "access_token", "value": ""}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_irrelevant_localstorage_keys_ignored(self):
+        cookies: dict = {}
+        origin = self._velog_origin([
+            {"name": "theme", "value": "dark"},
+            {"name": "lang", "value": "ko"},
+        ])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_multiple_origins_only_velog_processed(self):
+        cookies: dict = {}
+        origins = [
+            {"origin": "https://github.com", "localStorage": [
+                {"name": "access_token", "value": "gh-token"},
+            ]},
+            self._velog_origin([{"name": "access_token", "value": "velog-at"}]),
+        ]
+        _extract_tokens_from_origins(origins, cookies)
+        assert cookies == {"access_token": "velog-at"}
 
 
 # ── _effective_cap ────────────────────────────────────────────────────────────
