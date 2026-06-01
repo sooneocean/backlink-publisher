@@ -46,15 +46,45 @@ def test_unknown_gate_is_usage_error():
     assert exc.value.code == 1
 
 
-def test_unimplemented_gate_g3_is_flagged_not_crash():
-    with pytest.raises(SystemExit) as exc:
-        gate_probe.main(["--gate", "g3"])
-    assert exc.value.code == 1
-
-
 def test_unimplemented_gate_g5_is_flagged():
     with pytest.raises(SystemExit) as exc:
         gate_probe.main(["--gate", "g5"])
+    assert exc.value.code == 1
+
+
+# --- G3 routing (no network; the static audit is deterministic) ---------------
+def test_g3_calibration_inconclusive_exit_zero(capsys):
+    gate_probe.main(["--gate", "g3"])  # no threshold, creds available, no referral
+    rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert rows[0]["gate"] == "g3"
+    assert rows[0]["tier"] == 2
+    assert rows[0]["verdict"] == gv.INCONCLUSIVE
+
+
+def test_g3_majority_strip_kills(capsys):
+    gate_probe.main(["--gate", "g3", "--strip-threshold", "0.5"])
+    rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert rows[0]["verdict"] == gv.KILL
+
+
+def test_g3_credentials_unavailable_blocks(capsys):
+    gate_probe.main(["--gate", "g3", "--strip-threshold", "0.9", "--credentials-unavailable"])
+    rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert rows[0]["verdict"] == gv.BLOCKED
+
+
+def test_g3_positive_referral_is_go(capsys):
+    gate_probe.main([
+        "--gate", "g3", "--strip-threshold", "0.9",
+        "--referral-sessions", "12", "--referral-window", "2026-05",
+    ])
+    rows = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.strip()]
+    assert rows[0]["verdict"] == gv.GO
+
+
+def test_g3_referral_sessions_without_window_is_usage_error():
+    with pytest.raises(SystemExit) as exc:
+        gate_probe.main(["--gate", "g3", "--referral-sessions", "5"])
     assert exc.value.code == 1
 
 
