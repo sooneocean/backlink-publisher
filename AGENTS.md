@@ -2,6 +2,8 @@
 
 See `README.md` for project overview and `docs/` for plans, brainstorms, ideation, and solutions.
 
+> **Canonical AI-assistant guide.** `CLAUDE.md` at the repo root is a symlink to this file — edit `AGENTS.md`, never a copy. (Stale `bp-*/AGENTS.md` worktree copies are likewise not canonical; see below.)
+
 ## Dev Commands
 
 ```bash
@@ -268,18 +270,27 @@ Shared safety in `scripts/_worktree_safety.sh`. Tests: `tests/scripts/test_prune
 
 ## Monolith Budget
 
-`monolith_budget.toml` tracks radon SLOC ceilings for **6** source files. Enforced by `tests/test_no_monolith_regrowth.py` (R4 hard-fail + R7 warning canary + radon version pinning).
+`monolith_budget.toml` tracks radon SLOC ceilings for **13** source files (the canonical list lives in that file — the table below is a snapshot, re-read the TOML before relying on exact ceilings). Enforced by `tests/test_no_monolith_regrowth.py` (R4 hard-fail + R7 warning canary + radon version pinning).
 
 | File | Ceiling |
 |---|---|
-| `cli/plan_backlinks.py` | 1270 |
-| `cli/publish_backlinks.py` | 730 |
-| `content/fetch.py` | 370 |
-| `config/writer.py` | 340 |
-| `_util/markdown.py` | 320 |
-| `events/projector.py` | 580 |
+| `cli/plan_backlinks/core.py` | 250 |
+| `cli/publish_backlinks.py` | 370 |
+| `cli/_publish_helpers.py` | 660 |
+| `cli/generate_backlink_text.py` | 560 |
+| `cli/phase0_seal.py` | 465 |
+| `cli/plan_check.py` | 260 |
+| `cli/validate_backlinks.py` | 150 |
+| `cli/report_anchors.py` | 120 |
+| `content/fetch.py` | 250 |
+| `config/writer.py` | 200 |
+| `_util/markdown.py` | 240 |
+| `events/projector.py` | 110 |
+| `publishing/adapters/__init__.py` | 600 |
 
-If a PR exceeds a ceiling, edit `monolith_budget.toml` in the same PR — raise it and add `rationale` (≥80 chars). `git blame` is the defense; no override label. Bumping `radon` (pinned `==6.0.1`) requires re-measuring all 6 ceilings + updating `SLOC_CANARY_EXPECTED` in `tests/fixtures/sloc_canary.py`.
+Note: the historical `cli/plan_backlinks.py` monolith was decomposed into the `cli/plan_backlinks/` package (2026-05-19) — the budget now tracks its largest sub-file, `core.py`.
+
+If a PR exceeds a ceiling, edit `monolith_budget.toml` in the same PR — raise it and add `rationale` (≥80 chars). `git blame` is the defense; no override label. Bumping `radon` (pinned `==6.0.1`) requires re-measuring every ceiling + updating `SLOC_CANARY_EXPECTED` in `tests/fixtures/sloc_canary.py`.
 
 References: `docs/plans/2026-05-18-006-feat-monolith-sloc-ceiling-plan.md`, `docs/brainstorms/2026-05-18-monolith-loc-ceiling-requirements.md`.
 
