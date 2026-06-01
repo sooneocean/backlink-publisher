@@ -37,6 +37,29 @@ Flask app at `webui_app/` (20 route modules, `create_app()` factory). State pers
 
 App-level CSRF guard `_global_csrf_guard` (PR #143, `webui_app/__init__.py`) enforces a token on every POST/PUT/PATCH/DELETE. Tests opt out via `app.config['CSRF_ENABLED'] = False` (or the legacy `WTF_CSRF_ENABLED` flag — both honored). The `_check_csrf_or_abort` helper has a single production call site inside the global guard; PR #148 removed all inline per-route calls.
 
+### Frontend conventions — zero-build native ES modules (Plan 2026-06-01-007)
+
+No Node / bundler / framework. Browser-native ES modules + Jinja `base.html` + CSS custom-property tokens. Deployment stays "double-click → run".
+
+**Layer map**
+- `templates/base.html` owns the single `<head>`: Bootstrap/Icons CDN, `<meta name="csrf-token">`, the **classic non-`defer` Bootstrap bundle script**, `tokens.css`, and the blocks `title` / `head_extra` / `content` / `page_data` / `page_module`. Every page `{% extends 'base.html' %}` — never re-declare `<head>`.
+- `static/js/lib/` is the shared ESM layer: `api.js` (`fetchJson`, `readCsrf`, `postJson`/`postForm`), `dom.js` (`on`/`delegate`/`qs` + `esc` + `renderBadge`), `profiles.js` (config-form editor/profile fns). `static/js/package.json` `{type:module}` marks the dir as ESM (browsers ignore it; enables `node`-level unit checks).
+- `static/css/tokens.css` is the single `:root` token source; `index.css`/`settings.css` consume `var(--…)`, no local `:root`.
+
+**Add a page**: create `templates/<page>.html` → `{% extends 'base.html' %}`; put markup in `{% block content %}`; one `{% block page_module %}<script type="module" src="{{ url_for('static', filename='js/<page>.js', v=asset_version) }}"></script>`; server→client data via a read-once `{% block page_data %}<script>window.__<page>Bootstrap = {{ … | tojson }}</script>` (read once at module top, never for cross-module calls). The `<page>.js` module `import`s from `./lib/*.js`.
+
+**Add a channel card / binding form**: reuse the existing `{% include %}`-with-`{% with channel=… %}` partials (they inherit `csrf_token` via the context processor). **If you ever convert a binding partial to a Jinja `macro`, pass `csrf_token` as an explicit parameter** — macros do NOT inherit context-processor vars, and an empty `csrf_token` → 403 on every bind/save (render tests run `CSRF_ENABLED=False` and won't catch it).
+
+**Anti-rot rules (do not regress):**
+1. **No inline `on*` handlers, no inline `<script>` logic.** Use `data-action="…"` (+ `data-*` for args) and a delegated `addEventListener` in the page module. `return confirm(...)` guards become `data-confirm="…"` handled by `(e)=>{ if(!confirm(msg)) e.preventDefault(); }`.
+2. **No cross-script `window.*` globals as an API.** Modules `import` from `lib/`; cross-component signals use DOM `CustomEvent` (e.g. `channel-binding.js` → `velog:login` → `settings.js`), never a `typeof window.fn` probe (silently no-ops under module scope).
+3. **No untrusted `${…}` into `innerHTML`.** Build nodes with `createElement` + `textContent`/`el.dataset`, or `esc()` (the 5-char superset incl. single-quote). Untrusted = anything from a server/provider response (LLM model ids, error messages).
+4. **`readCsrf()` reads the `<meta>` per call** (never cache in a module const — a rotated token would 403 the fetch transport). Preserve the dual transport: form field `csrf_token` OR `X-CSRFToken` header.
+5. **Bootstrap stays a classic non-`defer`/non-`module` head script** — that ordering guarantees `window.bootstrap` before any deferred page module.
+6. **Bump `asset_version`** (auto, mtime-derived in `webui_app/__init__.py`) is stamped on every `url_for('static', …, v=asset_version)` ref so a long-lived operator session can't serve stale classic JS against new module HTML. Run any UI walkthrough after a hard refresh.
+
+JS interaction has no test framework yet (deferred). pytest covers server-rendered structure + CSRF; pure JS helpers (`esc`) have a `node` check at `tests/js/lib_dom_check.mjs`; behavior is verified by an adversarial manual walkthrough (silent-fail paths: velog bind, paste-to-derive, synthetic-click bind delegation).
+
 ### CLI entrypoints
 
 ```bash

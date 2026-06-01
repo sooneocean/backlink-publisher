@@ -719,7 +719,7 @@ still fires" check — here via the manual walkthrough + the server-render butto
 **Verification:** settings page works end-to-end with zero inline handlers and no `window.__*` cross
 calls; CSRF 403 regression holds; the dashboard-rendering suite passes; `settings.js` ≤ ~200 lines.
 
-- [ ] **Unit 4: Capture the convention in AGENTS.md (R9)**
+- [x] **Unit 4: Capture the convention in AGENTS.md (R9)** — added the "Frontend conventions — zero-build native ES modules" section (layer map, add-a-page + add-a-channel-card recipes, 6 anti-rot rules incl. the macro-CSRF param rule). CLAUDE.md skipped (workspace-root, out of worktree scope; AGENTS.md is authoritative).
 
 **Goal:** Document the proven pilot pattern as the project recipe so future pages/cards follow it and the
 architecture cannot silently re-rot.
