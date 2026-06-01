@@ -42,8 +42,8 @@ ceiling = 550
 rationale = "Holds the 3 extracted reducers (_project_checkpoint, _project_history, _project_drafts) plus the confirmed-emit helpers _emit_confirmed_history_row (#350) and _emit_drafts_confirmed (#340, extracted 2026-06-01 to bring _project_drafts CC under the CC-30 backstop). At 520 SLOC; ceiling 550 = round_up_to_10(520+30) per policy."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 670
-rationale = "Wave 1 dofollow channels (Plan 2026-06-01-007): added 3 register() blocks + adapter imports + manifest imports + _SETUP_CHECKS entries for hackmd, mataroa, gitlabpages (all dofollow='uncertain' pending OUR-pipeline canary). SLOC rose 584→640. Ceiling 670 = round_up_to_10(640+30) per policy. Prior 600 was a 2026-05-28 ratchet-down after removing csdn/juejin/note."
+ceiling = 270
+rationale = "refactor 2026-06-01: split live-verify (->_verify_live.py) + offline-readiness checks (->_setup_checks.py) out of the dispatcher; __init__ now holds only imports + register() wiring + thin verify_adapter_setup delegators. SLOC 640->234. Ceiling 270 = round_up_to_10(234+30) per ratchet-down policy."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465
