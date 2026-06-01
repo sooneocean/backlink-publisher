@@ -8,7 +8,6 @@ from pathlib import Path
 from backlink_publisher._util.logger import plan_logger
 from .types import (
     Config,
-    DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
     ImageGenConfig,
     MastodonConfig,
@@ -20,6 +19,7 @@ from ._config_io import _resolve_config_dir, _snapshot_config, _atomic_write_tex
 from .tokens import save_medium_integration_token
 from ._toml_utils import (
     _SAVE_CONFIG_KNOWN_ROOTS,
+    _emit_target_section,
     _preserve_unknown_sections,
     _toml_str,
     _toml_list,
@@ -89,6 +89,8 @@ def save_config(
     target_three_url: dict[str, ThreeUrlConfig] | None = None,
     ghpages_config: GhpagesConfig | None = None,
     mastodon_config: MastodonConfig | None = None,
+    target_probe_queries: dict[str, list[str]] | None = None,
+    target_brand_aliases: dict[str, list[str]] | None = None,
     image_gen_config: ImageGenConfig | None = None,
 ) -> None:
     config_path = path or (_resolve_config_dir() / "config.toml")
@@ -131,6 +133,16 @@ def save_config(
     else:
         three_url_by_domain = dict(target_three_url)
 
+    if target_probe_queries is None:
+        probe_queries_by_domain = dict(existing.target_probe_queries)
+    else:
+        probe_queries_by_domain = dict(target_probe_queries)
+
+    if target_brand_aliases is None:
+        brand_aliases_by_domain = dict(existing.target_brand_aliases)
+    else:
+        brand_aliases_by_domain = dict(target_brand_aliases)
+
     ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
     mastodon_cfg = mastodon_config if mastodon_config is not None else existing.mastodon
     image_gen_cfg = (
@@ -158,31 +170,21 @@ def save_config(
     lines.append("")
 
     all_target_domains = sorted(
-        set(kws_by_domain) | set(three_url_by_domain)
+        set(kws_by_domain)
+        | set(three_url_by_domain)
+        | set(probe_queries_by_domain)
+        | set(brand_aliases_by_domain)
     )
     for domain in all_target_domains:
-        lines.append(f"[targets.{_toml_str(domain)}]")
-        if domain in kws_by_domain:
-            kws = kws_by_domain[domain]
-            lines.append(f"anchor_keywords = {_toml_list(kws)}")
-        if domain in three_url_by_domain:
-            tu = three_url_by_domain[domain]
-            lines.append(f"main_url = {_toml_str(tu.main_url)}")
-            lines.append(f"list_url = {_toml_str(tu.list_url)}")
-            lines.append(f"work_urls = {_toml_list(tu.work_urls)}")
-            lines.append(f"branded_pool = {_toml_list(tu.branded_pool)}")
-            lines.append(f"partial_pool = {_toml_list(tu.partial_pool)}")
-            lines.append(f"exact_pool = {_toml_list(tu.exact_pool)}")
-            if tu.work_anchor_templates != list(DEFAULT_WORK_TEMPLATES):
-                lines.append(
-                    f"work_anchor_templates = {_toml_list(tu.work_anchor_templates)}"
-                )
-            if tu.list_path_blocklist is not None:
-                lines.append(
-                    f"list_path_blocklist = {_toml_list(tu.list_path_blocklist)}"
-                )
-            if tu.insecure_tls:
-                lines.append("insecure_tls = true")
+        lines.extend(
+            _emit_target_section(
+                domain,
+                kws_by_domain,
+                probe_queries_by_domain,
+                brand_aliases_by_domain,
+                three_url_by_domain,
+            )
+        )
         lines.append("")
 
     _emit_ghpages_section(lines, ghpages_cfg)
@@ -195,7 +197,10 @@ def save_config(
     for domain in all_target_domains:
         known_subsections.add(("targets", _toml_str(domain)))
     on_disk_target_domains = (
-        set(existing.target_anchor_keywords) | set(existing.target_three_url)
+        set(existing.target_anchor_keywords)
+        | set(existing.target_three_url)
+        | set(existing.target_probe_queries)
+        | set(existing.target_brand_aliases)
     )
     for domain in on_disk_target_domains - set(all_target_domains):
         known_subsections.add(("targets", _toml_str(domain)))

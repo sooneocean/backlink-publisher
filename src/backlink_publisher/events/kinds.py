@@ -49,6 +49,7 @@ BANNER_SKIPPED_NO_ARTIFACT: Final = "banner.skipped_no_artifact"
 IMAGE_GEN_INVOKED: Final = "image_gen_invoked"
 IMAGE_GEN_CAPPED: Final = "image_gen_capped"
 IMAGE_GEN_DISABLED_AUTO: Final = "image_gen_disabled_auto"
+CITATION_OBSERVED: Final = "citation.observed"
 #: Post-publish backlink re-verification verdict (Plan 2026-05-29-004). Written
 #: directly by the ``recheck-backlinks`` CLI via ``EventStore.append`` — NOT
 #: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
@@ -73,6 +74,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_INVOKED,
         IMAGE_GEN_CAPPED,
         IMAGE_GEN_DISABLED_AUTO,
+        CITATION_OBSERVED,
         LINK_RECHECKED,
     }
 )
@@ -119,6 +121,11 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     IMAGE_GEN_INVOKED: frozenset({"prompt_sha"}),
     IMAGE_GEN_CAPPED: frozenset({"reason"}),
     IMAGE_GEN_DISABLED_AUTO: frozenset({"threshold"}),
+    # citation.observed carries only parsed, bounded fields (D8): the raw
+    # LLM/HTTP trace is never persisted. The floor is the load-bearing triple a
+    # share/dashboard reader needs to make sense of the row — the citation
+    # verdict tier, the engine that produced it, and the query that was probed.
+    CITATION_OBSERVED: frozenset({"verdict", "engine", "query"}),
     # The verdict is the load-bearing field every reader (decay counts, age
     # cursor) needs; target identity travels in the events.db first-class
     # columns (target_url/host/article_id), not the floor.
