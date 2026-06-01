@@ -26,6 +26,9 @@ _TOKEN_FILES: list[tuple[str, str]] = [
     ("writeas", "writeas-token.json"),
     ("tumblr", "tumblr-credentials.json"),
     ("linkedin", "linkedin-token.json"),
+    ("hackmd", "hackmd-token.json"),
+    ("mataroa", "mataroa-token.json"),
+    ("gitlabpages", "gitlabpages-token.json"),
 ]
 
 

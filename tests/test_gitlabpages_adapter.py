@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from backlink_publisher._util.errors import DependencyError, ExternalServiceErro
 from backlink_publisher.config.types import GitlabPagesConfig
 from backlink_publisher.publishing.adapters.gitlabpages import (
     GitLabPagesAPIAdapter,
+    _build_html_body,
     _load_token,
     _published_url,
     _required_headers,
@@ -34,6 +36,7 @@ def config(tmp_path, monkeypatch):
 @pytest.fixture
 def config_with_token(config):
     config.gitlabpages_token_path.write_text(json.dumps({"token": "glpat_secret_99", "token_rev": 1}))
+    os.chmod(config.gitlabpages_token_path, 0o600)  # R10: real bind writes 0o600
     return config
 
 
@@ -59,6 +62,13 @@ class TestLoadToken:
 
     def test_returns_token(self, config_with_token):
         assert _load_token(config_with_token) == "glpat_secret_99"
+
+    def test_rejects_world_readable_token_file(self, config):
+        """R10: a 0o644 PAT file must be refused."""
+        config.gitlabpages_token_path.write_text(json.dumps({"token": "x"}))
+        os.chmod(config.gitlabpages_token_path, 0o644)
+        with pytest.raises(DependencyError, match="0o600"):
+            _load_token(config)
 
 
 class TestPublishedUrl:
@@ -121,6 +131,17 @@ class TestPublish:
             )
         assert result.status == "published"
 
+    def test_put_400_without_marker_raises_not_silent_success(self, config_with_token):
+        """A PUT 400 that is NOT the no-op/already-exists marker must raise, not
+        silently report success (would mask a permission/path failure)."""
+        post = _resp(400, text="A file with this name already exists")
+        put = _resp(400, text="403 Forbidden: insufficient permission to push")
+        with patch(_POST, return_value=post), patch(_PUT, return_value=put):
+            with pytest.raises(ExternalServiceError, match="400"):
+                GitLabPagesAPIAdapter().publish(
+                    {"title": "T", "slug": "test"}, mode="live", config=config_with_token,
+                )
+
     def test_draft_mode_no_commit(self, config_with_token):
         with patch(_POST) as mpost, patch(_PUT) as mput:
             result = GitLabPagesAPIAdapter().publish(
@@ -166,6 +187,20 @@ class TestPublish:
                     {"title": "T", "slug": "t"}, mode="live", config=config_with_token,
                 )
         assert "glpat_secret_99" not in str(exc.value)
+
+
+class TestHtmlBody:
+    def test_title_is_html_escaped(self):
+        """A title with HTML metacharacters must be escaped in the <title> tag —
+        no broken page / injection via the title text node."""
+        body = _build_html_body({"title": "Evil </title><script>alert(1)</script>", "content_html": "<p>x</p>"})
+        assert "</title><script>" not in body
+        assert "&lt;/title&gt;&lt;script&gt;" in body
+
+    def test_body_html_not_escaped(self):
+        """The negotiated HTML island is intentionally not escaped."""
+        body = _build_html_body({"title": "Plain", "content_html": "<p>hi <a href=\"https://x.com\">l</a></p>"})
+        assert "<title>Plain</title>" in body
 
 
 class TestRegistration:

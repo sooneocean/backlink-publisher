@@ -32,12 +32,15 @@ DOFOLLOW NOTICE:
 from __future__ import annotations
 
 import base64
+import html
 import json
+import os
+import stat
 import time
+from datetime import datetime, timezone
 from urllib.parse import quote
 from typing import Any
 
-import requests
 from backlink_publisher.http import post as http_post, put as http_put
 
 from backlink_publisher.config import Config, load_gitlabpages_token
@@ -52,7 +55,11 @@ from .retry import RETRYABLE_HTTP_STATUSES, retry_transient_call
 
 GITLAB_API = "https://gitlab.com/api/v4"
 _HTTP_TIMEOUT_S = 30
-_ALREADY_EXISTS = "already exists"  # GitLab 400 marker for create-on-existing
+_ALREADY_EXISTS = "already exists"  # GitLab 400 marker (create-on-existing AND no-op identical commit)
+
+
+def _utc_date() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 def _required_headers(token: str) -> dict[str, str]:
@@ -63,12 +70,28 @@ def _required_headers(token: str) -> dict[str, str]:
     }
 
 
+def _require_secure_mode(path) -> None:
+    """R10: refuse a group/world-readable token file (mirrors telegraph/livejournal).
+
+    Tokens are written 0o600 by safe-write, but an operator-hand-created file may
+    land 0o644 (world-readable secret). Fail loud rather than load it silently.
+    """
+    if path.exists():
+        mode = os.stat(path).st_mode & 0o777
+        if mode != 0o600:
+            raise DependencyError(
+                f"GitLab token file {path} has mode {oct(mode)}; must be 0o600. "
+                f"Run: chmod 600 {path}"
+            )
+
+
 def _load_token(config: Config) -> str:
     """Return the PAT, raising DependencyError when not configured.
 
     The message names the ``pages`` CI-job precondition loudly — committing a
     file does nothing without it.
     """
+    _require_secure_mode(config.gitlabpages_token_path)
     data = load_gitlabpages_token(config.gitlabpages_token_path)
     token = (data or {}).get("token", "").strip()
     if not token:
@@ -91,10 +114,13 @@ def _build_html_body(payload: dict[str, Any]) -> str:
     """
     title = payload.get("title", "Untitled")
     body_html = extract_publish_html(payload, "gitlabpages") or ""
+    # Escape the title text node — an unescaped "<" or "</title>" in the title
+    # would break the served page (and is an injection vector). body_html is the
+    # already-negotiated HTML island and is intentionally NOT escaped.
     return (
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n"
         "<meta charset=\"utf-8\">\n"
-        f"<title>{title}</title>\n"
+        f"<title>{html.escape(title)}</title>\n"
         "</head>\n<body>\n"
         f"{body_html}\n"
         "</body>\n</html>\n"
@@ -235,8 +261,10 @@ class GitLabPagesAPIAdapter(Publisher):
                 )
                 if _handle_status(put_resp, "PUT"):
                     return _published_url(cfg, file_path)
-                # Byte-identical re-publish: GitLab 400s the no-op commit. Idempotent skip.
-                if put_resp.status_code == 400:
+                # Byte-identical re-publish: GitLab 400s the no-op commit with an
+                # "already exists" marker. Only THAT 400 is an idempotent skip — any
+                # other 400 (permission, bad path, locked file) is a real failure.
+                if put_resp.status_code == 400 and _ALREADY_EXISTS in put_resp.text.lower():
                     log.info(json.dumps(dict(
                         adapter="gitlabpages", phase="noop-skip", id=article_id,
                     )))
@@ -278,8 +306,3 @@ class GitLabPagesAPIAdapter(Publisher):
             platform="gitlabpages",
             published_url=published_url,
         )
-
-
-def _utc_date() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d")

@@ -28,6 +28,8 @@ Design choices (mirrors ``hackmd_api.py`` / ``devto_api.py``):
 from __future__ import annotations
 
 import json
+import os
+import stat
 import time
 from typing import Any
 
@@ -54,8 +56,20 @@ def _required_headers(token: str) -> dict[str, str]:
     }
 
 
+def _require_secure_mode(path) -> None:
+    """R10: refuse a group/world-readable token file (mirrors telegraph/livejournal)."""
+    if path.exists():
+        mode = os.stat(path).st_mode & 0o777
+        if mode != 0o600:
+            raise DependencyError(
+                f"Mataroa token file {path} has mode {oct(mode)}; must be 0o600. "
+                f"Run: chmod 600 {path}"
+            )
+
+
 def _load_token(config: Config) -> str:
     """Return the API token, raising DependencyError when not configured."""
+    _require_secure_mode(config.mataroa_token_path)
     data = load_mataroa_token(config.mataroa_token_path)
     token = (data or {}).get("token", "").strip()
     if not token:

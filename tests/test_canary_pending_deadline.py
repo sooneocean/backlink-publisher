@@ -20,12 +20,19 @@ _TRACKER = Path(__file__).parents[1] / "docs" / "discovery" / "canary-pending.md
 _ROW_RE = re.compile(r"^\|\s*([a-z0-9_]+)\s*\|\s*([\d-]+)\s*\|\s*([\d-]+)\s*\|\s*(\w+)\s*\|$")
 
 
-def _parse_rows():
+_HEADER_OR_SEP_RE = re.compile(r"^\|[\s\-|a-z]*\|$", re.IGNORECASE)
+
+
+def _block_lines():
     text = _TRACKER.read_text(encoding="utf-8")
     block = text.split("<!-- canary-pending:begin -->", 1)[1].split("<!-- canary-pending:end -->", 1)[0]
+    return [ln.strip() for ln in block.splitlines() if ln.strip().startswith("|")]
+
+
+def _parse_rows():
     rows = []
-    for line in block.splitlines():
-        m = _ROW_RE.match(line.strip())
+    for line in _block_lines():
+        m = _ROW_RE.match(line)
         if m:
             rows.append({
                 "platform": m.group(1),
@@ -34,6 +41,28 @@ def _parse_rows():
                 "status": m.group(4),
             })
     return rows
+
+
+def test_no_malformed_rows_in_block():
+    """Fail-open guard: every pipe-row is the header, the separator, or a valid data
+    row. A typo (uppercase name, hyphen, bad date) would otherwise silently skip
+    enforcement — defeating the flip-or-kill gate."""
+    for line in _block_lines():
+        is_header_or_sep = (
+            "platform" in line.lower() and "deadline" in line.lower()
+        ) or set(line) <= set("|- ")
+        assert is_header_or_sep or _ROW_RE.match(line), (
+            f"canary-pending.md has a malformed row that enforcement will silently "
+            f"skip: {line!r}. Fix the format (| platform | YYYY-MM-DD | YYYY-MM-DD | status |)."
+        )
+
+
+def test_wave1_platforms_all_tracked():
+    """The three channels this gate exists for must each have a row (guards a
+    dropped/typo'd entry from silently escaping the deadline)."""
+    tracked = {r["platform"] for r in _parse_rows()}
+    for p in ("hackmd", "mataroa", "gitlabpages"):
+        assert p in tracked, f"{p} is registered uncertain but missing from canary-pending.md"
 
 
 def test_tracker_file_exists_and_parses():

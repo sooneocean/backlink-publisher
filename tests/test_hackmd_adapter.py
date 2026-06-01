@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,6 +30,7 @@ def config(tmp_path, monkeypatch):
 @pytest.fixture
 def config_with_token(config):
     config.hackmd_token_path.write_text(json.dumps({"token": "hmd_secret_abc", "token_rev": 1}))
+    os.chmod(config.hackmd_token_path, 0o600)  # R10: real bind writes 0o600
     return config
 
 
@@ -62,6 +64,13 @@ class TestLoadToken:
 
     def test_returns_token_when_present(self, config_with_token):
         assert _load_token(config_with_token) == "hmd_secret_abc"
+
+    def test_rejects_world_readable_token_file(self, config):
+        """R10: a 0o644 token file must be refused, not loaded silently."""
+        config.hackmd_token_path.write_text(json.dumps({"token": "x"}))
+        os.chmod(config.hackmd_token_path, 0o644)
+        with pytest.raises(DependencyError, match="0o600"):
+            _load_token(config)
 
 
 class TestBuildNotePayload:

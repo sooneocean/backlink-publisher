@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,6 +29,7 @@ def config(tmp_path, monkeypatch):
 @pytest.fixture
 def config_with_token(config):
     config.mataroa_token_path.write_text(json.dumps({"token": "mat_secret_xyz", "token_rev": 1}))
+    os.chmod(config.mataroa_token_path, 0o600)  # R10: real bind writes 0o600
     return config
 
 
@@ -51,6 +53,13 @@ class TestLoadToken:
 
     def test_returns_token(self, config_with_token):
         assert _load_token(config_with_token) == "mat_secret_xyz"
+
+    def test_rejects_world_readable_token_file(self, config):
+        """R10: a 0o644 token file must be refused."""
+        config.mataroa_token_path.write_text(json.dumps({"token": "x"}))
+        os.chmod(config.mataroa_token_path, 0o644)
+        with pytest.raises(DependencyError, match="0o600"):
+            _load_token(config)
 
 
 class TestBuildPostPayload:

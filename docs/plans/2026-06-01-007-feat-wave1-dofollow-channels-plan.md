@@ -5,6 +5,7 @@ status: active
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/discovery/2026-06-01-run.md
+claims: {}  # net-new feature: adapters are created by this plan; no pre-existing code anchors to validate. Explicit empty escape hatch per AGENTS.md post-2026-05-20 claims cutoff.
 ---
 
 # feat: Add Wave 1 dofollow channels (GitLab Pages, HackMD, Mataroa)
