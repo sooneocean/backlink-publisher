@@ -35,16 +35,12 @@ import ssl
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Optional
+from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
 from backlink_publisher._util.logger import opencli_logger
-from backlink_publisher._util.url import (
-    canonicalize_url,
-    normalize_url_for_fetch,
-    safe_urlparse,
-)
+from backlink_publisher._util.url import normalize_url_for_fetch
 from backlink_publisher._util.net_safety import (
     _check_url_for_ssrf,
     _make_ssrf_opener,
@@ -52,6 +48,13 @@ from backlink_publisher._util.net_safety import (
 )
 from ._soft404 import is_soft_404_title as _is_soft_404_title
 from ._html_utils import read_html_head_window, extract_title
+
+# Stats counters + stateless predicates were extracted to sibling modules for
+# monolith-budget headroom (2026-06-01). ``_STATS`` is imported by reference
+# and mutated in place here; ``reset_stats`` / ``stats_snapshot`` are
+# re-exported so ``content.fetch.<name>`` stays the stable public surface.
+from ._stats import _STATS, _record_reason, reset_stats, stats_snapshot
+from ._fetch_helpers import _cache_key, _is_transient, _is_valid_http_url
 
 #: Wall-clock budget per single GET attempt. Roughly matches ``linkcheck``'s
 #: REQUEST_TIMEOUT so a row's combined plan-time HTTP doesn't drift wildly.
@@ -132,29 +135,6 @@ def _evict_lru() -> None:
         _CACHE.pop(next(iter(_CACHE)), None)
 
 
-def _cache_key(url: object) -> str:
-    """Canonical cache key for ``url`` (collapses utm params, default ports,
-    trailing slash, fragment — see :func:`canonicalize_url`).
-
-    Declared ``-> str`` for the happy path, but defensively accepts ``object``
-    and passes non-canonicalizable input through unchanged so the fail-closed
-    contract of :func:`verify_url_has_content` holds: a malformed or non-string
-    URL must still reach ``_is_valid_http_url`` and resolve as ``invalid_url``
-    rather than crashing the fetch gate. Two cases:
-
-    - non-``str`` scalar input (``int``, ``bool`` …) — ``urlsplit`` would raise
-      ``AttributeError``/``TypeError``; we short-circuit on the type.
-    - malformed strings such as ``http://[invalid`` — ``urlsplit`` raises
-      ``ValueError`` (``Invalid IPv6 URL``); we catch and fall back.
-    """
-    if not isinstance(url, str):
-        return url  # type: ignore[return-value]  # fail-closed passthrough
-    try:
-        return canonicalize_url(url)
-    except ValueError:
-        return url
-
-
 # Initialize max cache entries from environment (allows tuning without code change)
 try:
     _MAX_CACHE_ENTRIES = int(os.environ.get("BACKLINK_FETCH_CACHE_MAX_ENTRIES", "256"))
@@ -166,18 +146,6 @@ except (ValueError, TypeError):
 #: ``BACKLINK_GATE_CACHE_TTL_SECONDS`` (default 900) so a long-running daemon
 #: re-fetches stale results.
 _DEFAULT_MAX_AGE_S: Optional[float] = None
-
-#: Process-wide statistics counters. Updated on every
-#: :func:`verify_url_has_content` call. ``stats_snapshot()`` returns a
-#: shallow copy; ``reset_stats()`` clears for tests / per-invocation resets.
-_STATS: dict[str, Any] = {
-    "cache_hits": 0,
-    "cache_misses": 0,
-    "fetches": 0,
-    "total_latency_ms": 0,
-    "reason_counts": {},
-}
-
 
 def reset_cache() -> None:
     """Clear the in-run cache. Tests call this between scenarios; production
@@ -196,53 +164,6 @@ def set_default_max_age(seconds: Optional[float]) -> None:
     """
     global _DEFAULT_MAX_AGE_S
     _DEFAULT_MAX_AGE_S = seconds
-
-
-def reset_stats() -> None:
-    """Reset the per-process stats counters.
-
-    Called by plan-backlinks ``main()`` so each invocation reports its own
-    cache hit rate / fetch count. Also by the autouse test fixture so
-    cross-test bleed doesn't corrupt assertions.
-    """
-    _STATS["cache_hits"] = 0
-    _STATS["cache_misses"] = 0
-    _STATS["fetches"] = 0
-    _STATS["total_latency_ms"] = 0
-    _STATS["reason_counts"] = {}
-
-
-def stats_snapshot() -> dict[str, Any]:
-    """Return a snapshot of the stats counters.
-
-    Shallow copy of the top-level dict, with ``reason_counts`` deep-copied
-    so callers can mutate without affecting the live counters. Use
-    :func:`reset_stats` to clear.
-    """
-    return {
-        "cache_hits": _STATS["cache_hits"],
-        "cache_misses": _STATS["cache_misses"],
-        "fetches": _STATS["fetches"],
-        "total_latency_ms": _STATS["total_latency_ms"],
-        "reason_counts": dict(_STATS["reason_counts"]),
-    }
-
-
-def _record_reason(reason: Optional[str], ok: bool) -> None:
-    """Increment the per-reason counter. ``ok=True`` records 'ok'."""
-    key = "ok" if ok else (reason or "unknown")
-    counts = _STATS["reason_counts"]
-    counts[key] = counts.get(key, 0) + 1
-
-
-def _is_transient(reason: str) -> bool:
-    """Return True for failure reasons safe to retry. 4xx and 200-no-title
-    are not transient — the page state is structurally stable.
-    """
-    from backlink_publisher.publishing.adapters.retry import is_transient_reason
-    return is_transient_reason(reason)
-
-
 
 
 
@@ -340,21 +261,6 @@ def _check_once(
         # from hard 404s / empty-title pages.
         return False, "soft_404_title", None
     return True, None, title
-
-
-def _is_valid_http_url(url: str) -> bool:
-    """Cheap structural check: scheme is http/https and netloc is non-empty.
-    Run before any network attempt so callers get a deterministic
-    ``invalid_url`` rather than a flaky network error for malformed input.
-    """
-    parsed = safe_urlparse(url)
-    if parsed is None:
-        return False
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    if not parsed.netloc:
-        return False
-    return True
 
 
 def verify_url_has_content(

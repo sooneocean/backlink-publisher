@@ -22,8 +22,8 @@ ceiling = 370
 rationale = "Two independent per-row loop gates now coexist here: the canary health gate (Plan 2026-05-27-001 U4 — advisory WARN + opt-in hard-skip) and the cross-run idempotency enforce gate (Plan 2026-05-27-005 U7 — skip-duplicate row, held-uncertain branch, counters, reconciliation precondition + force-manifest load). Both are intrinsic per-row publish-loop wiring; the gate decisions and audit live in cli/_dedup_gate.py (gate_with_force) + idempotency/store.py.gate_and_claim + canary/store.py. At 335 SLOC; ceiling 370 = round_up_to_10(335+30), 35 headroom."
 
 [files."src/backlink_publisher/content/fetch.py"]
-ceiling = 250
-rationale = "Soft-404 title detection extracted to content/_soft404.py, HTML head-window reading + title extraction to content/_html_utils.py (2026-05-26). SLOC dropped 281→216. Ceiling 250 = round_up_to_10(216+30) per policy."
+ceiling = 240
+rationale = "Stats counters (content/_stats.py) and stateless predicates _cache_key/_is_valid_http_url/_is_transient (content/_fetch_helpers.py) extracted 2026-06-01; gate hot-path (_check_once, verify_url_has_content, verify_urls_batch) and all test-patched module globals stay here. SLOC dropped 250→204. Ceiling 240 = round_up_to_10(204+30) per policy. Earlier: soft-404 → _soft404.py, head-window/title → _html_utils.py (2026-05-26)."
 
 [files."src/backlink_publisher/config/writer.py"]
 ceiling = 240
