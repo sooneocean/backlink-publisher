@@ -28,10 +28,12 @@ def register_blueprints(app: Flask) -> None:
     from .equity_ledger import bp as equity_ledger_bp
     from .health import bp as health_bp
     from .channel_bind_save import bp as channel_bind_save_bp
+    from .copilot import bp as copilot_bp
 
     for bp in (main_bp, pipeline_bp, batch_bp, checkpoint_bp,
                history_bp, drafts_bp, settings_basic_bp, llm_bp, oauth_bp,
                profiles_bp, sites_bp, queue_bp, dashboard_bp,
                medium_login_bp, bind_bp, token_paste_bp, url_verify_bp, image_gen_bp,
-               seo_viz_bp, equity_ledger_bp, health_bp, channel_bind_save_bp):
+               seo_viz_bp, equity_ledger_bp, health_bp, channel_bind_save_bp,
+               copilot_bp):
         app.register_blueprint(bp)
