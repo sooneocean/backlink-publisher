@@ -1,7 +1,8 @@
 ---
 title: "refactor: Thin WebUI — schema-first typed-error contract, then in-process pipeline"
 type: refactor
-status: active
+status: completed
+closed: "2026-06-01 (convergence 2026-06-01-009). Units 1-7 shipped (#270/#274/#277/#281/#284). Unit 8 (subprocess-mock test migration) was substantially shipped alongside U6/U7 — the AST funnel guards (test_pipeline_api_seam) and engine-seam mocks already existed; the only residual gap, the plan/report_anchors in-process==subprocess parity anchors, was added in 2026-06-01-009 PR-B (test_pipeline_inprocess_characterization). publish/login/footprint intentionally remain subprocess (R4/R5 non-goals)."
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-thin-webui-phase-b-in-process-pipeline-requirements.md
 deepened: 2026-05-27
@@ -283,7 +284,7 @@ graph TB
 
 Phase 1 = Units 1–3 (ship independently). Phase 2 = Units 4–8.
 
-- [ ] **Unit 1: Typed-error envelope + shared chokepoint**
+- [x] **Unit 1: Typed-error envelope + shared chokepoint**
 
 **Goal:** A dependency-free typed-error envelope (schema: `error_class`,
 `exit_code`, `message`) and an additive machine-readable emission through the
@@ -338,7 +339,7 @@ Phase 1 = Units 1–3 (ship independently). Phase 2 = Units 4–8.
 **Verification:** Round-trip and chokepoint tests pass; existing `errors.py` tests
 still green (human text preserved).
 
-- [ ] **Unit 2: Route every CLI fatal-error emit site through the chokepoint**
+- [x] **Unit 2: Route every CLI fatal-error emit site through the chokepoint**
 
 **Goal:** All fatal-error exits in the in-scope CLIs go through the Unit 1
 chokepoint so each emits the typed envelope — no direct `print(...,file=stderr)+SystemExit`.
@@ -393,7 +394,7 @@ guards in `validate_backlinks.py:108`, `publish_backlinks.py:69`.
 golden stdout unchanged; `tests/test_no_monolith_regrowth.py` still green (or
 ceiling raised in-PR with rationale).
 
-- [ ] **Unit 3: WebUI consumes typed errors; delete `stderr[:200]`**
+- [x] **Unit 3: WebUI consumes typed errors; delete `stderr[:200]`**
 
 **Goal:** `run_pipe` / `PipeResult` parse the envelope into a typed
 `PipeResult.error`; routes show the real error; QUARANTINE unknown shapes.
@@ -443,7 +444,7 @@ ceiling raised in-PR with rationale).
 `stderr[:200]`/`[:300]`/`[:500]` for pipeline CLIs (pipeline.py *and* checkpoint.py);
 existing pipeline-route + checkpoint tests green.
 
-- [ ] **Unit 4: B0 — funnel all callers through `PipelineAPI`; add `report-anchors` method**
+- [x] **Unit 4: B0 — funnel all callers through `PipelineAPI`; add `report-anchors` method**
 
 **Goal:** Single seam: no route/service calls `run_pipe`/`subprocess` for in-scope
 CLIs directly; `PipelineAPI` gains `report_anchors()`. Still subprocess underneath
@@ -508,7 +509,7 @@ CLIs directly; `PipelineAPI` gains `report_anchors()`. Still subprocess undernea
 through `PipelineAPI`; seo_viz output unchanged; checkpoint resume exit-code
 branching preserved; guard test passes.
 
-- [ ] **Unit 5: Global-state audit + characterization lock (gates in-process)**
+- [x] **Unit 5: Global-state audit + characterization lock (gates in-process)**
 
 **Goal:** Enumerate every process-lifetime side effect the in-scope CLIs mutate,
 decide per-call isolation, and capture a golden/characterization corpus of current
@@ -553,7 +554,7 @@ in-process code exists.
 runs green against the current subprocess path and is ready to assert against the
 in-process path in Unit 6.
 
-- [ ] **Unit 6: `validate-backlinks` in-process pilot (engine extraction)**
+- [x] **Unit 6: `validate-backlinks` in-process pilot (engine extraction)**
 
 **Goal:** Extract `validate-backlinks` core into a pure engine; `PipelineAPI.validate()`
 dispatches in-process; CLI shell calls the engine. Prove the pattern end-to-end
@@ -612,7 +613,7 @@ against the Unit 5 golden corpus.
 in-process output matches golden corpus; latency drops; CLI shell still passes its
 own tests.
 
-- [ ] **Unit 7: `plan-backlinks` + `report-anchors` in-process**
+- [x] **Unit 7: `plan-backlinks` + `report-anchors` in-process**
 
 **Goal:** Apply the Unit 6 pattern to the remaining two in-scope CLIs.
 
@@ -657,7 +658,7 @@ own tests.
 **Verification:** No subprocess spawn for plan/report-anchors from the WebUI;
 output matches golden corpus; budgets respected.
 
-- [ ] **Unit 8: Migrate subprocess-mocking tests to the in-process seam**
+- [x] **Unit 8: Migrate subprocess-mocking tests to the in-process seam**
 
 **Goal:** Re-point the **in-scope** subprocess-mocking tests (validate/plan/
 report-anchors) at the engine/seam; the 5 `run_pipe`-mocking files redirect

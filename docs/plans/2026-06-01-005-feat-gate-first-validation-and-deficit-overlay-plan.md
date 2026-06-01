@@ -1,7 +1,8 @@
 ---
 title: "feat: Gate-first validation suite (G2/G3/G5) + Phase-1 deficit-overlay first ship"
 type: feat
-status: active
+status: completed
+shipped: d7b0c757 (#362/#357/#358)
 date: 2026-06-01
 origin: docs/brainstorms/2026-06-01-optimization-backlog-consolidation-requirements.md
 claims: {}

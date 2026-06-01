@@ -1,7 +1,8 @@
 ---
 title: "feat: Add Wave 1 dofollow channels (GitLab Pages, HackMD, Mataroa)"
 type: feat
-status: active
+status: completed
+shipped: 1025acba (#363)
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/discovery/2026-06-01-run.md

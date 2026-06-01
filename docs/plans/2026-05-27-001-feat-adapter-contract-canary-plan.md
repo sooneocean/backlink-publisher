@@ -1,7 +1,8 @@
 ---
 title: "feat: Adapter Contract Canary — 主動偵測平台靜默契約漂移"
 type: feat
-status: active
+status: completed
+shipped: 7bbaf119 (#268)
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-adapter-contract-canary-requirements.md
 claims: {}

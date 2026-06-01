@@ -1,7 +1,8 @@
 ---
 title: "feat: Per-Channel Realized-Value Scorecard (GA4 referral + GSC discovery + unified vector)"
 type: feat
-status: active
+status: completed
+shipped: d7b0c757 (#362)
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/brainstorms/2026-06-01-per-channel-realized-value-scorecard-requirements.md

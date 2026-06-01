@@ -2,7 +2,8 @@
 date: 2026-05-28
 sequence: "003"
 type: fix
-status: active
+status: completed
+shipped: 482de679 (#290)
 origin: docs/brainstorms/2026-05-28-dedup-failed-to-done-invariant-requirements.md
 claims: {}
 ---

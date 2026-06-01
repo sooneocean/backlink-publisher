@@ -1,7 +1,8 @@
 ---
 title: "feat: Blast-radius Phase 1 — channel cull + money-site cell containment"
 type: feat
-status: active
+status: completed
+shipped: 87fbbcfa (#267)
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-cross-channel-blast-radius-requirements.md
 claims: {}

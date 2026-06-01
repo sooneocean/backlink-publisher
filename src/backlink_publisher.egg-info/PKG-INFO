@@ -3,25 +3,28 @@ Name: backlink-publisher
 Version: 0.2.0
 Summary: A local-first backlink publishing pipeline for Blogger and Medium.
 Requires-Python: >=3.11
-Requires-Dist: markdown-it-py>=3.0
-Requires-Dist: google-api-python-client>=2.0
-Requires-Dist: google-auth-oauthlib>=1.0
+Requires-Dist: markdown-it-py>=4.2
+Requires-Dist: google-api-python-client>=2.196
+Requires-Dist: google-auth-oauthlib>=1.4
 Requires-Dist: google-auth-httplib2>=0.2
-Requires-Dist: playwright>=1.40
-Requires-Dist: requests>=2.28
-Requires-Dist: websocket-client>=1.6
-Requires-Dist: beautifulsoup4>=4.12
-Requires-Dist: flask>=2.0
-Requires-Dist: apscheduler>=3.10
-Requires-Dist: pyyaml>=6.0
+Requires-Dist: playwright>=1.55
+Requires-Dist: requests>=2.32.4
+Requires-Dist: websocket-client>=1.9
+Requires-Dist: beautifulsoup4>=4.13
+Requires-Dist: flask<4,>=3.1
+Requires-Dist: apscheduler<4,>=3.11
+Requires-Dist: pyyaml>=6.0.3
 Requires-Dist: tomli>=2.0; python_version < "3.11"
 Provides-Extra: dev
-Requires-Dist: pytest>=7; extra == "dev"
-Requires-Dist: pytest-mock; extra == "dev"
-Requires-Dist: pytest-timeout; extra == "dev"
-Requires-Dist: pytest-socket; extra == "dev"
-Requires-Dist: pytest-env>=1.1; extra == "dev"
-Requires-Dist: requests; extra == "dev"
-Requires-Dist: pytest-asyncio>=0.23; extra == "dev"
-Requires-Dist: hypothesis>=6.0; extra == "dev"
+Requires-Dist: pytest>=8.4; extra == "dev"
+Requires-Dist: pytest-mock>=3.15; extra == "dev"
+Requires-Dist: pytest-timeout>=2.4; extra == "dev"
+Requires-Dist: pytest-socket>=0.7; extra == "dev"
+Requires-Dist: pytest-env>=1.6; extra == "dev"
+Requires-Dist: pytest-asyncio<2,>=1.1; extra == "dev"
+Requires-Dist: pytest-xdist>=3.6; extra == "dev"
+Requires-Dist: hypothesis>=6.151; extra == "dev"
 Requires-Dist: radon==6.0.1; extra == "dev"
+Requires-Dist: mypy>=1.8; extra == "dev"
+Provides-Extra: dev-webwright
+Requires-Dist: webwright==0.0.7; extra == "dev-webwright"

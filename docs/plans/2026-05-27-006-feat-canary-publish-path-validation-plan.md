@@ -1,7 +1,8 @@
 ---
 title: "feat: Canary Phase 2 — advisory forward-path drift from the adapter link-attr signal"
 type: feat
-status: active
+status: completed
+shipped: 101159e5 (#282)
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-canary-phase2-publish-path-validation-requirements.md
 claims: {}

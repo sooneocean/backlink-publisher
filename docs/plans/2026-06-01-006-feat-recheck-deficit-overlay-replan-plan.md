@@ -1,7 +1,8 @@
 ---
 title: "feat: Recheck-verdict deficit-overlay — close the recheck→re-plan loop (read-only)"
 type: feat
-status: active
+status: completed
+shipped: aa0464b9 (#357)
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/brainstorms/2026-06-01-recheck-ledger-liveness-writeback-requirements.md
