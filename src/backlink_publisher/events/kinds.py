@@ -50,6 +50,11 @@ IMAGE_GEN_INVOKED: Final = "image_gen_invoked"
 IMAGE_GEN_CAPPED: Final = "image_gen_capped"
 IMAGE_GEN_DISABLED_AUTO: Final = "image_gen_disabled_auto"
 CITATION_OBSERVED: Final = "citation.observed"
+#: Post-publish backlink re-verification verdict (Plan 2026-05-29-004). Written
+#: directly by the ``recheck-backlinks`` CLI via ``EventStore.append`` — NOT
+#: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
+#: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
+LINK_RECHECKED: Final = "link.rechecked"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -70,6 +75,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_CAPPED,
         IMAGE_GEN_DISABLED_AUTO,
         CITATION_OBSERVED,
+        LINK_RECHECKED,
     }
 )
 
@@ -120,6 +126,10 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # share/dashboard reader needs to make sense of the row — the citation
     # verdict tier, the engine that produced it, and the query that was probed.
     CITATION_OBSERVED: frozenset({"verdict", "engine", "query"}),
+    # The verdict is the load-bearing field every reader (decay counts, age
+    # cursor) needs; target identity travels in the events.db first-class
+    # columns (target_url/host/article_id), not the floor.
+    LINK_RECHECKED: frozenset({"verdict"}),
 }
 
 

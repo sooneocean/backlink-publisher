@@ -5,8 +5,28 @@ import json
 import logging
 import os
 import stat
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+
+#: All token-FILE-backed credential platforms, in scan order. Single source of
+#: truth for both the run-start baseline snapshot and the per-row drift re-check.
+#: Deliberately a SUBSET of the adapter registry — platforms that authenticate by
+#: browser session or paste-blob (e.g. livejournal, mastodon, rentry, substack,
+#: telegraph, txtfyi, velog) keep no token_rev file, so there is nothing to
+#: drift-check. Add an entry here whenever a NEW platform gains a save_*_token.
+_TOKEN_FILES: list[tuple[str, str]] = [
+    ("blogger", "blogger-token.json"),
+    ("medium", "medium-token.json"),
+    ("ghpages", "ghpages-token.json"),
+    ("notion", "notion-token.json"),
+    ("devto", "devto-token.json"),
+    ("wordpresscom", "wordpresscom-token.json"),
+    ("hashnode", "hashnode-token.json"),
+    ("writeas", "writeas-token.json"),
+    ("tumblr", "tumblr-credentials.json"),
+    ("linkedin", "linkedin-token.json"),
+]
 
 
 def _resolve_config_dir():
@@ -19,21 +39,20 @@ def _resolve_config_dir():
 _log = logging.getLogger(__name__)
 
 
-def snapshot_token_revs() -> dict[str, int]:
-    """Capture the current token_rev for all known credential files."""
+def snapshot_token_revs(platforms: Iterable[str] | None = None) -> dict[str, int]:
+    """Capture the current token_rev for credential files.
+
+    ``platforms`` limits the scan to the named platforms — pass it for the
+    per-row drift re-check so it reads only the few files already bound at
+    run-start instead of opening+parsing all ten every row (the publish
+    hot-loop did 10xN reads otherwise). ``None`` (the default, used for the
+    run-start baseline) scans every known file. An empty iterable scans none.
+    """
+    wanted = None if platforms is None else set(platforms)
     revs = {}
-    for plat, filename in [
-        ("blogger", "blogger-token.json"),
-        ("medium", "medium-token.json"),
-        ("ghpages", "ghpages-token.json"),
-        ("notion", "notion-token.json"),
-        ("devto", "devto-token.json"),
-        ("wordpresscom", "wordpresscom-token.json"),
-        ("hashnode", "hashnode-token.json"),
-        ("writeas", "writeas-token.json"),
-        ("tumblr", "tumblr-credentials.json"),
-        ("linkedin", "linkedin-token.json"),
-    ]:
+    for plat, filename in _TOKEN_FILES:
+        if wanted is not None and plat not in wanted:
+            continue
         token = _load_token(None, filename)
         if token:
             revs[plat] = token.get("token_rev", 0)

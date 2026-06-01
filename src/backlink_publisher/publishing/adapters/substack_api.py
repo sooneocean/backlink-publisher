@@ -35,8 +35,10 @@ def _load_cookies(config: Config) -> dict[str, str]:
         )
     try:
         raw = json.loads(cred_file.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        raise DependencyError(f"Cannot read Substack credentials: {exc}") from None
+    except (json.JSONDecodeError, OSError):
+        raise DependencyError(
+            "Cannot read Substack credentials: file missing, corrupt, or unreadable"
+        ) from None
 
     cookie_list = raw.get("cookies", [])
     if not isinstance(cookie_list, list):

@@ -234,3 +234,87 @@ def test_transition_expect_from_match_succeeds(store):
     store.transition(key, "uncertain")
     store.transition(key, "done", live_url="u", expect_from=("uncertain",))
     assert store.get(key).state == "done"
+
+
+# --------------------------------------------------------------------------- #
+# get_many: single-connection batch read (the reconciler hot path)
+# --------------------------------------------------------------------------- #
+def _count_connects(store, monkeypatch):
+    """Spy on ``_connect_raw`` and return a mutable counter dict."""
+    calls = {"n": 0}
+    orig = store._connect_raw
+
+    def spy():
+        calls["n"] += 1
+        return orig()
+
+    monkeypatch.setattr(store, "_connect_raw", spy)
+    return calls
+
+
+def test_get_many_returns_present_keys_and_omits_absent(store):
+    a = _key(target="https://money.example/a")
+    b = _key(target="https://money.example/b")
+    c = _key(target="https://money.example/c")  # never written
+    store.seed(a, "done", live_url="https://blogger.com/p/a")
+    store.intent_write(b)  # stays attempting
+
+    out = store.get_many([a, b, c])
+
+    assert set(out) == {a.as_tuple(), b.as_tuple()}  # absent key c omitted
+    assert out[a.as_tuple()].state == "done"
+    assert out[b.as_tuple()].state == "attempting"
+
+
+def test_get_many_matches_per_key_get(store):
+    """Each batch entry must equal what get() returns for that key."""
+    a = _key(target="https://money.example/a")
+    store.seed(a, "done", live_url="https://blogger.com/p/a")
+    out = store.get_many([a])
+    assert out[a.as_tuple()] == store.get(a)
+
+
+def test_get_many_empty_input_returns_empty_without_connecting(store, monkeypatch):
+    calls = _count_connects(store, monkeypatch)
+    assert store.get_many([]) == {}
+    assert calls["n"] == 0  # no DB touched for an empty batch
+
+
+def test_get_many_dedups_repeated_keys(store):
+    a = _key(target="https://money.example/a")
+    store.seed(a, "done")
+    # Second key canonicalizes to the same tuple (trailing slash + host case).
+    variant = _key(target="https://MONEY.example/a/")
+    out = store.get_many([a, variant])
+    assert set(out) == {a.as_tuple()}
+
+
+def test_get_many_opens_one_connection_for_many_keys(store, monkeypatch):
+    """The whole point: N keys -> 1 connection, not N (the reconciler regression
+    guard). Per-key get() would open one connection each."""
+    keys = []
+    for i in range(5):
+        k = _key(target=f"https://money.example/p{i}")
+        store.seed(k, "done")
+        keys.append(k)
+
+    calls = _count_connects(store, monkeypatch)  # count only the batch read
+    out = store.get_many(keys)
+
+    assert len(out) == 5
+    assert calls["n"] == 1
+
+
+def test_get_many_distinguishes_account_dimension(store):
+    """Same platform+target but different account are distinct keys — the batch
+    SELECT must include the account column, not collapse the two."""
+    a = _key(account="acct-1")
+    b = _key(account="acct-2")
+    store.seed(a, "done")
+    store.intent_write(b)  # attempting
+
+    out = store.get_many([a, b])
+
+    assert out[a.as_tuple()].state == "done"
+    assert out[b.as_tuple()].state == "attempting"
+    assert a.as_tuple() != b.as_tuple()  # account is part of the dict key

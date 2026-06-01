@@ -64,7 +64,7 @@ If this invariant breaks, a row was silently dropped — investigate immediately
 | Field | Healthy signal | Investigate if... |
 |-------|---------------|------------------|
 | `skipped_already_published` | ≥ 0 | Unexpectedly large; suggests duplicate input |
-| `held_uncertain` | 0 | > 0 with `DEDUP_ENFORCE=1` — a concurrent run may be stalled. Wait 10 min and re-run. |
+| `held_uncertain` | 0 | > 0 with `DEDUP_ENFORCE=1` — either a concurrent run holds the key (wait ~10 min and re-run), OR a prior run crashed mid-dispatch (SIGKILL/OOM) and the key was promoted to `uncertain` (the post may already be live). For the crash case, re-running will NOT clear it — run `publish-backlinks --list-uncertain` to inspect, verify whether the post is live, then `publish-backlinks --adjudicate-uncertain <platform> <target_url> --to (succeeded\|failed) --reason <text>` and re-run `--resume`. |
 | `dispatched` | = total input rows (first run) | < expected — some rows were silently filtered |
 | `skipped_canary` | 0 | > 0 — at least one platform has `hard_skip=true` and is quarantined. See `canary-targets` runbook. |
 

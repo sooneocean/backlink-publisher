@@ -223,6 +223,41 @@ def _probe_session_alive(session: requests.Session) -> tuple[bool, str]:
 
 # ── Cookie loading ─────────────────────────────────────────────────────────────
 
+
+def _extract_tokens_from_origins(origins: object, cookies: dict[str, str]) -> None:
+    """Mine velog auth tokens from browser-captured localStorage origins (mutates *cookies*).
+
+    Handles the Playwright storage-state shape where auth lives in
+    localStorage rather than the cookies list.  No-ops on non-list input.
+    """
+    if not isinstance(origins, list):
+        return
+    for origin in origins:
+        if not isinstance(origin, dict):
+            continue
+        if "velog.io" not in str(origin.get("origin", "")):
+            continue
+        local_storage = origin.get("localStorage", [])
+        if not isinstance(local_storage, list):
+            continue
+        for entry in local_storage:
+            if not isinstance(entry, dict):
+                continue
+            key = str(entry.get("name", ""))
+            val = str(entry.get("value", ""))
+            if key == "account":
+                try:
+                    account = json.loads(val)
+                except Exception:
+                    continue
+                for token_key in ("access_token", "refresh_token", "token"):
+                    token_val = account.get(token_key)
+                    if token_val and token_key not in cookies:
+                        cookies[token_key] = str(token_val)
+            elif key in {"access_token", "refresh_token", "token"} and val and key not in cookies:
+                cookies[key] = val
+
+
 def _load_cookies(cookies_path: Path) -> dict[str, str]:
     """Load velog cookies from *cookies_path* (must be 0600).
 
@@ -271,32 +306,7 @@ def _load_cookies(cookies_path: Path) -> dict[str, str]:
     # Preserve compatibility with both shapes by mining the captured
     # storage_state payload for an account token if needed.
     if not cookies or "access_token" not in cookies:
-        origins = raw.get("origins", [])
-        if isinstance(origins, list):
-            for origin in origins:
-                if not isinstance(origin, dict):
-                    continue
-                if "velog.io" not in str(origin.get("origin", "")):
-                    continue
-                local_storage = origin.get("localStorage", [])
-                if not isinstance(local_storage, list):
-                    continue
-                for entry in local_storage:
-                    if not isinstance(entry, dict):
-                        continue
-                    key = str(entry.get("name", ""))
-                    val = str(entry.get("value", ""))
-                    if key == "account":
-                        try:
-                            account = json.loads(val)
-                        except Exception:
-                            continue
-                        for token_key in ("access_token", "refresh_token", "token"):
-                            token_val = account.get(token_key)
-                            if token_val and token_key not in cookies:
-                                cookies[token_key] = str(token_val)
-                    elif key in {"access_token", "refresh_token", "token"} and val and key not in cookies:
-                        cookies[key] = val
+        _extract_tokens_from_origins(raw.get("origins", []), cookies)
 
     if not cookies:
         raise DependencyError(
@@ -554,17 +564,28 @@ class VelogGraphQLAdapter(Publisher):
                     raise _TransientHTTPError(resp.status_code)
                 return resp
 
+            # The WritePost mutation is a NON-IDEMPOTENT create. A network error
+            # (Timeout/ConnectionError) after the request left the client is
+            # ambiguous — velog may have already created the post — so it is NOT
+            # retried (would duplicate). Only 429 (a pre-create rate-limit
+            # rejection, surfaced as _TransientHTTPError) is safe to retry.
+            # Mirrors medium_api / http_form_post "create exactly once".
             try:
                 resp = retry_transient_call(
                     _do_post,
-                    is_retryable=lambda exc: isinstance(
-                        exc, (requests.Timeout, requests.ConnectionError, _TransientHTTPError)
-                    ),
+                    is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
                     adapter="velog-graphql",
                 )
             except requests.RequestException:
                 raise ExternalServiceError(
                     "velog GraphQL endpoint unreachable"
+                ) from None
+            except _TransientHTTPError as exc:
+                # 429 retried to exhaustion. retry_transient_call re-raises the
+                # _TransientHTTPError (not a RequestException), so it would
+                # otherwise escape uncaught — mirror medium_api and convert it.
+                raise ExternalServiceError(
+                    f"velog writePost returned HTTP {exc.status_code} after retries"
                 ) from None
 
             if not resp.ok:
@@ -591,16 +612,21 @@ class VelogGraphQLAdapter(Publisher):
                     id=article_id,
                 ))
                 try:
+                    # Same non-idempotent-create rule as the first attempt: only
+                    # 429 is retryable; a network error is not (would duplicate).
                     resp2 = retry_transient_call(
                         _do_post,
-                        is_retryable=lambda exc: isinstance(
-                            exc, (requests.Timeout, requests.ConnectionError, _TransientHTTPError)
-                        ),
+                        is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
                         adapter="velog-graphql",
                     )
                 except requests.RequestException:
                     raise ExternalServiceError(
                         "velog GraphQL endpoint unreachable on retry"
+                    ) from None
+                except _TransientHTTPError as exc:
+                    raise ExternalServiceError(
+                        f"velog writePost returned HTTP {exc.status_code} "
+                        "after retries (on retry)"
                     ) from None
 
                 if not resp2.ok:

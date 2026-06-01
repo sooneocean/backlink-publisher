@@ -32,9 +32,10 @@ def test_kinds_set_is_the_15_documented_kinds():
             "image_gen_capped",
             "image_gen_disabled_auto",
             "citation.observed",
+            "link.rechecked",
         }
     )
-    assert len(kinds.KINDS) == 15
+    assert len(kinds.KINDS) == 16
 
 
 @pytest.mark.parametrize(

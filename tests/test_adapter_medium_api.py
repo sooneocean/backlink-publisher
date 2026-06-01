@@ -151,19 +151,26 @@ def test_me_429_retried_and_recovers(mock_post, mock_get, mock_sleep):
     mock_sleep.assert_called_once()
 
 
+@pytest.mark.parametrize("exc_name", ["Timeout", "ConnectionError"])
 @patch("backlink_publisher.publishing.adapters.retry.time.sleep")
 @patch("backlink_publisher.publishing.adapters.medium_api.http_get")
 @patch("backlink_publisher.publishing.adapters.medium_api.http_post")
-def test_posts_connection_error_retried(mock_post, mock_get, mock_sleep):
-    """/posts ConnectionError triggers retry; second call succeeds."""
+def test_posts_network_error_not_retried(mock_post, mock_get, mock_sleep, exc_name):
+    """/posts is a non-idempotent create — a Timeout/ConnectionError may mean the
+    post was already created server-side, so it is NEVER retried (would duplicate).
+    The create-POST is attempted exactly once; the error surfaces as
+    ExternalServiceError for the resume/dedup layer to adjudicate. Mirrors
+    test_adapter_http_form_post.py::test_submit_form_does_not_retry_nonidempotent_post."""
     import requests as req
     mock_get.return_value = make_mock_get()
-    mock_post.side_effect = [req.ConnectionError("network"), make_mock_post()]
+    # The 2nd response is the duplicate that MUST NOT be sent.
+    mock_post.side_effect = [getattr(req, exc_name)("net"), make_mock_post()]
 
     adapter = MediumAPIAdapter()
-    result = adapter.publish(PAYLOAD, mode="draft", config=CONFIG_WITH_TOKEN)
-    assert result.status == "drafted"
-    mock_sleep.assert_called_once()
+    with pytest.raises(ExternalServiceError, match="unreachable"):
+        adapter.publish(PAYLOAD, mode="draft", config=CONFIG_WITH_TOKEN)
+    assert mock_post.call_count == 1  # create POST sent exactly once
+    mock_sleep.assert_not_called()
 
 
 @patch("backlink_publisher.publishing.adapters.retry.time.sleep")
@@ -187,10 +194,11 @@ def test_posts_401_not_retried(mock_post, mock_get, mock_sleep):
 @patch("backlink_publisher.publishing.adapters.medium_api.http_get")
 @patch("backlink_publisher.publishing.adapters.medium_api.http_post")
 def test_user_id_not_refetched_on_posts_retry(mock_post, mock_get, mock_sleep):
-    """user_id from /me is cached — /me called once even on /posts retry."""
-    import requests as req
+    """user_id from /me is cached — /me called once even on a /posts retry.
+    Drives the retry via 429 (a pre-create rate-limit rejection, the only
+    retryable create-POST case) rather than a network error."""
     mock_get.return_value = make_mock_get()
-    mock_post.side_effect = [req.Timeout("slow"), make_mock_post()]
+    mock_post.side_effect = [make_mock_post(status=429), make_mock_post()]
 
     adapter = MediumAPIAdapter()
     adapter.publish(PAYLOAD, mode="draft", config=CONFIG_WITH_TOKEN)

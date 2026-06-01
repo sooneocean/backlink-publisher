@@ -274,6 +274,26 @@ class TestEmbedBannerErrorPaths:
             with pytest.raises(BannerUploadError, match="PUT returned HTTP 500"):
                 GitHubPagesAPIAdapter().embed_banner(artifact, "alt")
 
+    def test_put_5xx_error_omits_response_body(self, tmp_path, monkeypatch):
+        """Banner PUT failure surfaces the status code but must not leak the raw
+        GitHub response body into the BannerUploadError message."""
+        _isolated_config(tmp_path, monkeypatch)
+        artifact = _write_banner(tmp_path)
+        marker = "LEAK-MARKER-banner-response-body"
+
+        with patch(
+            "backlink_publisher.publishing.adapters.ghpages.http_get",
+            return_value=_missing_get(),
+        ), patch(
+            "backlink_publisher.publishing.adapters.ghpages.http_put",
+            return_value=_err_response(500, marker),
+        ):
+            with pytest.raises(BannerUploadError) as exc:
+                GitHubPagesAPIAdapter().embed_banner(artifact, "alt")
+        msg = str(exc.value)
+        assert "500" in msg
+        assert marker not in msg
+
     def test_put_returns_422_raises_eventual_consistency_error(self, tmp_path, monkeypatch):
         _isolated_config(tmp_path, monkeypatch)
         artifact = _write_banner(tmp_path)

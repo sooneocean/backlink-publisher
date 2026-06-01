@@ -25,6 +25,13 @@ JITTER_FACTOR: float = 0.15
 # already created server-side (e.g., server timeout after POST succeeded but before
 # sending response). Retrying without deduplication risks duplicate posts.
 # See: https://sophiabits.com/blog/you-cant-always-retry-a-5xx
+#
+# INVARIANT — do NOT add 5xx (or any post-create-ambiguous status) to this set.
+# Non-idempotent create POSTs (medium_api, velog_graphql, http_form_post) gate
+# their retry on `_TransientHTTPError`, which is raised ONLY for statuses in this
+# set. They rely on every member being a PRE-create rejection (like 429) that the
+# server returns before creating anything. Adding 5xx here would silently make
+# those creates retry an ambiguous failure → duplicate published posts.
 RETRYABLE_HTTP_STATUSES: frozenset[int] = frozenset({429})
 
 

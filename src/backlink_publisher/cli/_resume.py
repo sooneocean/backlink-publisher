@@ -39,7 +39,7 @@ from ._publish_helpers import (
     _record_publish_path,
     _sleep_with_throttle,
 )
-from ._dedup_gate import gate, record_done, record_failure
+from ._dedup_gate import gate, is_crashed_in_flight, record_done, record_failure
 
 
 def item_to_publish_output(item: dict[str, Any]) -> dict[str, Any]:
@@ -153,7 +153,8 @@ def _revalidate_checkpoint_items(run_id: str, ckpt: dict[str, Any], config: Any)
 
 
 def _select_resume_items(ckpt: dict[str, Any]) -> list[dict[str, Any]]:
-    """Phase 3: items still to process (pending/failed minus retro/policy-skip); warn on 5xx."""
+    """Phase 3: items still to process (pending/failed minus retro/policy-skip); warn on
+    5xx and on crashed-in-flight (stale-attempting) rows that may already be live."""
     from .. import checkpoint
 
     to_process = [
@@ -166,11 +167,38 @@ def _select_resume_items(ckpt: dict[str, Any]) -> list[dict[str, Any]]:
         )
     ]
 
+    # One shared dedup store for the per-item crashed-in-flight reads below, so resume
+    # does not reopen a connection per item. None if it can't be opened — then
+    # is_crashed_in_flight falls back per-call and stays observe-safe.
+    try:
+        from ..idempotency import DedupStore
+        dedup_store: Any = DedupStore()
+    except Exception:
+        dedup_store = None
+
+    ckpt_platform = ckpt.get("platform")
     for item in to_process:
+        row = item.get("payload") or {}
+        platform = ckpt_platform or item.get("platform") or row.get("platform", "")
         if item.get("error_class") == "http_5xx":
             print(
                 f"WARNING: item {item['id']} failed with HTTP 5xx — "
-                f"post may already be live on {item['platform']}. Verify before resuming.",
+                f"post may already be live on {platform}. Verify before resuming.",
+                file=sys.stderr,
+            )
+            # http_5xx already carries the "may be live — verify" signal, so the
+            # crashed-in-flight check below would be redundant for it: skip it.
+            continue
+        # A hard crash (SIGKILL/OOM/power loss) mid-dispatch never set an error_class,
+        # so the item stays `pending` and is silent above — but its dedup row is a stale
+        # `attempting`, meaning the post may already be live. Warn with the same guidance
+        # (both observe and enforce). In enforce the gate additionally HOLDS it as
+        # uncertain; observe still dispatches by contract, so this warning is the
+        # operator's signal there.
+        if is_crashed_in_flight(row, platform, store=dedup_store):
+            print(
+                f"WARNING: item {item['id']} was interrupted mid-publish — "
+                f"post may already be live on {platform}. Verify before resuming.",
                 file=sys.stderr,
             )
 
@@ -466,8 +494,24 @@ def _finalize_resume(
             )
         raise SystemExit(0)
     else:
+        # Held-uncertain rows (dedup gate held a stale/crashed-in-flight key this run)
+        # stay `pending` with no error. Surface the adjudication path explicitly so the
+        # operator does not blindly re-run --resume into the same hold forever (mirrors
+        # the fresh seam's exit-3 guidance). Per-item "publish failed" prints only for
+        # rows that actually carry an error, so a held row is no longer mislabeled
+        # "unknown error".
+        if state.dedup_hold_count > 0:
+            print(
+                f"{state.dedup_hold_count} row(s) held by the dedup gate "
+                "(uncertain / crashed-in-flight — a prior run may have already published "
+                "them); adjudicate with --list-uncertain / --adjudicate-uncertain, then "
+                "re-run --resume",
+                file=sys.stderr,
+            )
         for f in still_unfinished:
-            print(f"publish failed: {f.get('error', 'unknown error')}", file=sys.stderr)
+            err = f.get("error")
+            if err:
+                print(f"publish failed: {err}", file=sys.stderr)
         emit_envelope_and_exit(
             "ExternalServiceError",
             4,

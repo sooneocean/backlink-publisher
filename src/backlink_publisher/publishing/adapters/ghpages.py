@@ -165,7 +165,7 @@ def _get_existing_sha(repo: str, branch: str, path: str, token: str) -> str | No
         return None
     if resp.status_code != 200:
         raise ExternalServiceError(
-            f"GitHub GET contents returned HTTP {resp.status_code}: {resp.text[:200]}"
+            f"GitHub GET contents returned HTTP {resp.status_code} — unexpected response"
         )
     body = resp.json()
     return body.get("sha")
@@ -214,9 +214,9 @@ def _put_contents(
         )
     if resp.status_code == 422:
         # Surface a typed signal so publish() knows to fetch sha + retry.
-        raise _ShaRequired(resp.text[:200])
+        raise _ShaRequired(None)
     raise ExternalServiceError(
-        f"GitHub PUT contents returned HTTP {resp.status_code}: {resp.text[:200]}"
+        f"GitHub PUT contents returned HTTP {resp.status_code} — unexpected response"
     )
 
 
@@ -296,9 +296,9 @@ def _put_binary_contents(
     if resp.status_code in (200, 201):
         return resp.json()
     if resp.status_code == 422:
-        raise _ShaRequired(resp.text[:200])
+        raise _ShaRequired(None)
     raise BannerUploadError(
-        f"ghpages banner PUT returned HTTP {resp.status_code}: {resp.text[:200]}"
+        f"ghpages banner PUT returned HTTP {resp.status_code} — unexpected response"
     )
 
 

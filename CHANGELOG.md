@@ -6,6 +6,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- txt.fyi adapter now clears the site's anti-spam dwell-time gate before
+  submitting. `edit.php` rejects POSTs that arrive too soon after the form was
+  served (keyed off the hidden `form_time` field): a sub-second GET→POST — what
+  the adapter did — is treated as a bot and silently tarpitted to a 200 "Thank
+  you for your submission!" page with no redirect and no permalink, so every
+  txt.fyi publish failed with `ExternalServiceError: did not redirect to a
+  published URL after submit`. The adapter now waits a configurable dwell time
+  (`BACKLINK_TXTFYI_SUBMIT_DELAY_SECONDS`, default 4s; the gate cleared by ~3s
+  in 2026-05-29 probing) before the POST, and detects the tarpit page to raise
+  an actionable error (raise the delay) instead of the generic no-redirect one.
 - All three `urllib.request` fetch sites now normalize non-ASCII URLs before
   opening a connection, preventing `'ascii' codec can't encode characters`
   crashes across the full pipeline: `linkcheck.verify.verify_published`

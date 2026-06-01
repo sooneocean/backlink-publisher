@@ -269,6 +269,62 @@ class TestNonAsciiUrls:
         assert captured == ["https://blog.example.com/post/1"]
 
 
+class TestInterstitialRewrittenLinks:
+    """Regression: LiveJournal rewrites outbound ``<a href>`` through
+    ``https://www.livejournal.com/away?to=<url-encoded-target>``.
+
+    Observed live (2026-05-29): a published post with backlink
+    ``https://51acgs.com/comic/117/`` rendered the anchor as
+    ``away?to=https%3A%2F%2F51acgs.com%2Fcomic%2F117`` — URL-encoded AND missing
+    the trailing slash. The old naive ``url in body`` substring scan
+    false-negatived it, demoting a genuinely-live dofollow backlink to
+    ``published_unverified`` and exiting 5 (``InternalError``). The gate now
+    unwraps + canonicalizes, matching the dofollow-canary path.
+    """
+
+    def _lj_body(self, title="51漫畫", away_target="https%3A%2F%2F51acgs.com%2Fcomic%2F117"):
+        return (
+            f"<html><head><title>{title}: redredchen02 — LiveJournal</title></head>"
+            f"<body><h1>{title}</h1>"
+            f'<a href="https://www.livejournal.com/away?to={away_target}" '
+            'rel="noopener noreferrer">link</a></body></html>'
+        )
+
+    def test_away_redirect_with_trailing_slash_mismatch_now_verifies(self):
+        body = self._lj_body()
+        with _mock_get(200, body):
+            result = verify_published(
+                "https://redredchen02.livejournal.com/574.html",
+                title="51漫畫",
+                # required URL HAS the trailing slash; the away-wrapped href does NOT.
+                required_link_urls=["https://51acgs.com/comic/117/"],
+            )
+        assert result.ok is True, f"expected ok=True, got reason={result.reason!r}"
+
+    def test_away_redirect_exact_match_verifies(self):
+        body = self._lj_body(away_target="https%3A%2F%2F51acgs.com%2Fcomic%2F117%2F")
+        with _mock_get(200, body):
+            result = verify_published(
+                "https://redredchen02.livejournal.com/574.html",
+                title="51漫畫",
+                required_link_urls=["https://51acgs.com/comic/117/"],
+            )
+        assert result.ok is True
+
+    def test_genuinely_absent_link_still_fails_with_interstitials_present(self):
+        # An away-wrapped link to a DIFFERENT target must not satisfy the gate.
+        body = self._lj_body(away_target="https%3A%2F%2Fsomeone-else.com%2Fpost")
+        with _mock_get(200, body):
+            result = verify_published(
+                "https://redredchen02.livejournal.com/574.html",
+                title="51漫畫",
+                required_link_urls=["https://51acgs.com/comic/117/"],
+                max_wait=0,
+            )
+        assert result.ok is False
+        assert "required links not found" in result.reason
+
+
 def test_verify_reports_attempt_count_in_reason():
     """Failure reason mentions attempt count."""
     with _mock_get(404, ""):

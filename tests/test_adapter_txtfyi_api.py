@@ -56,6 +56,17 @@ def _mock_response(*, status=200, text="", url="https://txt.fyi/"):
     return resp
 
 
+@pytest.fixture(autouse=True)
+def _zero_submit_delay(monkeypatch):
+    """Neutralize the txt.fyi anti-spam dwell-time wait in unit tests.
+
+    Production waits a few seconds before POSTing (see ``_SUBMIT_DELAY_ENV``);
+    forcing 0 here keeps the mocked-HTTP tests instant. The dwell-time test
+    below ``delenv``s this to exercise the real default.
+    """
+    monkeypatch.setenv("BACKLINK_TXTFYI_SUBMIT_DELAY_SECONDS", "0")
+
+
 # ── happy paths ────────────────────────────────────────────────────────────
 
 
@@ -160,6 +171,64 @@ def test_no_redirect_raises_external_service_error():
     ):
         with pytest.raises(ExternalServiceError, match="did not redirect"):
             TxtfyiFormPostAdapter().publish(_PAYLOAD, mode="publish", config=Config())
+
+
+def test_anti_spam_tarpit_page_raises_actionable_error():
+    """A 200 'Thank you' tarpit (no redirect) → clear anti-spam error, not the
+    generic no-redirect message, so the operator knows to raise the dwell time."""
+    form_resp = _mock_response(text=_FORM_HTML_WITH_TOKENS)
+    submit_resp = _mock_response(
+        url="https://txt.fyi/edit.php",
+        text="<p>Thank you for your submission!<p># Hi\n\nbody echoed back",
+    )
+
+    with mock.patch(f"{_ADAPTER}.fetch_form", return_value=form_resp), mock.patch(
+        f"{_ADAPTER}.submit_form", return_value=submit_resp
+    ):
+        with pytest.raises(ExternalServiceError, match="anti-spam dwell-time"):
+            TxtfyiFormPostAdapter().publish(_PAYLOAD, mode="publish", config=Config())
+
+
+def test_publish_waits_to_clear_anti_spam_gate_before_submit(monkeypatch):
+    """Publish sleeps a positive, gate-clearing dwell time BEFORE submitting."""
+    # Exercise the real default rather than the autouse 0-override.
+    monkeypatch.delenv("BACKLINK_TXTFYI_SUBMIT_DELAY_SECONDS", raising=False)
+    order: list[str] = []
+    form_resp = _mock_response(text=_FORM_HTML_WITH_TOKENS)
+    submit_resp = _mock_response(url="https://txt.fyi/+/ok/")
+
+    with mock.patch(
+        f"{_ADAPTER}.fetch_form", return_value=form_resp
+    ), mock.patch(
+        f"{_ADAPTER}.submit_form",
+        side_effect=lambda *a, **k: (order.append("submit"), submit_resp)[1],
+    ), mock.patch(
+        f"{_ADAPTER}.time.sleep", side_effect=lambda *_: order.append("sleep")
+    ) as mock_sleep, mock.patch(
+        f"{_ADAPTER}.attach_link_verification", return_value={}
+    ):
+        TxtfyiFormPostAdapter().publish(_PAYLOAD, mode="publish", config=Config())
+
+    mock_sleep.assert_called_once()
+    waited = mock_sleep.call_args.args[0]
+    assert waited >= 3.0, f"dwell time {waited}s too short to clear txt.fyi gate"
+    assert order == ["sleep", "submit"], "must wait BEFORE submitting, not after"
+
+
+def test_submit_delay_env_override_respected(monkeypatch):
+    """The dwell time is operator-tunable via env (here: a custom 9s)."""
+    monkeypatch.setenv("BACKLINK_TXTFYI_SUBMIT_DELAY_SECONDS", "9")
+    form_resp = _mock_response(text=_FORM_HTML_WITH_TOKENS)
+    submit_resp = _mock_response(url="https://txt.fyi/+/ok/")
+
+    with mock.patch(f"{_ADAPTER}.fetch_form", return_value=form_resp), mock.patch(
+        f"{_ADAPTER}.submit_form", return_value=submit_resp
+    ), mock.patch(f"{_ADAPTER}.time.sleep") as mock_sleep, mock.patch(
+        f"{_ADAPTER}.attach_link_verification", return_value={}
+    ):
+        TxtfyiFormPostAdapter().publish(_PAYLOAD, mode="publish", config=Config())
+
+    mock_sleep.assert_called_once_with(9.0)
 
 
 def test_anti_bot_challenge_on_fetch_form_propagates():

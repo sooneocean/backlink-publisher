@@ -38,6 +38,7 @@ import os
 import secrets as _secrets
 import sqlite3
 import time
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -318,6 +319,48 @@ class DedupStore:
 
         return _retry_sqlite(_op)
 
+    def get_many(
+        self, keys: Iterable[DedupKey]
+    ) -> dict[tuple[str, str, str], DedupRecord]:
+        """Batch point-read: look up every key in ``keys`` over a SINGLE connection.
+
+        Semantically identical to calling :meth:`get` once per key, but opens one
+        connection for the whole batch instead of one per key. The read-time
+        reconciler cross-references every pending/failed checkpoint item (and every
+        published history URL) against the dedup store; a fresh connection per item
+        — each re-running the WAL/synchronous PRAGMAs, the ``CREATE TABLE IF NOT
+        EXISTS`` DDL, and the WAL/SHM sidecar re-chmod — dominated that pass.
+        Batching collapses N connect/teardown cycles into one.
+
+        Returns a dict keyed by ``key.as_tuple()`` — a ``(platform, account,
+        target_url)`` tuple; build lookups with ``key.as_tuple()`` rather than a
+        hand-rolled tuple so the field order can never drift. Keys with no row are
+        simply absent from the result (mirroring :meth:`get` returning ``None``).
+        Duplicate keys collapse to a single lookup. An empty ``keys`` opens no
+        connection and returns ``{}``. The input iterable is materialized into a
+        set BEFORE the ``_retry_sqlite`` wrapper, so a retried batch (on
+        ``database is locked``) re-reads from that set, never an exhausted
+        generator; reads are idempotent so re-running SELECTs is harmless.
+        """
+        wanted = {k.as_tuple() for k in keys}
+        if not wanted:
+            return {}
+
+        def _op() -> dict[tuple[str, str, str], DedupRecord]:
+            out: dict[tuple[str, str, str], DedupRecord] = {}
+            with self.connect() as conn:
+                for tup in wanted:
+                    row = conn.execute(
+                        f"SELECT {_COLS} FROM dedup_keys "
+                        "WHERE platform = ? AND account = ? AND target_url = ?",
+                        tup,
+                    ).fetchone()
+                    if row is not None:
+                        out[tup] = _row_to_record(row)
+            return out
+
+        return _retry_sqlite(_op)
+
     def list_by_state(
         self, state: State, *, platform: str | None = None
     ) -> list[DedupRecord]:
@@ -375,7 +418,10 @@ class DedupStore:
         * ``done``                  -> ``skip``   (already published).
         * ``uncertain``             -> ``hold``   (held; surface, do not publish).
         * live ``attempting``       -> ``hold``   (another run owns the dispatch).
-        * stale ``attempting``      -> reclaim to ``attempting`` (new owner) -> ``dispatch``.
+        * stale ``attempting``      -> promote to ``uncertain`` -> ``hold`` (a run
+          died mid-dispatch; the post may already be live, so re-dispatch would
+          risk a duplicate — adjudicate, do not auto-republish). ``force``
+          overrides: reclaim to ``attempting`` -> ``dispatch``.
         * ``failed`` (re-publishable)-> reclaim to ``attempting`` -> ``dispatch``.
         * absent                    -> INSERT ``attempting`` -> ``dispatch``.
 
@@ -428,11 +474,30 @@ class DedupStore:
                 if rec.state == "failed":
                     _claim(conn, exists=True)
                     return GateDecision("dispatch", rec)
-                # attempting: reclaim only if the owning run is gone (R3 crash /
-                # lease-takeover topology); a live owner holds.
+                # attempting: a LIVE owner holds (another run owns the dispatch).
+                # A STALE attempting (owning run died mid-dispatch, or aged past
+                # the TTL backstop) is AMBIGUOUS: record_intent writes `attempting`
+                # BEFORE the post is created, so a crash leaves `attempting` whether
+                # or not the post landed. Re-dispatching could DUPLICATE an
+                # already-live post, so promote the stale row to `uncertain` and
+                # HOLD it for --adjudicate-uncertain (same may-have-committed
+                # treatment as the http_5xx hold). A manifest `force` still
+                # overrides, reclaiming + dispatching like a forced `uncertain`.
                 if self.is_stale_attempting(rec, now=now, ttl_s=ttl_s):
-                    _claim(conn, exists=True)
-                    return GateDecision("dispatch", rec)
+                    if force:
+                        _claim(conn, exists=True)
+                        return GateDecision("dispatch", rec)
+                    # Clear the dead run's ownership when promoting: the row is no
+                    # longer owned by any live run, and a leftover dead owner_pid /
+                    # owner_run_id would mislead --list-uncertain and the adjudication
+                    # audit trail. (run_id is kept as provenance of the originating run.)
+                    conn.execute(
+                        "UPDATE dedup_keys SET state = 'uncertain', owner_pid = NULL, "
+                        "owner_run_id = NULL, updated_at = ? "
+                        "WHERE platform = ? AND account = ? AND target_url = ?",
+                        (_now(), *key.as_tuple()),
+                    )
+                    return GateDecision("hold", rec)
                 return GateDecision("hold", rec)
 
         return _retry_sqlite(_op)

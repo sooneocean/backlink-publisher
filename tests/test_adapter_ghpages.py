@@ -520,3 +520,68 @@ class TestGhpagesRegistration:
     def test_ghpages_appears_in_registered_platforms(self):
         from backlink_publisher.publishing.registry import registered_platforms
         assert "ghpages" in registered_platforms()
+
+
+# ───────────────────────────────────────────────────────────────────────────────
+# Error messages must not leak the raw GitHub API response body
+# ───────────────────────────────────────────────────────────────────────────────
+
+class TestGhpagesErrorNoResponseLeak:
+    """A failed GitHub API call surfaces the status code for ops triage but must
+    NOT echo the raw response body — it can carry tokens, internal paths, or
+    rate-limit detail that does not belong in an exception message or log."""
+
+    _MARKER = "LEAK-MARKER-secret-response-body"
+
+    def _resp(self, status: int):
+        resp = MagicMock()
+        resp.status_code = status
+        resp.headers = {}
+        resp.text = f'{{"message":"{self._MARKER}"}}'
+        resp.json.return_value = {"message": self._MARKER}
+        return resp
+
+    def test_get_existing_sha_error_omits_response_body(self):
+        from backlink_publisher.publishing.adapters.ghpages import _get_existing_sha
+
+        with patch(
+            "backlink_publisher.publishing.adapters.ghpages.http_get",
+            return_value=self._resp(500),
+        ):
+            with pytest.raises(ExternalServiceError) as exc:
+                _get_existing_sha("owner/repo", "gh-pages", "_posts/x.md", "ghp_tok")
+        msg = str(exc.value)
+        assert "500" in msg
+        assert self._MARKER not in msg
+
+    def test_put_contents_error_omits_response_body(self):
+        from backlink_publisher.publishing.adapters.ghpages import _put_contents
+
+        with patch(
+            "backlink_publisher.publishing.adapters.ghpages.http_put",
+            return_value=self._resp(500),
+        ):
+            with pytest.raises(ExternalServiceError) as exc:
+                _put_contents(
+                    "owner/repo", "gh-pages", "_posts/x.md", "# md", "msg", "ghp_tok"
+                )
+        msg = str(exc.value)
+        assert "500" in msg
+        assert self._MARKER not in msg
+
+    def test_put_contents_422_sha_required_carries_no_body(self):
+        from backlink_publisher.publishing.adapters.ghpages import (
+            _put_contents,
+            _ShaRequired,
+        )
+
+        with patch(
+            "backlink_publisher.publishing.adapters.ghpages.http_put",
+            return_value=self._resp(422),
+        ):
+            with pytest.raises(_ShaRequired) as exc:
+                _put_contents(
+                    "owner/repo", "gh-pages", "_posts/x.md", "# md", "msg", "ghp_tok"
+                )
+        assert exc.value.args[0] is None
+        assert self._MARKER not in str(exc.value)

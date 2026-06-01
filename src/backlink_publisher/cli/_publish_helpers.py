@@ -219,7 +219,13 @@ def _check_token_drift(initial_revs: dict[str, int]) -> None:
     from backlink_publisher.config import snapshot_token_revs
     from backlink_publisher._util.errors import emit_error
 
-    current = snapshot_token_revs()
+    # Re-scan only the platforms present at run-start: the comparison below
+    # only inspects keys in initial_revs, so reading the other (unbound) token
+    # files every row was pure waste (10xN opens+parses on the publish path).
+    # A credential file CREATED mid-run is intentionally not tracked — it was
+    # never in initial_revs; only rotation/revocation of an already-bound
+    # platform aborts the run.
+    current = snapshot_token_revs(initial_revs.keys())
     for plat, init_rev in initial_revs.items():
         if current.get(plat, 0) != init_rev:
             emit_error(

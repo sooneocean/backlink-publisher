@@ -27,10 +27,12 @@ from backlink_publisher._util.errors import (
     AuthExpiredError,
     ContentRejectedError,
     DependencyError,
+    ExternalServiceError,
 )
 from backlink_publisher.publishing.adapters.velog_graphql import (
     VelogGraphQLAdapter,
     _effective_cap,
+    _extract_tokens_from_origins,
     _load_cookies,
     _mask_cookies,
     _probe_session_alive,
@@ -127,6 +129,110 @@ class TestLoadCookies:
         os.chmod(p, 0o600)
         with pytest.raises(DependencyError, match="velog-login"):
             _load_cookies(p)
+
+
+# ── _extract_tokens_from_origins ─────────────────────────────────────────────
+
+
+class TestExtractTokensFromOrigins:
+    """Unit tests for the extracted localStorage-mining helper."""
+
+    def _velog_origin(self, storage_entries: list) -> dict:
+        return {"origin": "https://velog.io", "localStorage": storage_entries}
+
+    def test_non_list_origins_is_noop(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins(None, cookies)
+        assert cookies == {}
+
+    def test_non_list_origins_string_is_noop(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins("not-a-list", cookies)
+        assert cookies == {}
+
+    def test_non_dict_origin_entries_skipped(self):
+        cookies: dict = {}
+        _extract_tokens_from_origins(["not-a-dict", 42], cookies)
+        assert cookies == {}
+
+    def test_non_velog_origin_skipped(self):
+        cookies: dict = {}
+        origin = {"origin": "https://other.com", "localStorage": [
+            {"name": "access_token", "value": "at123"},
+        ]}
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_non_list_localstorage_skipped(self):
+        cookies: dict = {}
+        origin = {"origin": "https://velog.io", "localStorage": "bad"}
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_non_dict_entry_in_localstorage_skipped(self):
+        cookies: dict = {}
+        origin = self._velog_origin(["not-a-dict", 99])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_account_key_parses_access_and_refresh_token(self):
+        cookies: dict = {}
+        account_json = json.dumps({"access_token": "at", "refresh_token": "rt"})
+        origin = self._velog_origin([{"name": "account", "value": account_json}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {"access_token": "at", "refresh_token": "rt"}
+
+    def test_account_key_with_invalid_json_skipped(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "account", "value": "{bad json"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_account_key_does_not_overwrite_existing_token(self):
+        cookies: dict = {"access_token": "existing"}
+        account_json = json.dumps({"access_token": "from-storage", "refresh_token": "rt"})
+        origin = self._velog_origin([{"name": "account", "value": account_json}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies["access_token"] == "existing"
+        assert cookies["refresh_token"] == "rt"
+
+    def test_direct_access_token_entry(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "access_token", "value": "direct-at"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {"access_token": "direct-at"}
+
+    def test_direct_token_does_not_overwrite_existing(self):
+        cookies: dict = {"access_token": "existing"}
+        origin = self._velog_origin([{"name": "access_token", "value": "new"}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies["access_token"] == "existing"
+
+    def test_empty_direct_token_value_not_written(self):
+        cookies: dict = {}
+        origin = self._velog_origin([{"name": "access_token", "value": ""}])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_irrelevant_localstorage_keys_ignored(self):
+        cookies: dict = {}
+        origin = self._velog_origin([
+            {"name": "theme", "value": "dark"},
+            {"name": "lang", "value": "ko"},
+        ])
+        _extract_tokens_from_origins([origin], cookies)
+        assert cookies == {}
+
+    def test_multiple_origins_only_velog_processed(self):
+        cookies: dict = {}
+        origins = [
+            {"origin": "https://github.com", "localStorage": [
+                {"name": "access_token", "value": "gh-token"},
+            ]},
+            self._velog_origin([{"name": "access_token", "value": "velog-at"}]),
+        ]
+        _extract_tokens_from_origins(origins, cookies)
+        assert cookies == {"access_token": "velog-at"}
 
 
 # ── _effective_cap ────────────────────────────────────────────────────────────
@@ -297,6 +403,16 @@ def _mock_null_response():
     return resp
 
 
+def _mock_429_response():
+    """HTTP 429 — a pre-create rate-limit rejection. _do_post raises
+    _TransientHTTPError(429) for this, which IS retryable (the server rejected
+    the request before creating anything)."""
+    resp = MagicMock()
+    resp.ok = False
+    resp.status_code = 429
+    return resp
+
+
 class TestVelogGraphQLAdapterPublish:
     def _patch_lock_and_count(self, tmp_path):
         """Context manager patches that bypass fcntl locking for tests."""
@@ -363,6 +479,92 @@ class TestVelogGraphQLAdapterPublish:
 
         assert result.status == "published"
         assert sess.post.call_count == 2
+
+    @pytest.mark.parametrize("exc_name", ["Timeout", "ConnectionError"])
+    def test_create_network_error_not_retried(self, tmp_path, exc_name):
+        """The WritePost mutation is a NON-IDEMPOTENT create — a Timeout/
+        ConnectionError may mean velog already created the post, so it is sent
+        exactly once and never retried on a network error (would duplicate).
+        429 (a pre-create rejection) remains retryable; network errors do not.
+        The 2nd response below is the duplicate that MUST NOT be sent."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    getattr(requests, exc_name)("net"),
+                    _mock_success_response(),
+                ]
+                with pytest.raises(ExternalServiceError, match="unreachable"):
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert sess.post.call_count == 1  # create mutation sent exactly once
+
+    @pytest.mark.parametrize("exc_name", ["Timeout", "ConnectionError"])
+    def test_silent_drop_retry_network_error_not_retried(self, tmp_path, exc_name):
+        """The silent-drop RE-POST is also a non-idempotent create. If it hits a
+        network error, it too is sent exactly once (no retry → no duplicate).
+        First call returns null (silent-drop), the re-post raises the network
+        error: total 2 posts (1 null + 1 failed-once), then ExternalServiceError."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    _mock_null_response(),           # first: silent-drop
+                    getattr(requests, exc_name)("net"),  # re-post: network error
+                    _mock_success_response(),        # duplicate that MUST NOT send
+                ]
+                with pytest.raises(ExternalServiceError, match="unreachable"):
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert sess.post.call_count == 2  # null + one failed re-post, no retry
+
+    def test_write_post_429_retried_and_recovers(self, tmp_path):
+        """Parity with medium: a 429 on writePost IS retried (pre-create
+        rejection), and the second attempt succeeds."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.side_effect = [
+                    _mock_429_response(),
+                    _mock_success_response(),
+                ]
+                with patch(
+                    "backlink_publisher.publishing.adapters.velog_graphql.verify_link_attributes",
+                    return_value={"verification": "ok"},
+                ):
+                    result = adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert result.status == "published"
+        assert sess.post.call_count == 2  # 429 retried, recovered
+
+    def test_write_post_429_exhausted_raises_external_service_error(self, tmp_path):
+        """429 on every attempt → retry exhausts → retry_transient_call re-raises
+        _TransientHTTPError. It must surface as ExternalServiceError (the explicit
+        except arm), not escape uncaught."""
+        config = _make_config(tmp_path)
+        adapter = VelogGraphQLAdapter()
+
+        with self._patch_lock_and_count(tmp_path):
+            with patch("requests.Session") as MockSession:
+                sess = MagicMock()
+                MockSession.return_value = sess
+                sess.post.return_value = _mock_429_response()
+                with pytest.raises(ExternalServiceError, match="after retries"):
+                    adapter.publish(PAYLOAD, mode="publish", config=config)
+
+        assert sess.post.call_count == 3  # MAX_ATTEMPTS, then ExternalServiceError
 
     def test_null_after_retry_probe_dead_raises_auth_expired(self, tmp_path):
         """Both writePost calls return null; probe says cookie dead → AuthExpiredError."""

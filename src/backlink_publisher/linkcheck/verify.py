@@ -66,7 +66,18 @@ def _title_in_body(title: str, body: str) -> bool:
 def _link_in_body(link_urls: Sequence[str], body: str) -> bool:
     if not link_urls:
         return True
-    return any(u in body for u in link_urls)
+    # Interstitial-aware match: platforms like LiveJournal rewrite every outbound
+    # <a href> through /away?to=<url-encoded-target>, so a verbatim substring scan
+    # false-negatives a backlink that is genuinely live (the post and link exist,
+    # but the URL only appears wrapped + percent-encoded). Delegate to the shared
+    # verifier helper — same unwrap + canonicalize logic as the dofollow canary —
+    # so the publish gate and the canary never diverge. Lazy import keeps linkcheck
+    # free of a module-load dependency on publishing.adapters.
+    from backlink_publisher.publishing.adapters.link_attr_verifier import (
+        body_has_required_link,
+    )
+
+    return body_has_required_link(body, link_urls)
 
 
 def verify_published(

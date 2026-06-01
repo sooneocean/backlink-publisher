@@ -9,7 +9,6 @@ import json
 import pytest
 
 from backlink_publisher.events import EventStore
-from backlink_publisher.linkcheck.verify import VerificationResult
 
 T = "https://site.com/p"
 
@@ -53,9 +52,15 @@ def _post(client, target=T):
 
 def test_recheck_both_rows_confirmed(client, monkeypatch):
     _seed_two_rows()
+    # Default verify_fn routes through the shared probe_liveness engine
+    # (Plan 2026-05-29-004 U2) — patch the underlying inspect_target_anchor.
     monkeypatch.setattr(
-        "backlink_publisher.linkcheck.verify.verify_published",
-        lambda *a, **k: VerificationResult(ok=True, reason=""),
+        "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+        lambda *a, **k: {
+            "page_readable": True, "target_anchor_found": True,
+            "target_is_nofollow": False, "target_rel": None,
+            "target_anchor_text": None, "reason": None, "marker_present": None,
+        },
     )
     resp = _post(client)
     assert resp.status_code == 200
@@ -71,8 +76,12 @@ def test_recheck_both_rows_confirmed(client, monkeypatch):
 def test_recheck_downgrade_reports_failed(client, monkeypatch):
     _seed_two_rows()
     monkeypatch.setattr(
-        "backlink_publisher.linkcheck.verify.verify_published",
-        lambda *a, **k: VerificationResult(ok=False, reason="404"),
+        "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+        lambda *a, **k: {
+            "page_readable": False, "target_anchor_found": False,
+            "target_is_nofollow": False, "target_rel": None,
+            "target_anchor_text": None, "reason": "http_404", "marker_present": None,
+        },
     )
     resp = _post(client)
     body = resp.get_json()

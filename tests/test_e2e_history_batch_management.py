@@ -10,7 +10,6 @@ from urllib.parse import unquote
 import pytest
 from werkzeug.datastructures import MultiDict
 
-from backlink_publisher.linkcheck.verify import VerificationResult
 from webui_store import history_store, drafts_store
 
 
@@ -64,13 +63,19 @@ class TestFullStackFlow:
         assert "已发布·未核实" in body
         assert "草稿·未核实" in body
 
-        # Stage 4: bulk-recheck the two unverified rows with a fake verify
+        # Stage 4: bulk-recheck the two unverified rows. The default verify_fn
+        # routes through the shared probe_liveness engine (Plan 2026-05-29-004
+        # U2), so patch the underlying inspect_target_anchor (host_gone → 404).
         unverified_ids = [it["id"] for it in history_store.load()
                           if it["status"].endswith("_unverified")]
         assert len(unverified_ids) == 2
         with patch(
-            "backlink_publisher.linkcheck.verify.verify_published",
-            return_value=VerificationResult(ok=False, reason="HTTP 404"),
+            "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+            return_value={
+                "page_readable": False, "target_anchor_found": False,
+                "target_is_nofollow": False, "target_rel": None,
+                "target_anchor_text": None, "reason": "http_404", "marker_present": None,
+            },
         ):
             resp = client.post(
                 "/ce:history/bulk-recheck",
@@ -83,7 +88,7 @@ class TestFullStackFlow:
         after = {it["target_url"]: it for it in history_store.load()}
         assert after["https://b/"]["status"] == "failed"
         assert after["https://c/"]["status"] == "failed"
-        assert after["https://b/"]["verify_error"] == "HTTP 404"
+        assert after["https://b/"]["verify_error"] == "http_404"
 
         # Stage 5: purge-failed wipes them + the original 'd' coerced failure
         resp = client.post("/ce:history/purge-failed")

@@ -91,6 +91,36 @@ def _key_for_row(row: dict[str, Any], platform: str) -> DedupKey | None:
         return None
 
 
+def is_crashed_in_flight(
+    row: dict[str, Any], platform: str, *, store: DedupStore | None = None
+) -> bool:
+    """True iff this row's dedup key is a stale ``attempting`` row.
+
+    A stale ``attempting`` means a prior run died mid-dispatch for this key (its
+    owner PID is gone, or the row aged past the TTL backstop). Because
+    :func:`record_intent` writes ``attempting`` BEFORE the post is created, the
+    post MAY already be live — the crash window is indistinguishable from a
+    crash-before-post. Resume uses this to print the same "verify before
+    resuming" warning it already prints for ``http_5xx`` checkpoint items, so a
+    hard-crash (which never set an ``error_class``) is no longer silent.
+
+    Pass ``store`` to reuse one :class:`DedupStore` across a loop (resume checks
+    every to-process item) instead of opening a fresh connection per call.
+
+    Observe-safe: an unusable key, missing record, or any store error returns
+    False — a pure read for an advisory warning that must never break a resume."""
+    key = _key_for_row(row, platform)
+    if key is None:
+        return False
+    try:
+        store = store or DedupStore()
+        rec = store.get(key)
+        return rec is not None and store.is_stale_attempting(rec)
+    except Exception as exc:  # advisory-only: never break the run
+        _log.debug(f"dedup crashed-in-flight check skipped: {exc}")
+        return False
+
+
 def terminal_for_error_class(error_class: str | None) -> str:
     """``http_5xx`` may have committed server-side → hold (``uncertain``);
     everything else is confirmed-not-landed → ``failed`` (re-publishable)."""

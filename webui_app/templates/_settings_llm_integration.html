@@ -107,6 +107,26 @@
                                                    placeholder="{% if llm_settings.image_gen_api_key %}已设置 (留空保留现值){% else %}输入 FRW API Key{% endif %}"
                                                    value="">
                                         </div>
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-md-6">
+                                                <label class="form-label">Image Endpoint</label>
+                                                <input type="text" class="form-control" name="image_gen_endpoint"
+                                                       placeholder="默认使用 LLM Endpoint"
+                                                       value="{{ llm_settings.image_gen_endpoint }}">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label">Image Model</label>
+                                                <input type="text" class="form-control" name="image_gen_model"
+                                                       placeholder="gpt-image-1 / banner-m"
+                                                       value="{{ llm_settings.image_gen_model }}">
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label">Size</label>
+                                                <input type="text" class="form-control" name="image_gen_banner_size"
+                                                       placeholder="1200x630"
+                                                       value="{{ llm_settings.image_gen_banner_size }}">
+                                            </div>
+                                        </div>
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" name="use_image_gen" id="useImageGen" {% if llm_settings.use_image_gen %}checked{% endif %}>
                                             <label class="form-check-label" for="useImageGen">启用 AI 封面生成</label>

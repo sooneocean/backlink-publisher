@@ -229,3 +229,18 @@ def test_registered_false_with_referral_and_rationale():
     assert R.dofollow_status("livejournal") is False
     assert R.referral_value("livejournal") == "high"
     assert len((R.dofollow_rationale("livejournal") or "").strip()) >= 80
+
+
+def test_load_credentials_corrupt_json_omits_raw_exception(isolated_config_dir):
+    """A corrupt credentials file must surface a generic DependencyError, not the
+    raw JSONDecodeError text (which echoes a snippet of the file contents)."""
+    path = store_credentials(Config(), "tester", "pw")
+    path.write_text("{ this is not valid json — hpassword leak risk ")
+    os.chmod(path, 0o600)
+    with pytest.raises(DependencyError) as exc:
+        lj._load_credentials(Config())
+    msg = str(exc.value)
+    assert msg == "Cannot parse LiveJournal credentials: file corrupt or unreadable"
+    # raw JSONDecodeError detail (position/snippet) must NOT leak
+    assert "Expecting" not in msg
+    assert "char" not in msg

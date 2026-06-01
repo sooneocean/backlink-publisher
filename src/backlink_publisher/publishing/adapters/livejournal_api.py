@@ -143,8 +143,10 @@ def _load_credentials(config: Config) -> dict[str, str]:
         )
     try:
         data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        raise DependencyError(f"Cannot parse LiveJournal credentials: {exc}") from None
+    except (json.JSONDecodeError, OSError):
+        raise DependencyError(
+            "Cannot parse LiveJournal credentials: file corrupt or unreadable"
+        ) from None
     if not data.get("username") or not data.get("hpassword"):
         raise DependencyError(
             f"{_CRED_FILENAME} missing 'username' or 'hpassword' field"
