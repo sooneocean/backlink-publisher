@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- `upgrade_target_to_threeurl` (the `/sites` "upgrade legacy target → three-URL"
+  path) now finds an existing `anchor_keywords` pool keyed by the bare domain or
+  a scheme variant, via the canonical `get_anchor_keywords` accessor. Previously
+  it tried only the scheme-exact key plus a trailing-slash variant that stored
+  keys never carry (`_parse_target_anchor_keywords` rstrip's them), so a
+  `[targets."legacy.com"]` pool was silently dropped and the target bootstrapped
+  to just the domain label — losing the operator's curated keywords on upgrade.
 - `[anchor_alarm]` override parsing now rejects unknown keys in an
   `[[anchor_alarm.override]]` row instead of silently ignoring them, mirroring
   the global-scope unknown-key guard. Previously a misspelled threshold field

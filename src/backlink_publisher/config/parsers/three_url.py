@@ -283,10 +283,15 @@ def upgrade_target_to_threeurl(
             insecure_tls=existing.insecure_tls,
         )
 
-    keywords = config.target_anchor_keywords.get(domain_key, [])
-    if not keywords:
-        # Try trailing-slash variant before declaring bootstrap.
-        keywords = config.target_anchor_keywords.get(main_url.rstrip("/") + "/", [])
+    # Use the canonical accessor so a legacy pool keyed by the bare domain or a
+    # scheme variant is found before declaring bootstrap. The previous manual
+    # lookup tried only the scheme-exact key plus a trailing-slash variant —
+    # but stored keys are always rstrip('/')-normalised by
+    # _parse_target_anchor_keywords, so the trailing-slash branch was dead code
+    # and a bare-domain anchor_keywords pool was silently lost on upgrade.
+    from .anchor import get_anchor_keywords
+
+    keywords = get_anchor_keywords(config, main_url)
 
     if keywords:
         plan_logger.recon(
