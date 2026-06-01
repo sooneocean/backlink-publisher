@@ -2,26 +2,8 @@
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
-
-import requests
-from backlink_publisher.config import Config
-from backlink_publisher.config.types import MEDIUM_API_BASE, MEDIUM_API_TIMEOUT, BLOGGER_LOCK_TIMEOUT_S
-from backlink_publisher._util.errors import (
-    AuthExpiredError,
-    DependencyError,
-    ExternalServiceError,
-)
-from backlink_publisher._util.logger import opencli_logger as log
-from backlink_publisher.publishing.adapters.retry import (
-    RETRYABLE_HTTP_STATUSES,
-    retry_transient_call,
-)
-from backlink_publisher.http import get as http_get, post as http_post
-
-T = TypeVar("T")
+from typing import Any
 
 
 _LINK_ATTR_VERIFICATION_KEY = "link_attr_verification"
@@ -98,62 +80,6 @@ class BaseAdapter:
         """Create a JSON log line."""
         import json
         return json.dumps(kwargs)
-    
-    def _make_headers(self, token: str) -> dict[str, str]:
-        """Create standard authorization headers."""
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-    
-    def _handle_http_response(
-        self,
-        resp: requests.Response,
-        adapter_name: str,
-        endpoint: str = "",
-    ) -> requests.Response:
-        """Handle HTTP response with standard error checking."""
-        if resp.status_code == 401:
-            raise AuthExpiredError(
-                channel=adapter_name,
-                reason=f"{adapter_name} {endpoint} HTTP 401",
-            )
-        if not resp.ok:
-            raise ExternalServiceError(
-                f"{adapter_name} {endpoint} returned HTTP {resp.status_code}"
-            )
-        return resp
-    
-    def _retry_http_call(
-        self,
-        fn: Callable[[], requests.Response],
-        adapter_name: str,
-        max_attempts: int = 3,
-    ) -> requests.Response:
-        """Execute an HTTP call with retry logic."""
-        try:
-            return retry_transient_call(
-                fn,
-                is_retryable=lambda exc: isinstance(
-                    exc, (requests.Timeout, requests.ConnectionError)
-                ),
-                adapter=adapter_name,
-                max_attempts=max_attempts,
-            )
-        except requests.RequestException as exc:
-            raise ExternalServiceError(
-                f"{adapter_name} API unreachable: {exc}"
-            ) from None
-    
-    def _handle_rate_limit(
-        self,
-        resp: requests.Response,
-        adapter_name: str,
-    ) -> None:
-        """Handle rate limiting responses."""
-        if resp.status_code == 429:
-            raise ExternalServiceError(f"{adapter_name} API rate-limited (429)")
 
 
 # Backward compatibility - expose the classes that were previously here
