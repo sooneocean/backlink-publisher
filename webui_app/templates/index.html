@@ -1,15 +1,13 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>Backlink Publisher</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css') }}">
-</head>
-<body>
+{% extends 'base.html' %}
+{# Index page — base layout + ES module entry (Plan 2026-06-01-007 Unit 6).
+   <head>/Bootstrap/csrf-meta from base.html; index.js (ESM) replaces
+   index_main.js + fetch_json.js + url_derive.js + mode_toggle.js + the inline
+   urlDerive consumer. Two bootstrap-in seams: __indexBootstrap + __batchTabHint. #}
+{% block title %}Backlink Publisher{% endblock %}
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css', v=asset_version) }}">
+{% endblock %}
+{% block content %}
     <nav class="navbar" style="display:flex;justify-content:space-between;align-items:center;">
         <h1><i class="bi bi-link-45deg me-2"></i>Backlink Publisher</h1>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -125,11 +123,7 @@
         </div><!-- End tab-content -->
     </div>
     
-    <script>window.__indexBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([]), 'platform_slugs': platforms | default([]) | map(attribute='slug') | list} | tojson }};</script>
-    <script src="{{ url_for('static', filename='js/fetch_json.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/index_main.js') }}"></script>
-
-    <!-- Loading component — to be injected in specific panels as needed -->
+    <!-- Loading component — injected into specific panels as needed (index.js) -->
     <template id="_loadingTemplate">
         <div class="loading-spinner-container" style="display:flex;flex-direction:column;align-items:center;padding:20px;">
             <div class="spinner-border text-primary mb-2" role="status">
@@ -138,31 +132,15 @@
             <div class="loading-text" style="font-size:0.9rem;font-weight:600;color:#374151;">处理中…</div>
         </div>
     </template>
+{% endblock %}
 
-    <!-- Plan 2026-05-20-002 Unit 4/5 — URL auto-derive: paste a URL into
-         #derive_source above to auto-fill main/category/work + verify. -->
-    <script src="{{ url_for('static', filename='js/url_derive.js') }}"></script>
+{% block page_data %}
+    <script>window.__indexBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([]), 'platform_slugs': platforms | default([]) | map(attribute='slug') | list} | tojson }};</script>
     <script>window.__batchTabHint = {{ batch_tab|tojson if batch_tab is defined else 'false' }};</script>
-    <script src="{{ url_for('static', filename='js/mode_toggle.js') }}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            if (!window.urlDerive) return;
-            var pasteEl = document.getElementById('derive_source');
-            if (!pasteEl) return;
-            window.urlDerive.bindPasteInput(
-                pasteEl,
-                {
-                    main: document.querySelector('input[name="main_url"]'),
-                    category: document.querySelector('input[name="category_url"]'),
-                    work: document.querySelector('input[name="work_url"]'),
-                },
-                {
-                    main: document.getElementById('status-main'),
-                    category: document.getElementById('status-category'),
-                    work: document.getElementById('status-work'),
-                }
-            );
-        });
-    </script>
-</body>
-</html>
+{% endblock %}
+
+{% block page_module %}
+    {# index.js imports url_derive (paste auto-fill) + mode_toggle + lib/profiles.
+       fetch_json.js retired here; settings' classic bind_channel.js still loads it. #}
+    <script type="module" src="{{ url_for('static', filename='js/index.js', v=asset_version) }}"></script>
+{% endblock %}

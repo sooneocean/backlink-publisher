@@ -1,7 +1,7 @@
 ---
 title: "refactor: WebUI frontend maintainability — base layout + ESM lib layer + CSS tokens (settings pilot first)"
 type: refactor
-status: active
+status: completed
 date: 2026-06-01
 deepened: 2026-06-01
 origin: docs/brainstorms/2026-06-01-webui-frontend-maintainability-refactor-requirements.md
@@ -798,7 +798,23 @@ recipe (Unit 4).
 data/sort/escape behavior; the as-touched recipe (incl. the `sites.html` CSRF regression) is documented in
 AGENTS.md for the deferred trivial pages.
 
-- [ ] **Unit 6: Rollout — index/new/history/batch (heaviest remaining)**
+- [x] **Unit 6: Rollout — index/new/history/batch (heaviest remaining)**
+
+> **Execution findings (2026-06-01):**
+> 1. **`cancelEdit` JSON.parse is correct in the `data-original` form.** The old inline
+>    `cancelEdit(idx, {{ content|tojson }})` evaluated tojson as a JS *value* (latent bug for non-JSON
+>    markdown). Storing `data-original='{{ content|tojson }}'` (the JSON *string*) + `JSON.parse(dataset.original)`
+>    actually round-trips correctly — the migration fixed the latent bug while keeping index's JSON.parse.
+> 2. **`fetch_json.js` is NOT deleted** (the plan's U6 premise was false): settings' classic `bind_channel.js`
+>    still loads `window.fetchJson`. Only the index reference was dropped (index.js imports lib/api). `fetch_json.js`
+>    stays as a file until bind_channel is itself modularized (deferred polish).
+> Implemented: index.html extends base (two seams `__indexBootstrap`+`__batchTabHint`); `index.js` ESM entry
+> internalizes all 3 cross-script globals (`__rewireBulkSelect` → module var, `urlDerive`/`fetchJson` → imports);
+> `lib/profiles.js` populated (factory, the 7 fns from index's live copies); `url_derive.js`+`mode_toggle.js`
+> ESM-ified (IIFE → exports); ~16 tab handlers → `data-action`/`data-confirm` (incl. `{{ anchor }}`→`data-tag`);
+> deleted `index_main.js`. Repointed 6 obsolete tests (index_main/fetch_json/mode_toggle script-order +
+> settings inline-handler-name contract + the `?v=` cache-bust src) and added `test_webui_base_layout.py` to
+> the security-toggle mutation-gate allowlist. **Full suite: 7664 pass, 6 skipped, 0 fail.**
 
 **Goal:** Migrate the index page family to base + ESM: `index_main.js` → `index.js` entry + lib imports;
 internalize `window.__rewireBulkSelect`; ESM-ify `mode_toggle.js`/`url_derive.js`; remove inline `on*`

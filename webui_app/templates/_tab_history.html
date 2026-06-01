@@ -22,7 +22,7 @@
                             <span class="bulk-action-label">|</span>
                             <button type="submit" formaction="/ce:draft/bulk-publish-now"
                                     class="btn btn-sm btn-success draft-bulk-btn" disabled
-                                    onclick="return confirm('批量立即发布所选草稿？')">
+                                    data-confirm="批量立即发布所选草稿？">
                                 <i class="bi bi-send me-1"></i>批量发布
                             </button>
                             <button type="submit" formaction="/ce:draft/bulk-cancel"
@@ -31,7 +31,7 @@
                             </button>
                             <button type="submit" formaction="/ce:draft/bulk-delete"
                                     class="btn btn-sm btn-outline-danger draft-bulk-btn" disabled
-                                    onclick="return confirm('批量删除所选草稿？')">
+                                    data-confirm="批量删除所选草稿？">
                                 <i class="bi bi-trash me-1"></i>批量删除
                             </button>
                         </div>
@@ -111,7 +111,7 @@
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-success"
-                                            onclick="return confirm('立即发布此草稿？')">
+                                            data-confirm="立即发布此草稿？">
                                         <i class="bi bi-send me-1"></i>立即发布
                                     </button>
                                 </form>
@@ -126,7 +126,7 @@
                                 {% endif %}
                                 <!-- 删除 -->
                                 <form method="POST" action="/ce:draft/delete" style="margin:0;"
-                                      onsubmit="return confirm('确定删除此草稿？')">
+                                      data-confirm="确定删除此草稿？">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -187,12 +187,12 @@
                             <span class="bulk-action-label">|</span>
                             <button type="submit" formaction="/ce:history/bulk-recheck"
                                     class="btn btn-sm btn-outline-primary history-bulk-btn" disabled
-                                    onclick="return confirm('对所选记录执行重新核实（GET 外站校验 title+anchor）？耗时约 10s/条')">
+                                    data-confirm="对所选记录执行重新核实（GET 外站校验 title+anchor）？耗时约 10s/条">
                                 <i class="bi bi-shield-check me-1"></i>批量重新核实
                             </button>
                             <button type="submit" formaction="/ce:history/bulk-delete"
                                     class="btn btn-sm btn-outline-danger history-bulk-btn" disabled
-                                    onclick="return confirm('批量删除所选历史？')">
+                                    data-confirm="批量删除所选历史？">
                                 <i class="bi bi-trash me-1"></i>批量删除
                             </button>
                             <span class="bulk-action-label" style="margin-left:auto;">|</span>
@@ -296,7 +296,7 @@
                                     <button type="submit" class="btn btn-sm btn-outline-secondary"><i class="bi bi-pencil"></i></button>
                                 </form>
                                 <form method="POST" action="/ce:history/delete" style="margin:0;"
-                                      onsubmit="return confirm('确定删除此条记录？')">
+                                      data-confirm="确定删除此条记录？">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                                     <input type="hidden" name="id" value="{{ item.id }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
@@ -334,7 +334,7 @@
                         <!-- Out-of-band form for the purge-failed button (cannot nest in historyBulkForm) -->
                         <form id="historyPurgeForm" method="POST" action="/ce:history/purge-failed"
                               style="display:none;"
-                              onsubmit="return confirm('一键清除所有 status=failed 记录？\n（不影响“未核实”，那些需要批量重新核实判定）');">
+                              data-confirm="一键清除所有 status=failed 记录？\n（不影响“未核实”，那些需要批量重新核实判定）">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                         </form>
                         <div id="historyEmptyFiltered" style="display:none;">

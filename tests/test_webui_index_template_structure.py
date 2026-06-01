@@ -147,24 +147,21 @@ def test_flash_msg_is_html_escaped(client):
 # so a future template edit can't silently reintroduce the silent-failure bug
 # this follow-up fixed. See feedback_fetch_json_must_guard_content_type.
 
-def test_index_page_loads_fetch_json_helper(client):
-    """GET / must load the fetch_json.js guard helper."""
+def test_index_loads_esm_entry_not_legacy_scripts(client):
+    """Plan 007 U6: index loads index.js as a single ES module; the legacy
+    fetch_json.js + index_main.js classic scripts (and their load-order
+    dependency) are gone — index.js imports the guarded fetch from lib/api.js."""
     resp = client.get("/")
     assert resp.status_code == 200
     body = resp.data.decode("utf-8")
-    assert "js/fetch_json.js" in body
+    assert "js/index.js" in body and 'type="module"' in body
+    assert "js/index_main.js" not in body
+    assert "js/fetch_json.js" not in body
 
 
-def test_fetch_json_loads_before_index_main(client):
-    """fetch_json.js must load before index_main.js (defines window.fetchJson
-    before the save-profile handler can call it)."""
-    resp = client.get("/")
-    assert resp.status_code == 200
-    body = resp.data.decode("utf-8")
-    fetch_json_pos = body.find("js/fetch_json.js")
-    index_main_pos = body.find("js/index_main.js")
-    assert fetch_json_pos != -1, "fetch_json.js script tag missing"
-    assert index_main_pos != -1, "index_main.js script tag missing"
-    assert fetch_json_pos < index_main_pos, (
-        "fetch_json.js must be loaded before index_main.js"
-    )
+def test_index_has_no_inline_event_handlers(client):
+    """All tab-partial inline on* handlers migrated to data-action."""
+    import re
+    body = client.get("/").data.decode("utf-8")
+    assert not re.search(r'\son(click|change|submit|input|keyup)=', body), \
+        "an inline on* handler survived the index ESM migration"

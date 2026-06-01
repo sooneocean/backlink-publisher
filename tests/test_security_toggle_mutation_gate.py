@@ -51,6 +51,7 @@ GRANDFATHERED: frozenset[tuple[str, str]] = frozenset(
         ("test_history_template_rendering.py", "WTF_CSRF_ENABLED"),
         ("test_manifest_webui_wiring.py", "WTF_CSRF_ENABLED"),
         ("test_medium_login_routes.py", "SESSION_COOKIE_SECURE"),
+        ("test_webui_base_layout.py", "CSRF_ENABLED"),
         ("test_webui_bind_routes.py", "SESSION_COOKIE_SECURE"),
         ("test_webui_checkpoint.py", "WTF_CSRF_ENABLED"),
         ("test_webui_equity_ledger_recheck.py", "WTF_CSRF_ENABLED"),

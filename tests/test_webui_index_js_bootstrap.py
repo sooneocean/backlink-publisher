@@ -25,8 +25,9 @@ def client(app):
 
 
 def test_index_main_js_served(client):
-    """GET /static/js/index_main.js returns 200 application/javascript."""
-    resp = client.get("/static/js/index_main.js")
+    """GET /static/js/index.js (ESM entry, replaced index_main.js in Plan 007 U6)
+    returns 200 application/javascript."""
+    resp = client.get("/static/js/index.js")
     assert resp.status_code == 200
     assert "javascript" in resp.content_type
 
