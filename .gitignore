@@ -52,6 +52,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Frontend ES-module lib dir is source, not a Python build artifact:
+!webui_app/static/js/lib/
 parts/
 sdist/
 var/

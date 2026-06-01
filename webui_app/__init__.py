@@ -16,6 +16,28 @@ from pathlib import Path
 from flask import Flask
 
 
+def _compute_asset_version(static_folder: str | None) -> str:
+    """Per-deploy cache-busting stamp for ``url_for('static', ..., v=…)``.
+
+    Derived once from the newest mtime of any bundled static asset, so an
+    operator's long-lived console session cannot serve a stale classic JS
+    against freshly-deployed module HTML (no build step / no bundler hash).
+    """
+    if not static_folder:
+        return "0"
+    latest = 0
+    try:
+        for root, _dirs, files in os.walk(static_folder):
+            for name in files:
+                try:
+                    latest = max(latest, os.stat(os.path.join(root, name)).st_mtime_ns)
+                except OSError:
+                    continue
+    except OSError:
+        return "0"
+    return format(latest, "x") or "0"
+
+
 def create_app(*, start_scheduler: bool | None = None) -> Flask:
     """Build the Flask app.
 
@@ -162,6 +184,17 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
             return {"csrf_token": _ensure_csrf_token()}
         except RuntimeError:
             return {"csrf_token": ""}
+
+    # Cache-busting: stamp a per-deploy version onto every base.html
+    # url_for('static', ..., v=asset_version) reference. Computed once and
+    # cached on app.config so the static-tree walk happens at most once.
+    @app.context_processor
+    def inject_asset_version():
+        version = app.config.get("ASSET_VERSION")
+        if version is None:
+            version = _compute_asset_version(app.static_folder)
+            app.config["ASSET_VERSION"] = version
+        return {"asset_version": version}
 
     # Global CSRF enforcement. SameSite=Lax + loopback already block most
     # cross-site POST, but operators who flip BACKLINK_PUBLISHER_ALLOW_NETWORK

@@ -1,0 +1,5 @@
+{
+  "type": "module",
+  "private": true,
+  "//": "Marks lib/*.js (and the ESM page entries) as native ES modules for Node-based unit checks. Browsers ignore this file; it adds no build step. Legacy classic <script> files load unaffected."
+}
