@@ -253,6 +253,11 @@ def _generate_payload(
     content_parts.append(links_to_markdown(links))
     content_markdown = "\n".join(content_parts)
 
+    from ._citability import apply_long_form_levers
+    content_markdown, _citability_levers = apply_long_form_levers(
+        content_markdown, domain_label, row, language=target_language
+    )
+
     seo_title = tmpl.get("seo_title", "{title}").format(title=title)
     seo_desc = tmpl.get("seo_desc", "").format(main_domain=main_domain)
 
@@ -273,6 +278,7 @@ def _generate_payload(
         "excerpt": excerpt,
         "tags": tags,
         "content_markdown": content_markdown,
+        "_citability_levers": _citability_levers,
         "links": links,
         "cover_image_url": cover_image_url,
         "cover_image_warning": cover_image_warning,

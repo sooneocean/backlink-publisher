@@ -117,7 +117,7 @@ def load_frw_token() -> str:
             f"frw-token.json missing or empty 'api_key' field at {path}\n"
             "Run `frw-login` to rewrite it."
         )
-    return key
+    return key  # type: ignore[no-any-return]
 
 
 # ── 3 + 4 + 5 + 6. Write under flock with μs-precise orphan archive ─────────

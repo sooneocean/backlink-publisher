@@ -307,6 +307,83 @@
   </div>
   {% endif %}
 
+  {# ── 4a. AI Citation Share — GEO panel (Plan 2026-05-29-006 U9) ────────── #}
+  {% set geo_targets = geo_panel.targets | default([]) if geo_panel else [] %}
+  {% if geo_targets %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      AI Citation Share (GEO)
+      <span class="text-muted small fw-normal">— advisory metric</span>
+    </div>
+    <div class="card-body pb-2">
+      <p class="text-muted small mb-3 advisory">
+        Advisory metric — correlation only, not causation.
+        Share = cited&nbsp;/&nbsp;(cited&nbsp;+&nbsp;absent); refusals excluded from denominator.
+        A change in share does not establish that any site action caused it.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Target</th>
+              <th>State</th>
+              <th class="text-end">Share</th>
+              <th class="text-end">n</th>
+              <th class="text-end">Refused rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in geo_targets %}
+            <tr>
+              <td class="target-cell">
+                {% if t.target_url and t.target_url.startswith('http') %}
+                  <a href="{{ t.target_url }}" rel="noopener noreferrer" target="_blank">{{ t.target_url }}</a>
+                {% else %}
+                  {{ t.target_url }}
+                {% endif %}
+              </td>
+              <td>
+                {% if t.state == 'measured' %}
+                  <span class="badge text-bg-success">measured</span>
+                  {% if t.low_confidence %}<span class="badge text-bg-warning" title="n below full-confidence threshold">low confidence</span>{% endif %}
+                {% elif t.state == 'warming_up' %}
+                  <span class="badge text-bg-secondary">Insufficient data ({{ t.total_n }} probe{{ '' if t.total_n == 1 else 's' }})</span>
+                {% elif t.state == 'never_probed' %}
+                  <span class="badge text-bg-secondary">Not yet probed</span>
+                {% elif t.state == 'excluded' %}
+                  <span class="badge text-bg-warning">Excluded from measurement</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">{{ t.state }}</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.state == 'measured' and t.share is not none %}
+                  {{ t.share }}%
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.n %}{{ t.n }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.refused_rate %}{{ "%.1f"|format(t.refused_rate * 100) }}%{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer bg-white text-muted small py-2">
+      Advisory only — nothing here gates publishing.
+      Refusal spikes may indicate the topic is declined rather than uncited.
+      Run <code>geo-probe</code> to gather citation probes; see the
+      <a href="/docs/operations/geo-probe.md">geo-probe runbook</a> for interpretation guidance.
+    </div>
+  </div>
+  {% endif %}
+
   {# ── 4. Error distribution (R8) ───────────────────────────────────────── #}
   <div class="card shadow-sm mb-4">
     <div class="card-header bg-white fw-semibold">Failure breakdown</div>

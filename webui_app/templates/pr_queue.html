@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block title %}PR 机会队列{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1100px;">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h2 class="m-0"><i class="bi bi-newspaper me-2"></i>PR 机会队列</h2>
+        <a href="/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>回首页</a>
+    </div>
+
+    {% if not items %}
+    <div class="text-center py-5 text-muted">
+        <p class="mb-1">暂无 PR 机会。</p>
+        <small>通过 <code>pr-opportunities ingest</code> 导入 HARO/SOS/HaB2BW 摘要。</small>
+    </div>
+    {% else %}
+    <div class="table-wrap">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>状态</th>
+                    <th>相关度</th>
+                    <th>标题</th>
+                    <th>摘要</th>
+                    <th>来源</th>
+                    <th>截止</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for item in items %}
+            <tr data-id="{{ item.id }}">
+                <td>
+                    <span class="badge bg-{{ item._status_color }}">{{ item.status | default('pending') }}</span>
+                </td>
+                <td class="text-center">
+                    <span class="fw-semibold">{{ (item.relevance_score or 0) | round(0) | int }}</span>
+                </td>
+                <td style="max-width:280px; white-space:normal;">
+                    <span class="fw-semibold">{{ item.headline | default('—') }}</span>
+                </td>
+                <td style="max-width:320px; white-space:normal; font-size:.875rem;" class="text-muted">
+                    {{ (item.summary or '')[:120] }}{% if (item.summary or '') | length > 120 %}…{% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ item.source | default('—') }}</span></td>
+                <td class="text-muted" style="font-size:.8rem;">{{ item.deadline | default('—') }}</td>
+                <td>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button class="btn btn-outline-success btn-status" data-status="won" title="标记为已获得">✓</button>
+                        <button class="btn btn-outline-secondary btn-status" data-status="skipped" title="跳过">✕</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+{% block page_data %}
+<script>
+document.querySelectorAll('.btn-status').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const row = btn.closest('tr');
+        const id = row?.dataset?.id;
+        const status = btn.dataset.status;
+        if (!id) return;
+        try {
+            const resp = await fetch('/api/pr-queue/status', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json', 'X-CSRFToken': window.__csrf || ''},
+                body: JSON.stringify({id, status}),
+            });
+            if (resp.ok) location.reload();
+        } catch (e) { console.error(e); }
+    });
+});
+</script>
+{% endblock %}

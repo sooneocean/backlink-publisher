@@ -31,11 +31,13 @@ export async function fetchJson(url, opts) {
 // fetch-transport helper: sends the CSRF token via the X-CSRFToken header (the
 // transport the JS flows already used). Reads the token fresh per call.
 export async function postJson(url, body, opts = {}) {
+  // Destructure to avoid ...opts overwriting the CSRF-injected headers object.
+  const { headers: extraHeaders, ...rest } = opts;
   return fetchJson(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': readCsrf(), ...(opts.headers || {}) },
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': readCsrf(), ...(extraHeaders || {}) },
     body: body == null ? undefined : JSON.stringify(body),
-    ...opts,
+    ...rest,
   });
 }
 

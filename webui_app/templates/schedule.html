@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}计划发布{% endblock %}
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/schedule.css', v=asset_version) }}">
+{% endblock %}
+{% block content %}
+<div class="container-fluid" style="max-width: 1100px;">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <h2 class="m-0"><i class="bi bi-calendar-week me-2"></i>计划发布</h2>
+        <a href="/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>回首页</a>
+    </div>
+    <div class="table-wrap">
+        <table class="table table-hover align-middle text-nowrap mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>平台</th>
+                    <th>标题</th>
+                    <th>目标链接</th>
+                    <th>计划时间</th>
+                    <th>创建时间</th>
+                </tr>
+            </thead>
+            <tbody id="scheduleList">
+                <tr class="placeholder-row">
+                    <td colspan="5" class="text-center py-4 text-muted">正在加载……</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+{% block page_data %}
+    <script>window.__scheduleBootstrap = {{ {'scheduled_items': scheduled_items | default([])} | tojson }};</script>
+{% endblock %}
+{% block page_module %}
+    <script type="module" src="{{ url_for('static', filename='js/schedule.js', v=asset_version) }}"></script>
+{% endblock %}

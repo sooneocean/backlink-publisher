@@ -19,6 +19,51 @@ All notable changes to this project will be documented in this file.
 - `test_pipeline_inprocess_characterization.py` — expanded coverage for edge cases.
 - `webui_app/helpers/cli_runner.py` — adjusted for API changes.
 
+- URL verify throttle rollback now removes the caller's own session-window
+  slot by value (`remove(now)`) instead of the last-appended entry (`pop()`).
+  Under concurrent calls sharing the same session, `pop()` (LIFO) could remove
+  a *peer's* slot instead of the failing caller's own, leaking the failing
+  caller's timestamp in the window. This caused the session's rate-limit counter
+  to over-count rejected requests: a session could be rate-limited for a 10s
+  window even though its requests were turned away before being served. Both
+  rollback paths (`upstream_overloaded` and `host_busy`) are fixed.
+
+- `spawn_browser_login` now prepends the **absolute** path to `src/` in
+  `PYTHONPATH` for the detached subprocess, matching the pattern established in
+  `bind_job.py`. The previous relative `"src"` prefix only resolved when the
+  WebUI was started from the repository root; starting from any other directory
+  (e.g. a system-service working directory) would cause the subprocess to fail
+  with an `ImportError` on `backlink_publisher`.
+
+- G3 referer-audit evidence now correctly shows `preserving=none` when every
+  render path strips `referer`. The previous `or "preserving=none"` fallback
+  was unreachable: `"preserving=" + ""` (an empty join over a zero-length list)
+  is truthy, so the `or` short-circuited and the evidence cell always read
+  `"preserving="`. Operators reading the committed `gate-verdicts.md` ledger
+  or the raw JSONL evidence when all paths strip referer would have seen a
+  misleading empty `preserving=` token instead of the explicit `preserving=none`.
+
+- SSRF blocklist now rejects `168.63.129.16` (Azure wireserver). This address
+  is not RFC 1918, not link-local, and not covered by the existing
+  `169.254.0.0/16` range, so it previously passed the IP guard. Azure wireserver
+  exposes DHCP, platform key management, and health-probe endpoints that are
+  reachable only from inside Azure VMs; an attacker-controlled redirect or a
+  domain that resolves to it could exfiltrate instance metadata. The address is
+  now blocked as a dedicated `/32` entry in `_BLOCKED_NETWORKS`.
+
+- `upgrade_target_to_threeurl` (the `/sites` "upgrade legacy target → three-URL"
+  path) now finds an existing `anchor_keywords` pool keyed by the bare domain or
+  a scheme variant, via the canonical `get_anchor_keywords` accessor. Previously
+  it tried only the scheme-exact key plus a trailing-slash variant that stored
+  keys never carry (`_parse_target_anchor_keywords` rstrip's them), so a
+  `[targets."legacy.com"]` pool was silently dropped and the target bootstrapped
+  to just the domain label — losing the operator's curated keywords on upgrade.
+- `[anchor_alarm]` override parsing now rejects unknown keys in an
+  `[[anchor_alarm.override]]` row instead of silently ignoring them, mirroring
+  the global-scope unknown-key guard. Previously a misspelled threshold field
+  (e.g. `exact_ratio_ceil`) was dropped without error whenever the row also
+  carried a valid field, so the operator's intended override silently never
+  applied. The row now raises `InputValidationError` at config load.
 - txt.fyi adapter now clears the site's anti-spam dwell-time gate before
   submitting. `edit.php` rejects POSTs that arrive too soon after the form was
   served (keyed off the hidden `form_time` field): a sub-second GET→POST — what

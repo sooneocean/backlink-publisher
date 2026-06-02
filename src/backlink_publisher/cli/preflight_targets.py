@@ -103,6 +103,7 @@ def _build_receipt(target_url: str, facts: PreflightFacts, source_rows: list[int
         "host_diff": facts.host_diff,
         "redirect_capped": facts.redirect_capped,
         "noindex": facts.noindex,
+        "indexed": False if facts.noindex else None,
         "soft404": facts.soft404,
         "has_title": facts.has_title,
         "has_h1": facts.has_h1,

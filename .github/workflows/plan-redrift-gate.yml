@@ -1,0 +1,90 @@
+name: Plan Redrift Guard
+
+# Anti-redrift: flags plan-docs whose status is still active/ready but whose
+# declared claims already resolve on origin/main (work shipped, status never
+# advanced). Complement of plan-claims-gate (forward) and plan-claims-radar.
+# Detection + blind spots documented in scripts/check_plan_redrift.py.
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    # 09:15 UTC daily — just after the claims radar (09:00) so the two drift
+    # scans don't contend, and outside US/EU peak.
+    - cron: "15 9 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plan-redrift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # PR job: blocking. Only checks plan-docs touched by the PR — catches NEW
+  # drift being introduced (e.g. shipping a feature while leaving the plan active).
+  pr-gate:
+    name: redrift-gate
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch origin/main
+        run: git fetch origin main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install (base deps only)
+        run: pip install -e .
+      - name: List touched plan-docs
+        id: touched
+        run: |
+          touched=$(git diff --name-only --diff-filter=d \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            -- 'docs/plans/*.md' 'docs/plans/**/*.md' || true)
+          if [ -z "$touched" ]; then
+            echo "have=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' $touched > /tmp/redrift-touched.txt
+            echo "Touched plan-docs:"; printf '  %s\n' $touched
+          fi
+      - name: Redrift check (blocking)
+        if: steps.touched.outputs.have == 'true'
+        run: |
+          mapfile -t plans < /tmp/redrift-touched.txt
+          python scripts/check_plan_redrift.py "${plans[@]}"
+
+  # Scheduled job: advisory (never blocks). Scans every plan-doc and surfaces
+  # accumulated drift in the run summary. workflow_dispatch allows on-demand runs.
+  radar:
+    name: redrift-radar
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch origin/main
+        run: git fetch origin main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install (base deps only)
+        run: pip install -e .
+      - name: Redrift scan (advisory)
+        run: |
+          python scripts/check_plan_redrift.py --all --advisory | tee /tmp/redrift.out
+          {
+            echo "## Plan Redrift Radar"
+            echo '```'
+            cat /tmp/redrift.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

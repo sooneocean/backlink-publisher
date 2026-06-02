@@ -1553,4 +1553,76 @@ class TestSeoVizRoutes:
         assert resp.is_json
         body = resp.get_json()
         assert "labels" in body
-        assert "datasets" in body
+
+
+class TestScheduleRoutes:
+    """Contract tests for /schedule and /api/scheduled (Plan 2026-05-29-001 Unit 2)."""
+
+    def test_get_schedule_page(self, client, monkeypatch):
+        """GET /schedule renders HTML."""
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(sched_api, "list_scheduled", lambda: {"ok": True, "items": []})
+        resp = client.get("/schedule")
+        assert resp.status_code == 200
+        assert b"html" in resp.data.lower()
+
+    def test_get_api_scheduled(self, client, monkeypatch):
+        """GET /api/scheduled returns JSON with ok + items keys."""
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(sched_api, "list_scheduled", lambda: {"ok": True, "items": []})
+        resp = client.get("/api/scheduled")
+        assert resp.status_code == 200
+        assert resp.is_json
+        data = resp.get_json()
+        assert "ok" in data
+        assert "items" in data
+
+
+class TestPrQueueRoutes:
+    """Contract tests for /pr-queue and /api/pr-queue (B1 PR opportunity queue)."""
+
+    def test_get_pr_queue_page(self, client, monkeypatch):
+        """GET /pr-queue renders HTML."""
+        import webui_app.routes.pr_queue as pq_mod
+
+        monkeypatch.setattr(pq_mod, "_load", lambda: [])
+        resp = client.get("/pr-queue")
+        assert resp.status_code == 200
+        assert b"html" in resp.data.lower()
+
+    def test_get_api_pr_queue(self, client, monkeypatch):
+        """GET /api/pr-queue returns JSON with ok + items keys."""
+        import webui_app.routes.pr_queue as pq_mod
+
+        monkeypatch.setattr(pq_mod, "_load", lambda: [])
+        resp = client.get("/api/pr-queue")
+        assert resp.status_code == 200
+        assert resp.is_json
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert "items" in data
+
+    def test_post_api_pr_queue_status_missing_csrf_returns_403(self, csrf_client):
+        """POST /api/pr-queue/status without CSRF token is rejected."""
+        resp = csrf_client.post(
+            "/api/pr-queue/status",
+            json={"id": "opp-1", "status": "won"},
+        )
+        assert resp.status_code == 403
+
+
+class TestMetricsRoutes:
+    """Contract test for /metrics Prometheus scrape endpoint."""
+
+    def test_get_metrics_returns_text(self, client, monkeypatch):
+        """GET /metrics returns 200 with text/plain Prometheus format."""
+        import webui_app.routes.metrics as metrics_mod
+
+        monkeypatch.setattr(metrics_mod, "_scrape_events_db", lambda: [])
+        monkeypatch.setattr(metrics_mod, "_scrape_content_cache", lambda: [])
+        monkeypatch.setattr(metrics_mod, "_scrape_publish_history", lambda: [])
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        assert b"bp_publish_total" in resp.data

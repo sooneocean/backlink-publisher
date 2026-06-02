@@ -1,0 +1,25 @@
+/*
+  Schedule page tokens — Plan 2026-05-29-001 Unit 2.
+  Uses existing :root tokens from tokens.css; only adds schedule-scoped helpers.
+*/
+
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(8px);
+}
+
+.table-wrap .table {
+  margin-bottom: 0;
+}
+
+.table-wrap .table th,
+.table-wrap .table td {
+  white-space: nowrap;
+}
+
+.placeholder-row td {
+  color: #6c757d;
+}

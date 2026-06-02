@@ -571,6 +571,29 @@ class TestUpgradeTargetToThreeUrl:
         assert result.list_url == "https://legacy.com/cat"
         assert result.work_urls == ["https://legacy.com/work/9"]
 
+    def test_legacy_anchor_keywords_bare_domain_key_migrated(self, tmp_path):
+        """Regression: a legacy pool keyed by the BARE domain (no scheme) must
+        still migrate. Stored keys are rstrip('/')-normalised but keep whatever
+        scheme the operator wrote; the upgrade path previously only matched the
+        scheme-exact key, so a ``[targets."legacy.com"]`` pool was silently
+        dropped and the target bootstrapped to just the domain label."""
+        path = tmp_path / "config.toml"
+        save_config(
+            load_config(path), path=path,
+            target_anchor_keywords={
+                "legacy.com": ["LegacyBrand", "legacy hub", "legacy"],
+            },
+        )
+        cfg = load_config(path)
+
+        from backlink_publisher.config import upgrade_target_to_threeurl
+        result = upgrade_target_to_threeurl(
+            cfg, main_url="https://legacy.com",
+        )
+
+        # Found via the bare-domain variant → migrated, NOT bootstrapped.
+        assert result.branded_pool == ["LegacyBrand", "legacy hub", "legacy"]
+
     def test_existing_threeurl_config_merges_only_provided_fields(self, tmp_path):
         """If a full ThreeUrlConfig already exists, only list_url and work_urls
         are overwritten when the corresponding kwargs are non-None. Other

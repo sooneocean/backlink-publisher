@@ -55,6 +55,9 @@ plan-gap = "backlink_publisher.cli.plan_gap:main"
 recheck-backlinks = "backlink_publisher.cli.recheck_backlinks:main"
 gate-probe = "backlink_publisher.cli.gate_probe:main"
 recheck-overlay = "backlink_publisher.cli.recheck_overlay:main"
+canonical-expand = "backlink_publisher.cli.canonical_expand:main"
+pr-opportunities = "backlink_publisher.cli.pr_opportunities:main"
+probe-citations = "backlink_publisher.cli.probe_citations:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

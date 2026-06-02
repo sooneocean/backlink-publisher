@@ -63,3 +63,21 @@ def test_does_not_stall_without_external_evidence():
     # even when the operator never supplies GA4 evidence.
     v = g3.assess_g3(referral=None, credentials_available=True, strip_threshold=0.5)
     assert v.state in (gv.KILL,)  # majority strip → structurally blind
+
+
+def test_all_paths_strip_evidence_shows_preserving_none(monkeypatch):
+    """When every render path strips referer, evidence must show 'preserving=none'.
+
+    The 'or "preserving=none"' fallback in the evidence tuple was unreachable
+    because "preserving=" + "" (an empty join) is truthy, so the `or` short-
+    circuits and the fallback string is never used. This test fails before the
+    fix (evidence shows "preserving=" instead of "preserving=none").
+    """
+    monkeypatch.setattr(g3, "_RENDER_PATHS", (
+        ("all_strip", "noopener noreferrer"),
+    ))
+    v = g3.assess_g3(referral=None, credentials_available=False, strip_threshold=0.5)
+    assert v.state == gv.KILL
+    assert any(e == "preserving=none" for e in v.evidence), (
+        f"evidence should contain 'preserving=none' when all paths strip, got {v.evidence!r}"
+    )

@@ -17,13 +17,13 @@
 ceiling = 250
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): pure generation kernel (_cell_gate_drop, _dispatch_row, _emit_link_count_recon, _scheduler_enabled_for, PlanOutcome, plan_rows) extracted to plan_backlinks/_engine.py so the in-process PipelineAPI.plan path shares it. core.py dropped from 392 to 208 SLOC — now argparse + set_log_level + row parsing + load_config + config_echo banner + reset_stats (H2) + plan_rows call + error-print + write_jsonl + preflight/canary nudge shell only. Ceiling 250 = round_up_to_10(208+30) per policy."
 
-[files."src/backlink_publisher/cli/publish_backlinks.py"]
-ceiling = 370
-rationale = "Two independent per-row loop gates now coexist here: the canary health gate (Plan 2026-05-27-001 U4 — advisory WARN + opt-in hard-skip) and the cross-run idempotency enforce gate (Plan 2026-05-27-005 U7 — skip-duplicate row, held-uncertain branch, counters, reconciliation precondition + force-manifest load). Both are intrinsic per-row publish-loop wiring; the gate decisions and audit live in cli/_dedup_gate.py (gate_with_force) + idempotency/store.py.gate_and_claim + canary/store.py. At 335 SLOC; ceiling 370 = round_up_to_10(335+30), 35 headroom."
+[files."src/backlink_publisher/cli/publish_backlinks/__init__.py"]
+ceiling = 190
+rationale = "refactor 2026-06-02: Unit 3b loop extraction — per-row loop body moved to _engine.py::_publish_one_row + run_publish_loop; __init__ keeps only setup orchestration + epilogue guard. SLOC 361->159. Ceiling 190 = round_up_to_10(159+30)."
 
 [files."src/backlink_publisher/content/fetch.py"]
-ceiling = 250
-rationale = "Soft-404 title detection extracted to content/_soft404.py, HTML head-window reading + title extraction to content/_html_utils.py (2026-05-26). SLOC dropped 281→216. Ceiling 250 = round_up_to_10(216+30) per policy."
+ceiling = 240
+rationale = "Stats counters (content/_stats.py) and stateless predicates _cache_key/_is_valid_http_url/_is_transient (content/_fetch_helpers.py) extracted 2026-06-01; gate hot-path (_check_once, verify_url_has_content, verify_urls_batch) and all test-patched module globals stay here. SLOC dropped 250→204. Ceiling 240 = round_up_to_10(204+30) per policy. Earlier: soft-404 → _soft404.py, head-window/title → _html_utils.py (2026-05-26)."
 
 [files."src/backlink_publisher/config/writer.py"]
 ceiling = 240
@@ -42,8 +42,8 @@ ceiling = 550
 rationale = "Holds the 3 extracted reducers (_project_checkpoint, _project_history, _project_drafts) plus the confirmed-emit helpers _emit_confirmed_history_row (#350) and _emit_drafts_confirmed (#340, extracted 2026-06-01 to bring _project_drafts CC under the CC-30 backstop). At 520 SLOC; ceiling 550 = round_up_to_10(520+30) per policy."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 670
-rationale = "Wave 1 dofollow channels (Plan 2026-06-01-007): added 3 register() blocks + adapter imports + manifest imports + _SETUP_CHECKS entries for hackmd, mataroa, gitlabpages (all dofollow='uncertain' pending OUR-pipeline canary). SLOC rose 584→640. Ceiling 670 = round_up_to_10(640+30) per policy. Prior 600 was a 2026-05-28 ratchet-down after removing csdn/juejin/note."
+ceiling = 270
+rationale = "refactor 2026-06-01: split live-verify (->_verify_live.py) + offline-readiness checks (->_setup_checks.py) out of the dispatcher; __init__ now holds only imports + register() wiring + thin verify_adapter_setup delegators. SLOC 640->234. Ceiling 270 = round_up_to_10(234+30) per ratchet-down policy."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465
@@ -62,9 +62,9 @@ ceiling = 120
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): main() split into two engine calls (report_from_profile + report_from_rows) extracted to _report_engine.py so the in-process PipelineAPI.report_anchors path shares it. report_anchors.py stayed at 89 SLOC — holds argparse + load_config + config_echo banner + engine call + stdout print + stderr breach lines + emit_envelope_and_exit shell only. Ceiling 120 = round_up_to_10(89+30) per policy."
 
 [files."src/backlink_publisher/cli/_publish_helpers.py"]
-ceiling = 660
-rationale = "Plan 2026-05-28-004 reconciled hub integration added _run_reconciler / _write_reconciler_report (~50 SLOC), --reconcile / --reconcile-all argparse args, and _recon_reconcile_checkpoints. At 622 SLOC; ceiling 660 = round_up_to_10(622+30) per policy; lease/throttle cluster remains the extraction candidate."
+ceiling = 480
+rationale = "refactor 2026-06-01: extracted the CLI layer (_build_parser argparse + _handle_checkpoint_ops + _handle_auth_expired) to cli/_publish_cli.py. The _do_sleep/_sleep_with_throttle and verify_published/_do_verify mock seams stay here (tests patch them at this module). _publish_helpers re-exports the 3 moved names. SLOC 634->442. Ceiling 480 = round_up_to_10(442+30)."
 
 [files."src/backlink_publisher/cli/generate_backlink_text.py"]
-ceiling = 560
-rationale = "New opt-in content-drafting CLI (Plan 2026-05-27-006): _read_candidates, _validate_candidate, _make_rejected, _validate_generated_text (refusal/unsafe/link/anchor/wordcount/language), _count_words (CJK-aware), _make_correction_hint, _run_dry_run, _resolve_client (endpoint/key/model resolution + SSRF/allowlist guard + userinfo rejection), _run_generate (corrective re-prompt loop). 541 SLOC measured 2026-05-27. Ceiling 560 = round_up_to_10(541+10) — minimal headroom; extraction candidate if it grows."
+ceiling = 390
+rationale = "refactor 2026-06-01: extracted the input-parsing + deterministic-validation cluster (9 funcs + their constants) to cli/_candidates.py; this module now holds CLI/argparse + LLM orchestration (main/_resolve_client/_run_dry_run/_run_generate) and re-exports the moved names for the tests that import them. SLOC 541->357. Ceiling 390 = round_up_to_10(357+30)."
