@@ -43,7 +43,7 @@ from .parsers.three_url import (
 )
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     """Indirect lookup so test monkeypatch on
     ``backlink_publisher.config._config_dir`` intercepts even when called
     from inside loader.py (where the local ``_config_dir`` would otherwise
@@ -309,7 +309,7 @@ def _resolve_medium_integration_token(toml_value: str | None) -> str | None:
     if token_data:
         token = token_data.get("integration_token", "").strip()
         if token:
-            return token
+            return token  # type: ignore[no-any-return]
     return toml_value
 
 

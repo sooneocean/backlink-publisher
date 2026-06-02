@@ -7,7 +7,7 @@ import os
 import stat
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 #: All token-FILE-backed credential platforms, in scan order. Single source of
 #: truth for both the run-start baseline snapshot and the per-row drift re-check.
@@ -32,7 +32,7 @@ _TOKEN_FILES: list[tuple[str, str]] = [
 ]
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     """Indirect lookup of ``_config_dir`` via the package — restores
     monkeypatchability after the Unit 5 split (see ``writer.py``)."""
     from backlink_publisher import config as _cfg
@@ -68,7 +68,7 @@ def _load_token(path: Path | None, default_filename: str) -> dict[str, Any] | No
         return None
     try:
         with open(token_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast("dict[str, Any] | None", json.load(f))
     except Exception:
         return None
 

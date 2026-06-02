@@ -99,7 +99,7 @@ def _parse_image_gen(section: Any) -> ImageGenConfig | None:
     )
 
 
-def _coerce_positive_int(value: Any, name: str) -> int:
+def _coerce_positive_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise InputValidationError(
             f"{name} must be a positive integer, got {value!r}"
@@ -107,7 +107,7 @@ def _coerce_positive_int(value: Any, name: str) -> int:
     return value
 
 
-def _coerce_nonneg_int(value: Any, name: str) -> int:
+def _coerce_nonneg_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise InputValidationError(
             f"{name} must be a non-negative integer, got {value!r}"
