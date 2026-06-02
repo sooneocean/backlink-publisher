@@ -184,4 +184,11 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "Zero PageRank transfer. Value = entity signal + JP referral traffic "
         'on a top JP dev platform (DA ~90+). referral_value="high".'
     ),
+    "zenn": (
+        "Zenn applies rel=nofollow noopener noreferrer to every outbound "
+        "external link server-side — confirmed on 36 real Zenn articles in "
+        "the 2026-06-01 discovery run (36/137 non-nofollow links, all "
+        "Zenn-internal). Zero PageRank transfer. Value = entity signal + "
+        'JP referral traffic on a top JP dev platform (DA ~90+). referral_value="high".'
+    ),
 }

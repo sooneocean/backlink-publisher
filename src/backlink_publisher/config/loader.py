@@ -1,4 +1,5 @@
 """TOML loader + parser dispatcher."""
+
 from __future__ import annotations
 
 import logging
@@ -8,15 +9,17 @@ import sys
 from pathlib import Path
 
 from backlink_publisher._util.errors import DependencyError
+
 from .tokens import load_medium_integration_token
 from .types import (
     BloggerOAuthConfig,
     Config,
-    MediumOAuthConfig,
-    ThreeUrlConfig,
     GhpagesConfig,
     GitlabPagesConfig,
     MastodonConfig,
+    ZennConfig,
+    MediumOAuthConfig,
+    ThreeUrlConfig,
     VelogConfig,
 )
 
@@ -49,6 +52,7 @@ def _resolve_config_dir() -> Path:
     from inside loader.py (where the local ``_config_dir`` would otherwise
     be a module-internal globals lookup, missed by the package-level patch)."""
     from backlink_publisher import config as _cfg
+
     return _cfg._config_dir()
 
 
@@ -164,7 +168,9 @@ def load_config(path: Path | None = None) -> Config:
 
     medium_oauth_section = medium_section.get("oauth", {})
     medium_oauth: MediumOAuthConfig | None = None
-    if medium_oauth_section.get("client_id") and medium_oauth_section.get("client_secret"):
+    if medium_oauth_section.get("client_id") and medium_oauth_section.get(
+        "client_secret"
+    ):
         medium_oauth = MediumOAuthConfig(
             client_id=medium_oauth_section["client_id"],
             client_secret=medium_oauth_section["client_secret"],
@@ -177,7 +183,9 @@ def load_config(path: Path | None = None) -> Config:
         user_data_dir = _resolve_config_dir() / "chrome-profile-default"
 
     # blogger_section now contains only main_domain → blog_id mappings
-    blog_ids = {k: str(v) for k, v in blogger_section.items() if isinstance(v, (str, int))}
+    blog_ids = {
+        k: str(v) for k, v in blogger_section.items() if isinstance(v, (str, int))
+    }
 
     targets_section = data.get("targets", {})
     target_anchor_keywords = _parse_target_anchor_keywords(targets_section)
@@ -201,7 +209,8 @@ def load_config(path: Path | None = None) -> Config:
             _log.info(
                 "[sites.%r] is in maintenance mode; consider migrating to "
                 "[targets.%r] three-URL form",
-                domain_key, domain_key,
+                domain_key,
+                domain_key,
             )
 
     anchor_proportions = _parse_anchor_proportions(data.get("anchor", {}))
@@ -267,6 +276,15 @@ def load_config(path: Path | None = None) -> Config:
             instance_url=str(mastodon_section.get("instance_url", "")),
         )
 
+    zenn_section = data.get("zenn")
+    zenn: ZennConfig | None = None
+    if zenn_section is not None:
+        zenn = ZennConfig(
+            github_repo=str(zenn_section.get("github_repo", "")),
+            username=str(zenn_section.get("username", "")),
+            branch=str(zenn_section.get("branch", "main")),
+        )
+
     image_gen = _parse_image_gen(data.get("image_gen"))
 
     cell_assignments = _parse_cell_assignments(data.get("cells"))
@@ -293,6 +311,7 @@ def load_config(path: Path | None = None) -> Config:
         ghpages=ghpages,
         gitlabpages=gitlabpages,
         mastodon=mastodon,
+        zenn=zenn,
         image_gen=image_gen,
         cell_assignments=cell_assignments,
     )
@@ -313,7 +332,9 @@ def _resolve_medium_integration_token(toml_value: str | None) -> str | None:
     return toml_value
 
 
-def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None = None) -> None:
+def _warn_if_loose_config_permissions(
+    config_path: Path, raw_data: dict | None = None
+) -> None:
     """Emit a warning if config.toml contains credentials but isn't 0600.
 
     Checks all credential-bearing sections: ``[llm].anchor_provider.api_key``,
@@ -350,13 +371,13 @@ def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None =
         _log.warning(
             "config file %s has mode %s and contains credential sections %s; "
             "set permissions to 0600 (chmod 600) to prevent credential leakage",
-            config_path, oct(mode), sections,
+            config_path,
+            oct(mode),
+            sections,
         )
 
 
-def get_three_url_config(
-    config: Config, main_domain: str
-) -> ThreeUrlConfig | None:
+def get_three_url_config(config: Config, main_domain: str) -> ThreeUrlConfig | None:
     """Return the work-themed ``ThreeUrlConfig`` for ``main_domain`` if any.
 
     Tolerates trailing-slash variants in the lookup key — matches

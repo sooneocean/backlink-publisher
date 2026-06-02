@@ -210,6 +210,24 @@ def save_gitlabpages_token(data: dict[str, Any], path: Path | None = None) -> No
     _save_token(data, path, "gitlabpages-token.json")
 
 
+def load_zenn_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Zenn GitHub PAT JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "zenn-token.json")
+
+
+def save_zenn_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Zenn GitHub PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at github.com → Settings →
+    Developer settings → Personal access tokens → New token
+    (repo or specific: contents:write on the Zenn-connected repo).
+    """
+    _save_token(data, path, "zenn-token.json")
+
+
 def load_qiita_token(path: Path | None = None) -> dict[str, Any] | None:
     """Load Qiita personal access token JSON ({token: "..."}).
 

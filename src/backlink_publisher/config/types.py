@@ -215,6 +215,24 @@ class GitlabPagesConfig:
 
 
 @dataclass(frozen=True)
+class ZennConfig:
+    """Zenn adapter configuration (wave-2 discovery, 2026-06-01).
+
+    Zenn publishes via a GitHub repository connected to the operator's Zenn
+    account. Articles are pushed as Markdown files to ``articles/<slug>.md``.
+    The GitHub PAT is stored in ``zenn-token.json`` (0600), NOT in config.toml.
+
+    ``github_repo`` — ``"owner/repo"`` of the GitHub repository connected to Zenn.
+    ``username``    — the operator's Zenn username (used to construct the article URL).
+    ``branch``      — the branch to commit to (default ``main``).
+    """
+
+    github_repo: str = ""
+    username: str = ""
+    branch: str = "main"
+
+
+@dataclass(frozen=True)
 class MastodonConfig:
     """Mastodon adapter configuration — single Fediverse instance.
 
@@ -434,6 +452,13 @@ class Config:
     in Plan 2026-05-21-001 Unit 4c; multi-instance is a follow-up
     (per-instance worktree with per-instance bind state)."""
 
+    zenn: "ZennConfig | None" = None
+    """Zenn adapter config (github_repo / username / branch).
+
+    Populated from ``[zenn]`` in config.toml. ``None`` when section is
+    absent. The GitHub PAT lives in a separate 0600 file at
+    ``~/.config/backlink-publisher/zenn-token.json`` (per SEC-3)."""
+
     image_gen: ImageGenConfig | None = None
     """AI banner image-gen settings (Plan 2026-05-20-001).
 
@@ -550,6 +575,12 @@ class Config:
         from backlink_publisher import config as _cfg
 
         return _cfg._config_dir() / "qiita-token.json"
+
+    @property
+    def zenn_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+
+        return _cfg._config_dir() / "zenn-token.json"
 
     @property
     def linkedin_token_path(self) -> Path:

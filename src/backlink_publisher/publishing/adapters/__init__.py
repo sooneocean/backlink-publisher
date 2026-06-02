@@ -49,6 +49,7 @@ from .._manifests import (
     VELOG_MANIFEST,
     WORDPRESSCOM_MANIFEST,
     WRITEAS_MANIFEST,
+    ZENN_MANIFEST,
 )
 from .._verify import VerifyResult
 
@@ -85,6 +86,7 @@ from .medium_browser import MediumBrowserAdapter
 from .notion_api import NotionAPIAdapter
 from .qiita_api import QiitaAPIAdapter
 from .rentry_api import RentryAPIAdapter
+from .zenn_github import ZennGitHubAdapter
 from .substack_api import SubstackAPIAdapter
 from .telegraph_api import TelegraphAPIAdapter
 from .tumblr_api import TumblrAPIAdapter
@@ -279,6 +281,14 @@ register(
     rationale=_R["qiita"],
     referral_value="high",  # top JP dev platform, DA ~90+, high referral traffic
     **QIITA_MANIFEST,
+)
+register(
+    "zenn",
+    ZennGitHubAdapter,
+    dofollow=False,  # confirmed rel=nofollow noopener noreferrer (36/137)
+    rationale=_R["zenn"],
+    referral_value="high",  # top JP dev platform, DA ~90+, high referral traffic
+    **ZENN_MANIFEST,
 )
 
 

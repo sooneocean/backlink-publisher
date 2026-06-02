@@ -21,6 +21,7 @@ from .hackmd_api import HackmdAPIAdapter
 from .hatena_atompub import HatenaAtomPubAdapter
 from .mataroa_api import MataroaAPIAdapter
 from .qiita_api import QiitaAPIAdapter
+from .zenn_github import ZennGitHubAdapter
 from .notion_api import NotionAPIAdapter
 from .telegraph_api import verify_telegraph_setup
 
@@ -128,6 +129,16 @@ _SETUP_CHECKS: dict[str, Callable[[Config], str | None]] = {
             f'Write {{"token": "<token>"}} to {c.qiita_token_path} '
             "(chmod 600). Generate at qiita.com → Settings → Applications "
             "→ New token (read_qiita + write_qiita scopes)."
+        )
+    ),
+    "zenn": lambda c: (
+        None
+        if ZennGitHubAdapter.available(c)
+        else (
+            "Zenn not configured. Requires: (1) [zenn] section in config.toml "
+            "with github_repo = \"owner/repo\" and username = \"your-zenn-username\"; "
+            f'(2) {{"token": "<github-pat>"}} at {c.zenn_token_path} '
+            "(chmod 600, contents:write scope on your Zenn-connected repo)."
         )
     ),
     "gitlabpages": lambda c: (

@@ -363,6 +363,43 @@ QIITA_MANIFEST: dict[str, Any] = dict(
 )
 
 
+# ── zenn ───────────────────────────────────────────────────────────────────
+#
+# Zenn: GitHub-repo git-push archetype. Articles committed as Markdown to a
+# GitHub repo connected to the operator's Zenn account. Token-paste backend
+# (GitHub PAT {"token": "..."}) at ``<config_dir>/zenn-token.json``.
+# dofollow=False — confirmed nofollow noopener noreferrer on all outbound
+# links (2026-06-01 discovery run, 36/137 ratio). Wave-2 discovery (2026-06-01).
+# PRECONDITION: [zenn] section in config.toml with github_repo + username.
+
+ZENN_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Zenn",
+        domain="zenn.dev",
+        category="dev-blog",
+        icon="bi-code-square",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/zenn-token.json",
+            extras={
+                "secret_shape": '{"token": "<github-pat>"}',
+                "token_location": "github.com → Settings → Developer settings → Personal access tokens (contents:write scope on your Zenn-connected repo)",
+                "requires_config_section": "[zenn] with github_repo + username",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=("ja",),
+    ),
+)
+
+
 # ── hatena ─────────────────────────────────────────────────────────────────
 #
 # Hatena Blog AtomPub + WSSE. Secret JSON shape:
