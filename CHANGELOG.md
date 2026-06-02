@@ -6,6 +6,22 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- G3 referer-audit evidence now correctly shows `preserving=none` when every
+  render path strips `referer`. The previous `or "preserving=none"` fallback
+  was unreachable: `"preserving=" + ""` (an empty join over a zero-length list)
+  is truthy, so the `or` short-circuited and the evidence cell always read
+  `"preserving="`. Operators reading the committed `gate-verdicts.md` ledger
+  or the raw JSONL evidence when all paths strip referer would have seen a
+  misleading empty `preserving=` token instead of the explicit `preserving=none`.
+
+- SSRF blocklist now rejects `168.63.129.16` (Azure wireserver). This address
+  is not RFC 1918, not link-local, and not covered by the existing
+  `169.254.0.0/16` range, so it previously passed the IP guard. Azure wireserver
+  exposes DHCP, platform key management, and health-probe endpoints that are
+  reachable only from inside Azure VMs; an attacker-controlled redirect or a
+  domain that resolves to it could exfiltrate instance metadata. The address is
+  now blocked as a dedicated `/32` entry in `_BLOCKED_NETWORKS`.
+
 - `upgrade_target_to_threeurl` (the `/sites` "upgrade legacy target → three-URL"
   path) now finds an existing `anchor_keywords` pool keyed by the bare domain or
   a scheme variant, via the canonical `get_anchor_keywords` accessor. Previously

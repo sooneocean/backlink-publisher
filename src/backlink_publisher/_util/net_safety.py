@@ -22,6 +22,7 @@ _BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("168.63.129.16/32"),  # Azure wireserver (DHCP, key mgmt, health probes)
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("224.0.0.0/4"),

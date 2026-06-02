@@ -91,10 +91,11 @@ def assess_g3(
     stripped = sum(1 for p in audit if p.strips_referer)
     strip_fraction = (stripped / total) if total else 0.0
     threshold_set = strip_threshold is not None
+    _preserved = [p.name for p in audit if not p.strips_referer]
     evidence = (
         f"render_paths={total}",
         f"strip_referer={stripped}/{total}",
-        "preserving=" + ",".join(p.name for p in audit if not p.strips_referer) or "preserving=none",
+        "preserving=" + (",".join(_preserved) if _preserved else "none"),
         f"referral_sessions={referral.sessions}" if referral else "referral_evidence=absent",
     )
     note = "referer render-path audit + GA4 referral"
