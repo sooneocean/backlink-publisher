@@ -20,9 +20,10 @@ _log = logging.getLogger(__name__)
 
 def _parse_work_urls(entry: dict, raw_domain: str) -> list[str]:
     """Validate and normalise the ``work_urls`` list for one target entry."""
-    raw: list = entry.get("work_urls", []) or []
+    raw: Any = entry.get("work_urls", []) or []
     if not isinstance(raw, list):
         raw = []
+
     urls: list[str] = []
     dropped = 0
     for u in raw:

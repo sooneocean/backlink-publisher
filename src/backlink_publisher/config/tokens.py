@@ -1,4 +1,5 @@
 """Blogger / Medium token file I/O."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import os
 import stat
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 #: All token-FILE-backed credential platforms, in scan order. Single source of
 #: truth for both the run-start baseline snapshot and the per-row drift re-check.
@@ -32,10 +33,11 @@ _TOKEN_FILES: list[tuple[str, str]] = [
 ]
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     """Indirect lookup of ``_config_dir`` via the package — restores
     monkeypatchability after the Unit 5 split (see ``writer.py``)."""
     from backlink_publisher import config as _cfg
+
     return _cfg._config_dir()
 
 
@@ -68,7 +70,7 @@ def _load_token(path: Path | None, default_filename: str) -> dict[str, Any] | No
         return None
     try:
         with open(token_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast("dict[str, Any] | None", json.load(f))
     except Exception:
         return None
 
@@ -206,6 +208,40 @@ def save_gitlabpages_token(data: dict[str, Any], path: Path | None = None) -> No
     write_repository) scope on the target Pages project.
     """
     _save_token(data, path, "gitlabpages-token.json")
+
+
+def load_zenn_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Zenn GitHub PAT JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "zenn-token.json")
+
+
+def save_zenn_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Zenn GitHub PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at github.com → Settings →
+    Developer settings → Personal access tokens → New token
+    (repo or specific: contents:write on the Zenn-connected repo).
+    """
+    _save_token(data, path, "zenn-token.json")
+
+
+def load_qiita_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Qiita personal access token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "qiita-token.json")
+
+
+def save_qiita_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Qiita PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at qiita.com → Settings → Applications.
+    """
+    _save_token(data, path, "qiita-token.json")
 
 
 def save_wordpresscom_token(data: dict[str, Any], path: Path | None = None) -> None:

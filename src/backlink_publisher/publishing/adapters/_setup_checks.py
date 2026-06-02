@@ -11,14 +11,17 @@ from __future__ import annotations
 
 from typing import Callable
 
-from backlink_publisher.config import Config
 from backlink_publisher._util.errors import DependencyError
+from backlink_publisher.config import Config
+
 from ..registry import _REGISTRY, registered_platforms
 from .devto_api import DevtoAPIAdapter
 from .gitlabpages import GitLabPagesAPIAdapter
 from .hackmd_api import HackmdAPIAdapter
 from .hatena_atompub import HatenaAtomPubAdapter
 from .mataroa_api import MataroaAPIAdapter
+from .qiita_api import QiitaAPIAdapter
+from .zenn_github import ZennGitHubAdapter
 from .notion_api import NotionAPIAdapter
 from .telegraph_api import verify_telegraph_setup
 
@@ -26,11 +29,13 @@ from .telegraph_api import verify_telegraph_setup
 def _check_medium_setup(config: Config) -> str | None:
     from backlink_publisher.config import load_medium_token
     from backlink_publisher.config.tokens import load_medium_integration_token
+
     has_oauth = bool(load_medium_token())
     it_data = load_medium_integration_token()
     has_it = bool(it_data and it_data.get("integration_token", "").strip())
     has_toml_it = bool(config.medium_integration_token)
     from .medium_browser import sync_playwright as _spw
+
     has_playwright = _spw is not None
     if not (has_it or has_toml_it or has_oauth or has_playwright):
         return (
@@ -44,13 +49,13 @@ def _check_medium_setup(config: Config) -> str | None:
 def _check_ghpages_setup(config: Config) -> str | None:
     if config.ghpages is None or not config.ghpages.repo:
         return (
-            "GitHub Pages config missing. Add [ghpages] repo=\"owner/name\" "
+            'GitHub Pages config missing. Add [ghpages] repo="owner/name" '
             "to ~/.config/backlink-publisher/config.toml"
         )
     if not config.ghpages_token_path.exists():
         return (
             "GitHub Pages PAT not stored. Write "
-            f"{{\"token\": \"<pat>\"}} to {config.ghpages_token_path} "
+            f'{{"token": "<pat>"}} to {config.ghpages_token_path} '
             "(chmod 600). PAT needs Contents:Read+Write on the target repo."
         )
     return None
@@ -59,75 +64,100 @@ def _check_ghpages_setup(config: Config) -> str | None:
 def _check_velog_setup(config: Config) -> str | None:
     velog_cfg = config.velog
     cookies_path = (
-        velog_cfg.cookies_path if velog_cfg else
-        config.config_dir / "velog-cookies.json"
+        velog_cfg.cookies_path
+        if velog_cfg
+        else config.config_dir / "velog-cookies.json"
     )
     if not cookies_path.exists():
-        return (
-            f"velog cookies not found: {cookies_path}\n"
-            "Run: velog-login"
-        )
+        return f"velog cookies not found: {cookies_path}\nRun: velog-login"
     return None
 
 
 _SETUP_CHECKS: dict[str, Callable[[Config], str | None]] = {
     "blogger": lambda c: (
-        None if c.blogger_oauth
+        None
+        if c.blogger_oauth
         else "Blogger OAuth not configured. "
-             "Add [blogger.oauth] to ~/.config/backlink-publisher/config.toml"
+        "Add [blogger.oauth] to ~/.config/backlink-publisher/config.toml"
     ),
     "medium": _check_medium_setup,
     "telegraph": lambda c: _check_telegraph_setup(c),
     "velog": _check_velog_setup,
     "ghpages": _check_ghpages_setup,
     "notion": lambda c: (
-        None if NotionAPIAdapter.available(c)
+        None
+        if NotionAPIAdapter.available(c)
         else (
             "Notion integration token or database_id not configured. "
-            f"Write {{\"integration_token\": \"secret_...\", \"database_id\": \"...\"}} "
+            f'Write {{"integration_token": "secret_...", "database_id": "..."}} '
             f"to {c.notion_token_path} (chmod 600). "
             "Create an Integration at https://www.notion.so/my-integrations."
         )
     ),
     "devto": lambda c: (
-        None if DevtoAPIAdapter.available(c)
+        None
+        if DevtoAPIAdapter.available(c)
         else (
             "Dev.to API key not configured. "
-            f"Write {{\"api_key\": \"<key>\"}} to {c.devto_token_path} "
+            f'Write {{"api_key": "<key>"}} to {c.devto_token_path} '
             "(chmod 600). Generate at https://dev.to/settings/extensions."
         )
     ),
     "hackmd": lambda c: (
-        None if HackmdAPIAdapter.available(c)
+        None
+        if HackmdAPIAdapter.available(c)
         else (
             "HackMD API token not configured. "
-            f"Write {{\"token\": \"<token>\"}} to {c.hackmd_token_path} "
+            f'Write {{"token": "<token>"}} to {c.hackmd_token_path} '
             "(chmod 600). Generate at HackMD → Settings → API → Create token."
         )
     ),
     "mataroa": lambda c: (
-        None if MataroaAPIAdapter.available(c)
+        None
+        if MataroaAPIAdapter.available(c)
         else (
             "Mataroa API token not configured. "
-            f"Write {{\"token\": \"<token>\"}} to {c.mataroa_token_path} "
+            f'Write {{"token": "<token>"}} to {c.mataroa_token_path} '
             "(chmod 600). Enable at mataroa.blog → account settings → API."
         )
     ),
-    "gitlabpages": lambda c: (
-        None if GitLabPagesAPIAdapter.available(c)
+    "qiita": lambda c: (
+        None
+        if QiitaAPIAdapter.available(c)
         else (
-            "GitLab Pages not configured. Add [gitlabpages] project=\"namespace/name\" "
-            f"to config.toml and write {{\"token\": \"<pat>\"}} to {c.gitlabpages_token_path} "
+            "Qiita personal access token not configured. "
+            f'Write {{"token": "<token>"}} to {c.qiita_token_path} '
+            "(chmod 600). Generate at qiita.com → Settings → Applications "
+            "→ New token (read_qiita + write_qiita scopes)."
+        )
+    ),
+    "zenn": lambda c: (
+        None
+        if ZennGitHubAdapter.available(c)
+        else (
+            "Zenn not configured. Requires: (1) [zenn] section in config.toml "
+            "with github_repo = \"owner/repo\" and username = \"your-zenn-username\"; "
+            f'(2) {{"token": "<github-pat>"}} at {c.zenn_token_path} '
+            "(chmod 600, contents:write scope on your Zenn-connected repo)."
+        )
+    ),
+    "gitlabpages": lambda c: (
+        None
+        if GitLabPagesAPIAdapter.available(c)
+        else (
+            'GitLab Pages not configured. Add [gitlabpages] project="namespace/name" '
+            f'to config.toml and write {{"token": "<pat>"}} to {c.gitlabpages_token_path} '
             "(chmod 600, `api` scope). PRECONDITION: the target project must already "
             "have a `pages` CI job emitting public/ — committing a file does not "
             "publish without it."
         )
     ),
     "hatena": lambda c: (
-        None if HatenaAtomPubAdapter.available(c)
+        None
+        if HatenaAtomPubAdapter.available(c)
         else (
             "Hatena credentials not configured. Write "
-            "{\"hatena_id\": \"...\", \"blog_id\": \"...\", \"api_key\": \"...\"} to "
+            '{"hatena_id": "...", "blog_id": "...", "api_key": "..."} to '
             f"{c.config_dir / 'hatena-credentials.json'} (chmod 600). "
             "API key: Hatena Blog → Settings → Advanced → AtomPub."
         )

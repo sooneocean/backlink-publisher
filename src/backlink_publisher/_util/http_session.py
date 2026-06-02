@@ -20,6 +20,7 @@ from __future__ import annotations
 import ssl
 import threading
 from typing import Any, Optional
+from urllib.error import URLError
 from urllib.request import (
     BaseHandler,
     build_opener,
@@ -27,11 +28,10 @@ from urllib.request import (
     HTTPError,
     HTTPRedirectHandler,
     Request,
-    URLError,
 )
 from http.cookiejar import CookieJar
 
-from backlink_publisher._util.net_safety import _check_url_for_ssrf, _SSRF_REDIRECT_HANDLER
+from backlink_publisher._util.net_safety import _check_url_for_ssrf
 from backlink_publisher._util.logger import opencli_logger
 
 # Thread-local storage for sessions
@@ -91,7 +91,7 @@ def _build_opener(max_redirects: int = 10) -> Any:
     # Create handlers
     cookie_handler = HTTPCookieProcessor(_cookie_jar)
     redirect_handler = _SessionRedirectHandler()
-    redirect_handler.max_redirects = max_redirects
+    setattr(redirect_handler, "max_redirections", max_redirects)
 
     # Build opener with handlers
     opener = build_opener(cookie_handler, redirect_handler)
@@ -167,7 +167,7 @@ def fetch_url(
         # Re-raise with body available
         body = exc.read() if exc.fp else b""
         raise HTTPError(
-            exc.fp,
+            exc.url,
             exc.code,
             exc.msg,
             exc.headers,

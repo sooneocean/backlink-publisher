@@ -3,6 +3,7 @@
 Pure data types. No I/O, no parsing — see ``loader.py``, ``writer.py``,
 and ``parsers/`` for those.
 """
+
 from __future__ import annotations
 
 import re
@@ -110,8 +111,8 @@ class LLMProviderConfig:
     # in ``frw-token.json`` (0600) per SEC-3.  Reading the field
     # raises ``DeprecationWarning`` at parse time; the field will be
     # removed once Unit 4 lands and no call sites remain.
-    use_image_gen: bool = False
-    image_gen_api_key: str | None = None
+    use_image_gen: bool = False  # type: ignore[no-redef]
+    image_gen_api_key: str | None = None  # type: ignore[no-redef]
 
 
 @dataclass
@@ -214,6 +215,24 @@ class GitlabPagesConfig:
 
 
 @dataclass(frozen=True)
+class ZennConfig:
+    """Zenn adapter configuration (wave-2 discovery, 2026-06-01).
+
+    Zenn publishes via a GitHub repository connected to the operator's Zenn
+    account. Articles are pushed as Markdown files to ``articles/<slug>.md``.
+    The GitHub PAT is stored in ``zenn-token.json`` (0600), NOT in config.toml.
+
+    ``github_repo`` — ``"owner/repo"`` of the GitHub repository connected to Zenn.
+    ``username``    — the operator's Zenn username (used to construct the article URL).
+    ``branch``      — the branch to commit to (default ``main``).
+    """
+
+    github_repo: str = ""
+    username: str = ""
+    branch: str = "main"
+
+
+@dataclass(frozen=True)
 class MastodonConfig:
     """Mastodon adapter configuration — single Fediverse instance.
 
@@ -254,9 +273,7 @@ class VelogConfig:
     The file must be 0600 — the adapter enforces this at load time.
     """
 
-    cookies_path: Path = field(
-        default_factory=lambda: _velog_default_cookies_path()
-    )
+    cookies_path: Path = field(default_factory=lambda: _velog_default_cookies_path())
 
 
 @dataclass(frozen=True)
@@ -435,6 +452,13 @@ class Config:
     in Plan 2026-05-21-001 Unit 4c; multi-instance is a follow-up
     (per-instance worktree with per-instance bind state)."""
 
+    zenn: "ZennConfig | None" = None
+    """Zenn adapter config (github_repo / username / branch).
+
+    Populated from ``[zenn]`` in config.toml. ``None`` when section is
+    absent. The GitHub PAT lives in a separate 0600 file at
+    ``~/.config/backlink-publisher/zenn-token.json`` (per SEC-3)."""
+
     image_gen: ImageGenConfig | None = None
     """AI banner image-gen settings (Plan 2026-05-20-001).
 
@@ -465,79 +489,107 @@ class Config:
     @property
     def frw_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "frw-token.json"
 
     @property
     def config_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir()
 
     @property
     def cache_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._cache_dir()
 
     @property
     def blogger_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "blogger-token.json"
 
     @property
     def ghpages_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "ghpages-token.json"
 
     @property
     def notion_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "notion-token.json"
 
     @property
     def wordpresscom_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "wordpresscom-token.json"
 
     @property
     def hashnode_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "hashnode-token.json"
 
     @property
     def writeas_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "writeas-token.json"
 
     @property
     def tumblr_credentials_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "tumblr-credentials.json"
 
     @property
     def devto_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "devto-token.json"
 
     @property
     def hackmd_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "hackmd-token.json"
 
     @property
     def mataroa_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "mataroa-token.json"
 
     @property
     def gitlabpages_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "gitlabpages-token.json"
+
+    @property
+    def qiita_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+
+        return _cfg._config_dir() / "qiita-token.json"
+
+    @property
+    def zenn_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+
+        return _cfg._config_dir() / "zenn-token.json"
 
     @property
     def linkedin_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "linkedin-token.json"
 
     @property
     def screenshot_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._cache_dir() / "screenshots"

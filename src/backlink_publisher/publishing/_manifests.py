@@ -24,7 +24,6 @@ from typing import Any
 
 from ._manifest_types import BindDescriptor, Policy, UiMeta
 
-
 # ── velog ──────────────────────────────────────────────────────────────────
 #
 # First channel to declare a complete manifest (Plan 2026-05-25-002 Unit 3).
@@ -58,8 +57,7 @@ VELOG_MANIFEST: dict[str, Any] = dict(
             card_template="_settings_channel_velog.html",
             extras={
                 "browser_recipe": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes.velog"
+                    "backlink_publisher.publishing.browser_publish.recipes.velog"
                 ),
                 "bind_recipe": "backlink_publisher.cli._bind.recipes.velog",
                 "login_module": "backlink_publisher.cli.velog_login",
@@ -144,9 +142,7 @@ BLOGGER_MANIFEST: dict[str, Any] = dict(
             card_template="_settings_channel_blogger.html",
             extras={
                 "oauth_config_section": "blogger_oauth",
-                "token_loader": (
-                    "backlink_publisher.config.load_blogger_token"
-                ),
+                "token_loader": ("backlink_publisher.config.load_blogger_token"),
             },
         ),
     ],
@@ -333,6 +329,77 @@ GITLABPAGES_MANIFEST: dict[str, Any] = dict(
 )
 
 
+# ── qiita ──────────────────────────────────────────────────────────────────
+#
+# Qiita v2 REST API (Bearer token). Token-paste backend ({"token": "..."})
+# at ``<config_dir>/qiita-token.json``. dofollow=False — confirmed nofollow
+# noopener on all outbound links (2026-06-01 discovery run, 12/86 ratio).
+# JP developer platform, referral_value="high". Wave-2 discovery (2026-06-01).
+
+QIITA_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Qiita",
+        domain="qiita.com",
+        category="dev-blog",
+        icon="bi-code-slash",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/qiita-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "qiita.com → Settings → Applications → New token (read_qiita + write_qiita)",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=("ja",),
+    ),
+)
+
+
+# ── zenn ───────────────────────────────────────────────────────────────────
+#
+# Zenn: GitHub-repo git-push archetype. Articles committed as Markdown to a
+# GitHub repo connected to the operator's Zenn account. Token-paste backend
+# (GitHub PAT {"token": "..."}) at ``<config_dir>/zenn-token.json``.
+# dofollow=False — confirmed nofollow noopener noreferrer on all outbound
+# links (2026-06-01 discovery run, 36/137 ratio). Wave-2 discovery (2026-06-01).
+# PRECONDITION: [zenn] section in config.toml with github_repo + username.
+
+ZENN_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Zenn",
+        domain="zenn.dev",
+        category="dev-blog",
+        icon="bi-code-square",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/zenn-token.json",
+            extras={
+                "secret_shape": '{"token": "<github-pat>"}',
+                "token_location": "github.com → Settings → Developer settings → Personal access tokens (contents:write scope on your Zenn-connected repo)",
+                "requires_config_section": "[zenn] with github_repo + username",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=("ja",),
+    ),
+)
+
+
 # ── hatena ─────────────────────────────────────────────────────────────────
 #
 # Hatena Blog AtomPub + WSSE. Secret JSON shape:
@@ -421,8 +488,7 @@ MASTODON_MANIFEST: dict[str, Any] = dict(
             storage_state_path="<config_dir>/mastodon-cookies.json",
             extras={
                 "browser_recipe": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes.mastodon"
+                    "backlink_publisher.publishing.browser_publish.recipes.mastodon"
                 ),
                 "selectors_module": (
                     "backlink_publisher.publishing.browser_publish."
@@ -561,7 +627,9 @@ TUMBLR_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(display_name="Tumblr", domain="tumblr.com", category="social"),
 )
 WORDPRESSCOM_MANIFEST: dict[str, Any] = dict(
-    ui=UiMeta(display_name="WordPress", domain="wordpress.com", category="general-blog"),
+    ui=UiMeta(
+        display_name="WordPress", domain="wordpress.com", category="general-blog"
+    ),
 )
 WRITEAS_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(display_name="Write.as", domain="write.as", category="general-blog"),

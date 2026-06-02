@@ -3,27 +3,29 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Any, Optional
 
 _mdit_instance = None
 
 
-def _get_mdit():
+def _get_mdit() -> Any:
     global _mdit_instance
     if _mdit_instance is None:
         from markdown_it import MarkdownIt
         mdit = MarkdownIt("commonmark").enable(["table", "strikethrough"])
-        default_link_open = mdit.renderer.rules.get("link_open")
+        default_link_open = mdit.renderer.rules.get("link_open")  # type: ignore[attr-defined]
 
-        def _link_open(tokens, idx, options, env):
+        def _link_open(
+            tokens: Any, idx: int, options: Any, env: Any,
+        ) -> str:
             token = tokens[idx]
             token.attrSet("target", "_blank")
             token.attrSet("rel", "noopener")
             if default_link_open is not None:
-                return default_link_open(tokens, idx, options, env)
-            return mdit.renderer.renderToken(tokens, idx, options, env)
+                return default_link_open(tokens, idx, options, env)  # type: ignore[no-any-return]
+            return mdit.renderer.renderToken(tokens, idx, options, env)  # type: ignore[no-any-return,attr-defined]
 
-        mdit.renderer.rules["link_open"] = _link_open
+        mdit.renderer.rules["link_open"] = _link_open  # type: ignore[attr-defined]
         _mdit_instance = mdit
     return _mdit_instance
 
@@ -38,7 +40,7 @@ def render_to_html(md: str) -> str:
     """
     if not md:
         return ""
-    return _get_mdit().render(md)
+    return _get_mdit().render(md)  # type: ignore[no-any-return]
 
 
 _URL_MODE_OFFSETS = {"A": 0, "B": 1, "C": 2}
