@@ -3,6 +3,7 @@
 Pure data types. No I/O, no parsing — see ``loader.py``, ``writer.py``,
 and ``parsers/`` for those.
 """
+
 from __future__ import annotations
 
 import re
@@ -254,9 +255,7 @@ class VelogConfig:
     The file must be 0600 — the adapter enforces this at load time.
     """
 
-    cookies_path: Path = field(
-        default_factory=lambda: _velog_default_cookies_path()
-    )
+    cookies_path: Path = field(default_factory=lambda: _velog_default_cookies_path())
 
 
 @dataclass(frozen=True)
@@ -465,79 +464,101 @@ class Config:
     @property
     def frw_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "frw-token.json"
 
     @property
     def config_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir()
 
     @property
     def cache_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._cache_dir()
 
     @property
     def blogger_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "blogger-token.json"
 
     @property
     def ghpages_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "ghpages-token.json"
 
     @property
     def notion_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "notion-token.json"
 
     @property
     def wordpresscom_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "wordpresscom-token.json"
 
     @property
     def hashnode_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "hashnode-token.json"
 
     @property
     def writeas_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "writeas-token.json"
 
     @property
     def tumblr_credentials_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "tumblr-credentials.json"
 
     @property
     def devto_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "devto-token.json"
 
     @property
     def hackmd_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "hackmd-token.json"
 
     @property
     def mataroa_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "mataroa-token.json"
 
     @property
     def gitlabpages_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "gitlabpages-token.json"
+
+    @property
+    def qiita_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+
+        return _cfg._config_dir() / "qiita-token.json"
 
     @property
     def linkedin_token_path(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._config_dir() / "linkedin-token.json"
 
     @property
     def screenshot_dir(self) -> Path:
         from backlink_publisher import config as _cfg
+
         return _cfg._cache_dir() / "screenshots"

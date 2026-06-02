@@ -22,10 +22,10 @@ Behaviour preserved verbatim:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, Optional
 
 from backlink_publisher.config import Config
-from ..registry import dispatch, register
+
 from .._manifests import (
     BLOGGER_MANIFEST,
     DEVTO_MANIFEST,
@@ -40,6 +40,7 @@ from .._manifests import (
     MATAROA_MANIFEST,
     MEDIUM_MANIFEST,
     NOTION_MANIFEST,
+    QIITA_MANIFEST,
     RENTRY_MANIFEST,
     SUBSTACK_MANIFEST,
     TELEGRAPH_MANIFEST,
@@ -49,30 +50,7 @@ from .._manifests import (
     WORDPRESSCOM_MANIFEST,
     WRITEAS_MANIFEST,
 )
-from .base import AdapterResult
-from .blogger_api import BloggerAPIAdapter
-from .ghpages import GitHubPagesAPIAdapter
-from .devto_api import DevtoAPIAdapter
-from .gitlabpages import GitLabPagesAPIAdapter
-from .hackmd_api import HackmdAPIAdapter
-from .mataroa_api import MataroaAPIAdapter
-from .instant_web import TelegraphCdpAdapter  # noqa: F401  kept for test import, not yet wired
-from .livejournal_api import LivejournalAPIAdapter
-from .txtfyi_api import TxtfyiFormPostAdapter
-from .medium_api import MediumAPIAdapter
-from .medium_brave import MediumBraveAdapter
-from .medium_browser import MediumBrowserAdapter
-from .notion_api import NotionAPIAdapter
-from .telegraph_api import TelegraphAPIAdapter
-from .velog_graphql import VelogGraphQLAdapter
-from .wordpresscom_api import WordpresscomAPIAdapter
-from .hashnode_graphql import HashnodeGraphQLAdapter
-from .hatena_atompub import HatenaAtomPubAdapter
-from .writeas_api import WriteasAPIAdapter
-from .tumblr_api import TumblrAPIAdapter
-from .linkedin_api import LinkedInAPIAdapter
-from .substack_api import SubstackAPIAdapter
-from .rentry_api import RentryAPIAdapter
+from .._verify import VerifyResult
 
 # Import the Unit 4a velog browser recipe module so it can populate
 # RECIPES["velog"] before the registration line below references it.
@@ -80,13 +58,40 @@ from .rentry_api import RentryAPIAdapter
 # VelogGraphQLAdapter (DependencyError → fall through; ExternalServiceError
 # from API path propagates without fall-through, per registry contract).
 from ..browser_publish import BrowserPublishDispatcher
-from ..browser_publish.recipes import velog as _velog_recipe  # noqa: F401
 from ..browser_publish.recipes import devto as _devto_recipe  # noqa: F401
 from ..browser_publish.recipes import mastodon as _mastodon_recipe  # noqa: F401
+from ..browser_publish.recipes import velog as _velog_recipe  # noqa: F401
+from ..registry import dispatch, register
 from ._nofollow_rationales import NOFOLLOW_RATIONALES as _R
 from ._setup_checks import _verify_offline_setup
 from ._verify_live import _verify_dry_run, _verify_live
-
+from .base import AdapterResult
+from .blogger_api import BloggerAPIAdapter
+from .devto_api import DevtoAPIAdapter
+from .ghpages import GitHubPagesAPIAdapter
+from .gitlabpages import GitLabPagesAPIAdapter
+from .hackmd_api import HackmdAPIAdapter
+from .hashnode_graphql import HashnodeGraphQLAdapter
+from .hatena_atompub import HatenaAtomPubAdapter
+from .instant_web import (
+    TelegraphCdpAdapter,  # noqa: F401  kept for test import, not yet wired
+)
+from .linkedin_api import LinkedInAPIAdapter
+from .livejournal_api import LivejournalAPIAdapter
+from .mataroa_api import MataroaAPIAdapter
+from .medium_api import MediumAPIAdapter
+from .medium_brave import MediumBraveAdapter
+from .medium_browser import MediumBrowserAdapter
+from .notion_api import NotionAPIAdapter
+from .qiita_api import QiitaAPIAdapter
+from .rentry_api import RentryAPIAdapter
+from .substack_api import SubstackAPIAdapter
+from .telegraph_api import TelegraphAPIAdapter
+from .tumblr_api import TumblrAPIAdapter
+from .txtfyi_api import TxtfyiFormPostAdapter
+from .velog_graphql import VelogGraphQLAdapter
+from .wordpresscom_api import WordpresscomAPIAdapter
+from .writeas_api import WriteasAPIAdapter
 
 # Register the fallback chain per platform. Adding a new platform = one
 # more ``register(...)`` call — no dispatcher changes. Each registration
@@ -265,6 +270,15 @@ register(
     rationale=_R["gitlabpages"],
     referral_value="high",
     **GITLABPAGES_MANIFEST,
+)
+# Wave-2 discovery (2026-06-01) — confirmed nofollow, high JP referral value.
+register(
+    "qiita",
+    QiitaAPIAdapter,
+    dofollow=False,  # confirmed rel=nofollow noopener on all outbound links
+    rationale=_R["qiita"],
+    referral_value="high",  # top JP dev platform, DA ~90+, high referral traffic
+    **QIITA_MANIFEST,
 )
 
 

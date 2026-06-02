@@ -1,4 +1,5 @@
 """Blogger / Medium token file I/O."""
+
 from __future__ import annotations
 
 import json
@@ -36,6 +37,7 @@ def _resolve_config_dir() -> Path:
     """Indirect lookup of ``_config_dir`` via the package — restores
     monkeypatchability after the Unit 5 split (see ``writer.py``)."""
     from backlink_publisher import config as _cfg
+
     return _cfg._config_dir()
 
 
@@ -206,6 +208,22 @@ def save_gitlabpages_token(data: dict[str, Any], path: Path | None = None) -> No
     write_repository) scope on the target Pages project.
     """
     _save_token(data, path, "gitlabpages-token.json")
+
+
+def load_qiita_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Qiita personal access token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "qiita-token.json")
+
+
+def save_qiita_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Qiita PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at qiita.com → Settings → Applications.
+    """
+    _save_token(data, path, "qiita-token.json")
 
 
 def save_wordpresscom_token(data: dict[str, Any], path: Path | None = None) -> None:
