@@ -44,6 +44,7 @@ from .._manifests import (
     MEDIUM_MANIFEST,
     NOTION_MANIFEST,
     POSTEASY_MANIFEST,
+    PUBMARK_MANIFEST,
     QIITA_MANIFEST,
     RENTRY_MANIFEST,
     SUBSTACK_MANIFEST,
@@ -99,6 +100,7 @@ from .brewpage_api import BrewPageAPIAdapter
 from .posteasy_api import PostEasyAPIAdapter
 from .htmldrop_api import HtmlDropAPIAdapter
 from .nonograph_api import NonographAPIAdapter
+from .pubmark_api import PubmarkAPIAdapter
 from .velog_graphql import VelogGraphQLAdapter
 from .wordpresscom_api import WordpresscomAPIAdapter
 from .writeas_api import WriteasAPIAdapter
@@ -332,6 +334,14 @@ register(
     rationale=_R["nonograph"],
     referral_value="low",
     **NONOGRAPH_MANIFEST,
+)
+register(
+    "pubmark",
+    PubmarkAPIAdapter,
+    dofollow="uncertain",  # browser-probe confirmed dofollow; pipeline canary pending
+    rationale=_R["pubmark"],
+    referral_value="low",
+    **PUBMARK_MANIFEST,
 )
 
 

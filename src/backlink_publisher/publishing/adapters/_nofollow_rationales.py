@@ -220,6 +220,17 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "verify_link_attributes on the live page. 24-hour TTL for anonymous "
         'posts. referral_value="low": short-TTL paste service, modest DA.'
     ),
+    "pubmark": (
+        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
+        "(Plan 2026-06-04-001 Wave pubmark): a 2026-06-04 live browser "
+        "probe confirmed Pubmark renders Markdown links as <a href> with "
+        "no rel attribute (rel=null) — dofollow by construction for the "
+        "sampled post. A pipeline canary must confirm stability across "
+        "multiple publishes before marking dofollow=True. Free plan limits "
+        "to 5 published documents per IP/session; the adapter accepts this "
+        'limit transparently. referral_value="low": modest DA, anonymous '
+        "publishing."
+    ),
     "nonograph": (
         'Registered dofollow="uncertain" pending an OUR-pipeline canary '
         "(Plan 2026-06-04-001 Wave 3a): Nonograph renders Markdown content "

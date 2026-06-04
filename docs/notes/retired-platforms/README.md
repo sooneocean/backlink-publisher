@@ -13,6 +13,8 @@ Platforms evaluated and ruled out. One file per platform.
 | [Weebly](2026-06-01-discovery-batch.md) | 2026-06-01 | Free subdomain PBN, deindex-prone, heavy adapter |
 | [Google Sites](2026-06-01-discovery-batch.md) | 2026-06-01 | Apex-DA mirage, redirect-wrapped links, heavy |
 | [GitLab Snippets](2026-06-01-discovery-batch.md) | 2026-06-01 | GitLab-only content barely indexed by Google |
+| [paste.rs](2026-06-01-discovery-batch.md) | 2026-06-05 | No Google indexation of paste pages |
+| [ix.io](2026-06-01-discovery-batch.md) | 2026-06-05 | Service is down |
 
 ## Adding an entry
 

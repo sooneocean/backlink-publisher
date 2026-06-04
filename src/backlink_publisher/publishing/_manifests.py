@@ -675,3 +675,13 @@ NONOGRAPH_MANIFEST: dict[str, Any] = dict(
         icon="bi-file-text",
     ),
 )
+
+# Pubmark — free instant Markdown publishing, REST API (this wave).
+PUBMARK_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Pubmark",
+        domain="pubmark.site",
+        category="anonymous-paste",
+        icon="bi-pencil-square",
+    ),
+)

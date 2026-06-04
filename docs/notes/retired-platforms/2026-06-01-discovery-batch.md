@@ -14,5 +14,7 @@ them instead of re-probing. Each has a documented reopen condition.
 | **weebly.com** | NO-GO | Free `*.weebly.com` subdomain: low DA, forced footer, **deindexation-prone** (2025 thin-content wave); heavy browser+account adapter; unverified dofollow. | N/A — classic Web2.0 PBN layer, no ROI. |
 | **sites.google.com** | NO-GO | Apex DA is a mirage: per-`/view/` content weakly indexed, outbound links **redirect-wrapped** (dofollow unconfirmable), heavy browser+account adapter. | New Google Sites stops wrapping links AND per-site indexation proven. |
 | **gitlab.com Snippets** | NO-GO | GitLab-only content **barely indexed by Google** (issues #4650/#24289) → near-zero SEO value. (GitLab **Pages** is a separate GO — see discovery run.) | Google indexation of snippets materially improves. |
+| **paste.rs** | NO-GO | **No Google indexation** — `site:paste.rs` returns only the homepage; no paste content appears in search results. Links are technically dofollow (raw `<a>` elements from Markdown renderer), but unindexed pages pass zero PageRank. Also heavy rate limiting. | Google begins indexing paste.rs paste pages. |
+| **ix.io** | NO-GO | **Service is down** ("taking a break 🍻" splash page as of 2026-06-05). No API reachable, no active service. | Service returns with stable uptime. |
 
 Probe method + full per-candidate evidence: `docs/discovery/2026-06-01-run.md`.
