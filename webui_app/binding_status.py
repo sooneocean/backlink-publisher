@@ -101,6 +101,32 @@ def __getattr__(name: str) -> object:
 # wordpresscom) live in publishing.registry._REJECTED_PLATFORMS and re-attempts
 # at those names raise RegistryError at import time.
 
+# Backlink outcome taxonomy — mirrors publishing._verify_html.RenderedLinkResult.
+_BACKLINK_OUTCOME_VALUES: frozenset[str] = frozenset(
+    {"effective_backlink", "published_but_ineffective", "needs_canary", "failed"}
+)
+
+
+def _get_latest_backlink_outcome(platform: str) -> str | None:
+    """Return the most recent backlink outcome for *platform* from publish history.
+
+    Reads from the WebUI history store (in-memory JSON file) and finds the newest
+    entry whose ``backlink_outcome`` field is set.  Returns ``None`` when no
+    outcome has been recorded yet (first publish, or only failures before the
+    verification hook was added).
+    """
+    try:
+        from webui_store import history_store
+        hist = history_store.load()
+    except Exception:
+        return None
+    for entry in hist:
+        if entry.get("platform") == platform:
+            outcome = entry.get("backlink_outcome")
+            if outcome in _BACKLINK_OUTCOME_VALUES:
+                return outcome
+    return None
+
 
 def get_channel_status(name: str, config: Config) -> dict[str, Any]:
     """Cheap offline status — never hits the network.

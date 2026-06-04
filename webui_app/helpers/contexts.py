@@ -320,11 +320,17 @@ def _settings_context(flash=None):
         # legacy fallback path but redundant once we read from
         # ``active_platforms()`` directly.
         from backlink_publisher.publishing.registry import active_platforms
-        from ..binding_status import get_channel_status
+        from ..binding_status import get_channel_status, _get_latest_backlink_outcome
         dashboard_channels = [
             (name, get_channel_status(name, cfg))
             for name in active_platforms()
         ]
+        # Inject the latest backlink outcome into each channel status dict so
+        # templates can render outcome badges without extra store reads.
+        for name, status in dashboard_channels:
+            outcome = _get_latest_backlink_outcome(name)
+            if outcome:
+                status["backlink_outcome"] = outcome
     except Exception:
         dashboard_channels = []
 

@@ -7,6 +7,7 @@ from typing import Any
 
 
 _LINK_ATTR_VERIFICATION_KEY = "link_attr_verification"
+_BACKLINK_OUTCOME_KEY = "backlink_outcome"
 
 
 def carry_link_attr_verification(
@@ -24,6 +25,9 @@ def carry_link_attr_verification(
         verdict = source.get(_LINK_ATTR_VERIFICATION_KEY)
         if verdict is not None:
             out[_LINK_ATTR_VERIFICATION_KEY] = verdict
+        outcome = source.get(_BACKLINK_OUTCOME_KEY)
+        if outcome is not None:
+            out[_BACKLINK_OUTCOME_KEY] = outcome
     return out
 
 

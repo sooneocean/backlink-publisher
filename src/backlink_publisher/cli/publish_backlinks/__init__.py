@@ -86,6 +86,13 @@ def main(argv: list[str] | None = None) -> None:
     except SystemExit as exc:
         raise SystemExit(exc.code)
 
+    if args.zero_auth:
+        from backlink_publisher.publishing.registry import zero_auth_platforms
+        zaps = zero_auth_platforms()
+        publish_logger.recon("zero_auth_filter", in_count=len(rows), zero_auth_platforms=list(zaps))
+        rows = [r for r in rows if r.get("platform", "") in zaps]
+        publish_logger.info(f"filtered to {len(rows)} rows after zero-auth filter")
+
     publish_logger.info(f"processing {len(rows)} payloads")
 
     config = load_config()

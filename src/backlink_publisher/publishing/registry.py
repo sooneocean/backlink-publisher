@@ -226,7 +226,8 @@ _AUTH_TYPE_VALUES: frozenset[str] = frozenset({
 })
 _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     # ANON — no credentials (anonymous publish / auto-bootstrap)
-    "telegraph": "anon", "txtfyi": "anon", "rentry": "anon",
+    "telegraph": "anon", "rentry": "anon",
+    "brewpage": "anon", "posteasy": "anon", "nonograph": "anon", "htmldrop": "anon",
     # TOKEN — single secret field
     "devto": "token", "writeas": "token",
     "hackmd": "token", "mataroa": "token",
@@ -246,6 +247,8 @@ _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     "blogger": "oauth",
     # LIVE-BROWSER — driven browser login (Chrome/Playwright)
     "velog": "live_browser", "medium": "live_browser", "mastodon": "live_browser",
+    # NO-OP — platforms with no binding credential flow
+    "qiita": "anon", "zenn": "anon",
 }
 # Which auth_types are consistent with a declared ``bind[].backend``. Used by
 # the consistency test only (not at runtime). ``cookie`` backend currently
@@ -471,6 +474,16 @@ def referral_value(name: str) -> _ReferralValue | None:
     """
     entry = _REGISTRY.get(name)
     return entry.referral_value if entry else None
+
+
+def zero_auth_platforms() -> frozenset[str]:
+    """Return the set of active platforms requiring zero authentication
+    (auth_type == ``\"anon\"``).
+
+    These are platforms that support anonymous publish without credentials —
+    the primary target for the zero-auth backlink channel MVP.
+    """
+    return platforms_by_auth_type("anon")
 
 
 def dofollow_rationale(name: str) -> str | None:

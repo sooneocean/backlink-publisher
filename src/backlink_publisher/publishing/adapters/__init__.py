@@ -28,7 +28,10 @@ from backlink_publisher.config import Config
 
 from .._manifests import (
     BLOGGER_MANIFEST,
+    BREWPAGE_MANIFEST,
     DEVTO_MANIFEST,
+    HTMLDROP_MANIFEST,
+    NONOGRAPH_MANIFEST,
     GHPAGES_MANIFEST,
     GITLABPAGES_MANIFEST,
     HACKMD_MANIFEST,
@@ -40,6 +43,7 @@ from .._manifests import (
     MATAROA_MANIFEST,
     MEDIUM_MANIFEST,
     NOTION_MANIFEST,
+    POSTEASY_MANIFEST,
     QIITA_MANIFEST,
     RENTRY_MANIFEST,
     SUBSTACK_MANIFEST,
@@ -91,6 +95,10 @@ from .substack_api import SubstackAPIAdapter
 from .telegraph_api import TelegraphAPIAdapter
 from .tumblr_api import TumblrAPIAdapter
 from .txtfyi_api import TxtfyiFormPostAdapter
+from .brewpage_api import BrewPageAPIAdapter
+from .posteasy_api import PostEasyAPIAdapter
+from .htmldrop_api import HtmlDropAPIAdapter
+from .nonograph_api import NonographAPIAdapter
 from .velog_graphql import VelogGraphQLAdapter
 from .wordpresscom_api import WordpresscomAPIAdapter
 from .writeas_api import WriteasAPIAdapter
@@ -211,6 +219,7 @@ register(
     dofollow="uncertain",  # R4 canary pending; Phase 0 preliminary = dofollow
     rationale=_R["txtfyi"],
     referral_value="low",  # anonymous pastebin; modest DA + R4 pending
+    visibility="hidden",  # R12 — plain-text URL, no rendered <a>; UX honest
     **TXTFYI_MANIFEST,
 )
 register(
@@ -289,6 +298,40 @@ register(
     rationale=_R["zenn"],
     referral_value="high",  # top JP dev platform, DA ~90+, high referral traffic
     **ZENN_MANIFEST,
+)
+
+# ── Zero-Auth MVP (Plan 2026-06-04-001 Wave 1b/1c) ──────────────────────
+register(
+    "posteasy",
+    PostEasyAPIAdapter,
+    dofollow="uncertain",  # client-side rendered <a> status pending canary
+    rationale=_R["posteasy"],
+    referral_value="low",
+    **POSTEASY_MANIFEST,
+)
+register(
+    "brewpage",
+    BrewPageAPIAdapter,
+    dofollow="uncertain",  # live probe confirmed no nofollow; canary pending
+    rationale=_R["brewpage"],
+    referral_value="low",
+    **BREWPAGE_MANIFEST,
+)
+register(
+    "htmldrop",
+    HtmlDropAPIAdapter,
+    dofollow="uncertain",  # canary-gated: <a href> survives rendering but rel must be confirmed
+    rationale=_R["htmldrop"],
+    referral_value="low",
+    **HTMLDROP_MANIFEST,
+)
+register(
+    "nonograph",
+    NonographAPIAdapter,
+    dofollow="uncertain",  # canary-gated: markdown <a> rendering behavior pending evidence
+    rationale=_R["nonograph"],
+    referral_value="low",
+    **NONOGRAPH_MANIFEST,
 )
 
 

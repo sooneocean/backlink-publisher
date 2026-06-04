@@ -129,6 +129,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Log verbosity (default: WARN)",
     )
     parser.add_argument(
+        "--zero-auth",
+        action="store_true",
+        default=False,
+        help="Restrict platform pool to zero-auth (no-login) platforms only",
+    )
+    parser.add_argument(
         "--no-fetch-verify",
         action="store_true",
         default=False,
@@ -197,6 +203,13 @@ def main(argv: list[str] | None = None) -> None:
             rows = list(read_jsonl(args.input))
         except SystemExit as exc:
             raise SystemExit(exc.code)
+
+    if args.zero_auth:
+        from backlink_publisher.publishing.registry import zero_auth_platforms
+        zaps = zero_auth_platforms()
+        plan_logger.recon("zero_auth_filter", in_count=len(rows), zero_auth_platforms=list(zaps))
+        rows = [r for r in rows if r.get("platform", "") in zaps]
+        plan_logger.info(f"filtered to {len(rows)} rows after zero-auth filter")
 
     plan_logger.info(f"read {len(rows)} seed rows")
 

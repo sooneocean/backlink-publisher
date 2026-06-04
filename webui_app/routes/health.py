@@ -196,6 +196,34 @@ def ce_health():
             _log.warning("health: channel scorecard read failed: %s", exc)
             return []
 
+    def _zero_auth_rows():
+        """Zero-auth backlink outcome card (Wave 4 of the zero-auth MVP).
+
+        Reads publish history and groups latest backlink outcomes for every
+        zero-auth platform.  Fail-open: any read error → empty list."""
+        try:
+            from backlink_publisher.publishing.registry import (
+                platforms_by_auth_type,
+            )
+            from webui_app.binding_status import _get_latest_backlink_outcome
+            from webui_store import history_store
+
+            # Force history load to happen inside the try/except so a corrupt
+            # history file does not 500 the dashboard.
+            history_store.load()
+
+            rows = []
+            for name in sorted(platforms_by_auth_type("anon") or []):
+                outcome = _get_latest_backlink_outcome(name)
+                rows.append({
+                    "platform": name,
+                    "outcome": outcome or "no_data",
+                })
+            return rows
+        except Exception as exc:  # noqa: BLE001 — never 500 the page
+            _log.warning("health: zero-auth rows failed: %s", exc)
+            return []
+
     try:
         projection, health = _g_cache("health_agg", _build)
         canary = _g_cache("canary_health", _canary_rows)
@@ -204,6 +232,7 @@ def ce_health():
         recheck_decay = _g_cache("recheck_decay", _decay_counts)
         channel_scorecard = _g_cache("channel_scorecard", _scorecard_rows)
         geo_panel = _g_cache("geo_panel", _geo_panel)
+        zero_auth = _g_cache("zero_auth_health", _zero_auth_rows)
         return _render(
             "health.html",
             health=health,
@@ -214,6 +243,7 @@ def ce_health():
             recheck_decay=recheck_decay,
             channel_scorecard=channel_scorecard,
             geo_panel=geo_panel,
+            zero_auth=zero_auth,
         )
     except Exception as exc:  # noqa: BLE001 — R5: even a render/context error must not 500
         _log.error("health: dashboard render failed, serving minimal fallback: %s", exc)

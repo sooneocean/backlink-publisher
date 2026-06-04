@@ -307,6 +307,47 @@
   </div>
   {% endif %}
 
+  {# ── 3d. Zero-auth backlink health (Wave 4 zero-auth MVP) ─────────────── #}
+  {% set za_rows = zero_auth | default([]) %}
+  {% if za_rows %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Zero-auth backlinks
+      <span class="text-muted small fw-normal">— per-channel rendered-link verdict (honest outcome)</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Platform</th>
+            <th>Latest outcome</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for z in za_rows %}
+          <tr>
+            <td class="target-cell">{{ z.platform }}</td>
+            <td>
+              {% if z.outcome == 'effective_backlink' %}
+              <span class="badge text-bg-success">effective</span>
+              {% elif z.outcome == 'published_but_ineffective' %}
+              <span class="badge text-bg-warning">ineffective</span>
+              {% elif z.outcome == 'needs_canary' %}
+              <span class="badge text-bg-info">needs canary</span>
+              {% elif z.outcome == 'failed' %}
+              <span class="badge text-bg-danger">verify failed</span>
+              {% else %}
+              <span class="badge text-bg-secondary text-muted">no data</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
   {# ── 4a. AI Citation Share — GEO panel (Plan 2026-05-29-006 U9) ────────── #}
   {% set geo_targets = geo_panel.targets | default([]) if geo_panel else [] %}
   {% if geo_targets %}

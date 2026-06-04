@@ -304,7 +304,7 @@ def test_receipt_contains_no_secret_substrings(tmp_path, monkeypatch, capsys):
     assert "token" not in blob.lower() or "not_configured" in blob  # no query-string keys either
     assert "cookie" not in blob.lower()
     # Allowlist: only the expected keys.
-    assert set(receipts[0].keys()) <= {"platform", "verdict", "mode", "failed_checks", "checked_at", "note"}
+    assert set(receipts[0].keys()) <= {"platform", "verdict", "mode", "failed_checks", "checked_at", "note", "backlink_outcome"}
 
 
 # --------------------------------------------------------------------------

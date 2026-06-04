@@ -309,10 +309,30 @@ def main(argv: list[str] | None = None) -> None:
             failed = _failed_checks(facts, anchor, configured=True)
             record_verdict(platform, verdict)
 
+            # Wave 4 zero-auth MVP: best-effort rendered-link verification.
+            # Adds backlink_outcome to the receipt when the page is readable
+            # and the post_url is set (no-op for not-configured paths).
+            backlink_outcome: str | None = None
+            try:
+                from backlink_publisher.publishing._verify_html import verify_rendered_link
+                vr = verify_rendered_link(
+                    published_url=cfg["post_url"],
+                    target_url=cfg["expected_target"],
+                )
+                if vr.effective:
+                    backlink_outcome = "effective_backlink"
+                else:
+                    backlink_outcome = "published_but_ineffective"
+            except Exception:  # noqa: BLE001 — best-effort; never fails the canary
+                backlink_outcome = "failed"
+
             is_stale = verdict == STATUS_ADVISORY and _is_stale(platform, verdict)
             if is_stale:
                 stale.append(platform)
-            receipts.append(_build_receipt(platform, verdict, failed, stale=is_stale))
+            receipt = _build_receipt(platform, verdict, failed, stale=is_stale)
+            if backlink_outcome:
+                receipt["backlink_outcome"] = backlink_outcome
+            receipts.append(receipt)
             counts[verdict] += 1
 
         write_jsonl(receipts)

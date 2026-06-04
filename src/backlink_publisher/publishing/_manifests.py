@@ -634,3 +634,44 @@ WORDPRESSCOM_MANIFEST: dict[str, Any] = dict(
 WRITEAS_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(display_name="Write.as", domain="write.as", category="general-blog"),
 )
+
+# ── Zero-Auth MVP (Plan 2026-06-04-001 Wave 1) ──────────────────────────
+# PostEasy — anonymous microblog, 90-day TTL, REST API.
+POSTEASY_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="PostEasy",
+        domain="post-easy.org",
+        category="anonymous-paste",
+        icon="bi-chat-dots",
+    ),
+)
+
+# BrewPage — instant HTML/MD hosting, 15-30 day TTL, REST API.
+BREWPAGE_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="BrewPage",
+        domain="brewpage.app",
+        category="instant-publish",
+        icon="bi-lightning-charge",
+    ),
+)
+
+# HtmlDrop — anonymous HTML paste, 24h TTL, REST API (Wave 3b).
+HTMLDROP_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="HtmlDrop",
+        domain="htmldrop.in",
+        category="instant-publish",
+        icon="bi-code-slash",
+    ),
+)
+
+# Nonograph — anonymous markdown publishing, CSRF form POST (Wave 3a).
+NONOGRAPH_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Nonograph",
+        domain="nonogra.ph",
+        category="anonymous-paste",
+        icon="bi-file-text",
+    ),
+)

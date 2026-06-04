@@ -181,6 +181,20 @@ def probe_liveness(
         out["expected_nofollow"] = True
 
     out["verdict"] = verdicts.ALIVE
+
+    # Wave 4 zero-auth MVP: best-effort rendered-link outcome orthogonal to the
+    # liveness verdict. Runs only when both URLs are available (no-op for
+    # unreachable pages / missing targets). Never changes the verdict.
+    if live_url and target and res.get("page_readable"):
+        try:
+            from backlink_publisher.publishing._verify_html import verify_rendered_link
+            vr = verify_rendered_link(published_url=live_url, target_url=target)
+            if vr.effective:
+                out["backlink_outcome"] = "effective_backlink"
+            else:
+                out["backlink_outcome"] = "published_but_ineffective"
+        except Exception:  # noqa: BLE001 — best-effort; never fails the recheck
+            out["backlink_outcome"] = "failed"
     return out
 
 

@@ -101,6 +101,12 @@ def _build_parser() -> Any:
     from ._dedup_ops import add_dedup_arguments
     add_dedup_arguments(parser)
     parser.add_argument(
+        "--zero-auth",
+        action="store_true",
+        default=False,
+        help="Restrict dispatch to zero-auth (no-login) adapters only",
+    )
+    parser.add_argument(
         "--no-verify",
         action="store_true",
         default=False,

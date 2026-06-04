@@ -92,6 +92,9 @@ def _push_history_per_row(
             "title": row.get("title", ""),
             "adapter": row.get("adapter", ""),
         }
+        backlink_outcome = row.get("backlink_outcome")
+        if backlink_outcome:
+            item["backlink_outcome"] = backlink_outcome
         if raw_error:
             item["error"] = raw_error
         new_items.append(item)

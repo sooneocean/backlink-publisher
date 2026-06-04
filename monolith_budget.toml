@@ -42,8 +42,8 @@ ceiling = 550
 rationale = "Holds the 3 extracted reducers (_project_checkpoint, _project_history, _project_drafts) plus the confirmed-emit helpers _emit_confirmed_history_row (#350) and _emit_drafts_confirmed (#340, extracted 2026-06-01 to bring _project_drafts CC under the CC-30 backstop). At 520 SLOC; ceiling 550 = round_up_to_10(520+30) per policy."
 
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 270
-rationale = "refactor 2026-06-01: split live-verify (->_verify_live.py) + offline-readiness checks (->_setup_checks.py) out of the dispatcher; __init__ now holds only imports + register() wiring + thin verify_adapter_setup delegators. SLOC 640->234. Ceiling 270 = round_up_to_10(234+30) per ratchet-down policy."
+ceiling = 330
+rationale = "Zero-auth MVP Wave 1 (2026-06-05): added brewpage/posteasy/nonograph/htmldrop 4 new platform imports + register() calls + manifest splats. SLOC 270->297. Ceiling 330 = round_up_to_10(297+30) per ratchet-down policy."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465

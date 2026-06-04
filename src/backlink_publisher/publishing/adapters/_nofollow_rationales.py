@@ -191,4 +191,42 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "Zenn-internal). Zero PageRank transfer. Value = entity signal + "
         'JP referral traffic on a top JP dev platform (DA ~90+). referral_value="high".'
     ),
+    "posteasy": (
+        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
+        "(Plan 2026-06-04-001 Wave 1b): PostEasy renders Markdown content "
+        "client-side via Next.js hydration, which auto-links URLs as <a> "
+        "elements, but the rel attribute (nofollow vs none) depends on the "
+        "platform's markdown renderer configuration and cannot be determined "
+        "without publishing a real canary post and reading "
+        "verify_link_attributes on the live page. 90-day TTL post expiration. "
+        'referral_value="low": anonymous microblog, modest DA.'
+    ),
+    "brewpage": (
+        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
+        "(Plan 2026-06-04-001 Wave 1c): a 2026-06-04 live probe confirmed "
+        "BrewPage serves rendered HTML with <a href> elements and no "
+        'rel="nofollow" decoration, but a third-party spot-check does not '
+        "discharge the canary burden (hashnode/substack precedent). Confirm "
+        "by publishing a canary and reading verify_link_attributes on the "
+        "live page, then amend to dofollow=True. 15-day default, 30-day max "
+        'TTL. referral_value="low": short-TTL instant hosting, modest DA.'
+    ),
+    "htmldrop": (
+        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
+        "(Plan 2026-06-04-001 Wave 3b): HtmlDrop serves raw HTML including "
+        "<a> elements, so links survive rendering. However, the rel "
+        "attribute policy (nofollow vs none) is not documented and must be "
+        "verified by publishing a real canary post and reading "
+        "verify_link_attributes on the live page. 24-hour TTL for anonymous "
+        'posts. referral_value="low": short-TTL paste service, modest DA.'
+    ),
+    "nonograph": (
+        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
+        "(Plan 2026-06-04-001 Wave 3a): Nonograph renders Markdown content "
+        "to static HTML. URLs in markdown become <a> elements, but the rel "
+        "attribute policy depends on the server-side renderer configuration "
+        "and must be confirmed by publishing a real canary post and reading "
+        "verify_link_attributes on the live page. Permanent storage (no TTL). "
+        'referral_value="low": anonymous publishing, modest DA.'
+    ),
 }
