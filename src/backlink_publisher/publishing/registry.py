@@ -228,6 +228,7 @@ _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     # ANON — no credentials (anonymous publish / auto-bootstrap)
     "telegraph": "anon", "rentry": "anon",
     "brewpage": "anon", "posteasy": "anon", "nonograph": "anon", "htmldrop": "anon",
+    "pubmark": "anon",
     # TOKEN — single secret field
     "devto": "token", "writeas": "token",
     "hackmd": "token", "mataroa": "token",
@@ -480,10 +481,26 @@ def zero_auth_platforms() -> frozenset[str]:
     """Return the set of active platforms requiring zero authentication
     (auth_type == ``\"anon\"``).
 
-    These are platforms that support anonymous publish without credentials —
-    the primary target for the zero-auth backlink channel MVP.
+    These are platforms that support anonymous publish without credentials.
+    This is a low-level binding/auth bucket, not a guarantee that the platform
+    produces an effective backlink.
     """
     return platforms_by_auth_type("anon")
+
+
+def zero_auth_backlink_platforms() -> frozenset[str]:
+    """Return active zero-auth platforms that may produce effective backlinks.
+
+    This product-level predicate is intentionally narrower than
+    ``zero_auth_platforms()``: anonymous publishers with declared
+    ``dofollow=False`` remain in the auth bucket but are excluded from the
+    zero-auth backlink MVP surface.
+    """
+    return frozenset(
+        p
+        for p in zero_auth_platforms()
+        if dofollow_status(p) in (True, "uncertain")
+    )
 
 
 def dofollow_rationale(name: str) -> str | None:
