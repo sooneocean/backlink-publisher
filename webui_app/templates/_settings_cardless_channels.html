@@ -20,11 +20,11 @@
             <span>{{ name }}</span>
             <span class="badges">
                 {% if status.auth_type == 'anon' %}
-                <span class="badge-status ok" style="font-size:10px;">免绑定</span>
+                <span class="badge-status ok" style="font-size:10px;">免綁定</span>
                 {% elif status.bound %}
-                <span class="badge-status ok">已绑定 ✓</span>
+                <span class="badge-status ok">已綁定 ✓</span>
                 {% else %}
-                <span class="badge-status err">未绑定</span>
+                <span class="badge-status err">未綁定</span>
                 {% endif %}
                 {% if status.dofollow == True %}
                 <span class="badge-dofollow good" title="dofollow">dofollow</span>
@@ -32,14 +32,15 @@
                 <span class="badge-dofollow weak" title="nofollow">nofollow</span>
                 {% endif %}
                 {% set bo = status.get('backlink_outcome') %}
+                {% set bo_reason = status.get('backlink_outcome_reason') %}
                 {% if bo == 'effective_backlink' %}
-                <span class="badge-success" style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;">有效</span>
+                <span class="badge-success" style="font-size:10px;background:#10b981;color:#fff;padding:2px 6px;border-radius:4px;">有效 backlink</span>
                 {% elif bo == 'published_but_ineffective' %}
-                <span class="badge-warning" style="font-size:10px;background:#f59e0b;color:#fff;padding:2px 6px;border-radius:4px;">无链接</span>
+                <span class="badge-warning" title="{{ bo_reason or 'published_but_ineffective' }}" style="font-size:10px;background:#f59e0b;color:#fff;padding:2px 6px;border-radius:4px;">無效 backlink</span>
                 {% elif bo == 'needs_canary' %}
-                <span class="badge-info" style="font-size:10px;background:#3b82f6;color:#fff;padding:2px 6px;border-radius:4px;">需验证</span>
+                <span class="badge-info" title="{{ bo_reason or 'needs_canary' }}" style="font-size:10px;background:#3b82f6;color:#fff;padding:2px 6px;border-radius:4px;">需 canary</span>
                 {% elif bo == 'failed' %}
-                <span class="badge-danger" style="font-size:10px;background:#ef4444;color:#fff;padding:2px 6px;border-radius:4px;">验证失败</span>
+                <span class="badge-danger" title="{{ bo_reason or 'failed' }}" style="font-size:10px;background:#ef4444;color:#fff;padding:2px 6px;border-radius:4px;">驗證失敗</span>
                 {% endif %}
             </span>
             <i class="bi bi-chevron-right chevron" aria-hidden="true"></i>

@@ -313,14 +313,16 @@
   <div class="card shadow-sm mb-4">
     <div class="card-header bg-white fw-semibold">
       Zero-auth backlinks
-      <span class="text-muted small fw-normal">— per-channel rendered-link verdict (honest outcome)</span>
+      <span class="text-muted small fw-normal">— 免登入有效 backlink 候選；發布成功不等於 backlink 有效</span>
     </div>
     <div class="table-responsive">
       <table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr>
             <th>Platform</th>
+            <th>Declared</th>
             <th>Latest outcome</th>
+            <th>Reason / TTL</th>
           </tr>
         </thead>
         <tbody>
@@ -328,17 +330,27 @@
           <tr>
             <td class="target-cell">{{ z.platform }}</td>
             <td>
+              <span class="badge text-bg-secondary">{{ z.dofollow }}</span>
+              {% if z.referral_value %}<span class="text-muted small">{{ z.referral_value }}</span>{% endif %}
+            </td>
+            <td>
               {% if z.outcome == 'effective_backlink' %}
-              <span class="badge text-bg-success">effective</span>
+              <span class="badge text-bg-success">有效 backlink</span>
               {% elif z.outcome == 'published_but_ineffective' %}
-              <span class="badge text-bg-warning">ineffective</span>
+              <span class="badge text-bg-warning">無效 backlink</span>
               {% elif z.outcome == 'needs_canary' %}
-              <span class="badge text-bg-info">needs canary</span>
+              <span class="badge text-bg-info">需要 canary</span>
               {% elif z.outcome == 'failed' %}
-              <span class="badge text-bg-danger">verify failed</span>
+              <span class="badge text-bg-danger">驗證失敗</span>
               {% else %}
-              <span class="badge text-bg-secondary text-muted">no data</span>
+              <span class="badge text-bg-secondary text-muted">尚無資料</span>
               {% endif %}
+            </td>
+            <td class="text-muted small">
+              {% if z.reason %}<code>{{ z.reason }}</code>{% endif %}
+              {% if z.ttl_days %}<span class="ms-1">TTL {{ z.ttl_days }} days</span>{% endif %}
+              {% if z.expires_at %}<span class="ms-1">expires {{ z.expires_at }}</span>{% endif %}
+              {% if not z.reason and not z.ttl_days and not z.expires_at %}—{% endif %}
             </td>
           </tr>
           {% endfor %}

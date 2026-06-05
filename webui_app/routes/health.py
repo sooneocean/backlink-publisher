@@ -203,9 +203,11 @@ def ce_health():
         zero-auth platform.  Fail-open: any read error → empty list."""
         try:
             from backlink_publisher.publishing.registry import (
-                platforms_by_auth_type,
+                dofollow_status,
+                referral_value,
+                zero_auth_backlink_platforms,
             )
-            from webui_app.binding_status import _get_latest_backlink_outcome
+            from webui_app.binding_status import _get_latest_backlink_outcome_details
             from webui_store import history_store
 
             # Force history load to happen inside the try/except so a corrupt
@@ -213,11 +215,20 @@ def ce_health():
             history_store.load()
 
             rows = []
-            for name in sorted(platforms_by_auth_type("anon") or []):
-                outcome = _get_latest_backlink_outcome(name)
+            for name in sorted(zero_auth_backlink_platforms() or []):
+                details = _get_latest_backlink_outcome_details(name)
                 rows.append({
                     "platform": name,
-                    "outcome": outcome or "no_data",
+                    "outcome": details.get("backlink_outcome") or "no_data",
+                    "reason": details.get("backlink_outcome_reason"),
+                    "dofollow": dofollow_status(name),
+                    "referral_value": referral_value(name),
+                    "ttl_days": details.get("brewpage_ttl_days"),
+                    "expires_at": (
+                        details.get("brewpage_expires_at")
+                        or details.get("posteasy_expires_at")
+                        or details.get("expires_at")
+                    ),
                 })
             return rows
         except Exception as exc:  # noqa: BLE001 — never 500 the page

@@ -65,3 +65,36 @@ def test_card_fails_open_when_engine_raises(client, monkeypatch):
     # The page still renders; the card degrades to its empty state.
     assert "Per-channel value scorecard" in body
     assert "No channels to score yet" in body
+
+
+def test_zero_auth_backlink_card_uses_product_predicate(client):
+    body = client.get("/ce:health").get_data(as_text=True)
+    section = body.split("Zero-auth backlinks", 1)[1].split("AI Citation Share", 1)[0]
+
+    assert "telegraph" in section
+    assert "pubmark" in section
+    assert "qiita" not in section
+    assert "zenn" not in section
+
+
+def test_zero_auth_backlink_card_renders_reason(client):
+    from webui_store import history_store
+
+    history_store.save([{
+        "id": "h-plain",
+        "platform": "brewpage",
+        "status": "published",
+        "target_url": "https://example.com/work/1",
+        "published_url": "https://brewpage.app/p/abc",
+        "backlink_outcome": "published_but_ineffective",
+        "backlink_outcome_reason": "link_not_found:plain_text_only",
+        "brewpage_ttl_days": 15,
+    }])
+
+    body = client.get("/ce:health").get_data(as_text=True)
+    section = body.split("Zero-auth backlinks", 1)[1].split("AI Citation Share", 1)[0]
+
+    assert "brewpage" in section
+    assert "無效 backlink" in section
+    assert "link_not_found:plain_text_only" in section
+    assert "15 days" in section
