@@ -32,6 +32,8 @@ from backlink_publisher.config import Config
 from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
+from .http_form_post import attach_link_verification
+from .link_attr_verifier import required_link_urls
 
 
 
@@ -129,6 +131,17 @@ class PostEasyAPIAdapter(Publisher):
             seconds=round(elapsed, 2),
         )))
 
+        meta = attach_link_verification(
+            published_url,
+            {
+                "posteasy_id": post_id,
+                "posteasy_title": data["post"].get("title"),
+                "posteasy_created_at": data["post"].get("createdAt"),
+                "posteasy_expires_at": data["post"].get("expiresAt"),
+            },
+            target_urls=required_link_urls(payload),
+        )
+
         return AdapterResult(
             status="published",
             adapter=_ADAPTER,
@@ -137,12 +150,7 @@ class PostEasyAPIAdapter(Publisher):
             published_url=published_url,
             error=None,
             post_publish_delay_seconds=_POST_PUBLISH_DELAY_S,
-            _provider_meta={
-                "posteasy_id": post_id,
-                "posteasy_title": data["post"].get("title"),
-                "posteasy_created_at": data["post"].get("createdAt"),
-                "posteasy_expires_at": data["post"].get("expiresAt"),
-            },
+            _provider_meta=meta,
         )
 
 

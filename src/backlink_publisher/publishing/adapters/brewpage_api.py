@@ -31,6 +31,8 @@ from backlink_publisher.config import Config
 from backlink_publisher.publishing.content_negotiation import extract_publish_html
 from backlink_publisher.publishing.registry import Publisher
 from .base import AdapterResult
+from .http_form_post import attach_link_verification
+from .link_attr_verifier import required_link_urls
 
 
 
@@ -120,6 +122,17 @@ class BrewPageAPIAdapter(Publisher):
             seconds=round(elapsed, 2),
         )))
 
+        meta = attach_link_verification(
+            published_url,
+            {
+                "brewpage_id": data.get("id"),
+                "brewpage_owner_token": data.get("ownerToken"),
+                "brewpage_expires_at": data.get("expiresAt"),
+                "brewpage_ttl_days": ttl,
+            },
+            target_urls=required_link_urls(payload),
+        )
+
         return AdapterResult(
             status="published",
             adapter=_ADAPTER,
@@ -128,12 +141,7 @@ class BrewPageAPIAdapter(Publisher):
             published_url=published_url,
             error=None,
             post_publish_delay_seconds=_POST_PUBLISH_DELAY_S,
-            _provider_meta={
-                "brewpage_id": data.get("id"),
-                "brewpage_owner_token": data.get("ownerToken"),
-                "brewpage_expires_at": data.get("expiresAt"),
-                "brewpage_ttl_days": ttl,
-            },
+            _provider_meta=meta,
         )
 
 
