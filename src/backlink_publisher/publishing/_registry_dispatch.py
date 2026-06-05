@@ -42,12 +42,17 @@ def _attach_backlink_outcome(result: AdapterResult, payload: dict[str, Any]) -> 
         vr = verify_rendered_link(published_url=published_url, target_url=target_url)
         if vr.effective:
             outcome = "effective_backlink"
+            reason = None
         else:
             outcome = "published_but_ineffective"
-    except Exception:
+            reason = vr.failure_reason
+    except Exception as exc:
         outcome = "failed"
+        reason = f"verify_failed:{type(exc).__name__}"
     meta = dict(result._provider_meta) if result._provider_meta else {}
     meta["backlink_outcome"] = outcome
+    if reason is not None:
+        meta["backlink_outcome_reason"] = reason
     object.__setattr__(result, "_provider_meta", meta)
 
 
