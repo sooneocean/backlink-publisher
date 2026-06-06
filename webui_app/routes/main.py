@@ -38,3 +38,8 @@ def ce_clear():
     """Clear session and restart."""
     session.clear()
     return _render('index.html')
+
+
+@bp.route('/favicon.ico')
+def favicon():
+    return "", 204

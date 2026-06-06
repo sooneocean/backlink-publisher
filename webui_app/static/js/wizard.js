@@ -383,12 +383,15 @@ function handleSkip() {
 }
 
 function initEventListeners() {
-    delegate('#wizard-app', 'click', '[data-wizard-action="next"]', () => goToStep(currentStep + 1));
-    delegate('#wizard-app', 'click', '[data-wizard-action="prev"]', () => goToStep(currentStep - 1));
-    delegate('#wizard-app', 'click', '[data-wizard-action="skip"]', handleSkip);
-    delegate('#wizard-app', 'click', '[data-wizard-action="launch"]', handleLaunch);
+    const wizardRoot = qs('#wizard-app');
+    if (!wizardRoot) return;
 
-    delegate('#wizard-app', 'click', '#add-sitemap-btn', () => {
+    delegate(wizardRoot, 'click', '[data-wizard-action="next"]', () => goToStep(currentStep + 1));
+    delegate(wizardRoot, 'click', '[data-wizard-action="prev"]', () => goToStep(currentStep - 1));
+    delegate(wizardRoot, 'click', '[data-wizard-action="skip"]', handleSkip);
+    delegate(wizardRoot, 'click', '[data-wizard-action="launch"]', handleLaunch);
+
+    delegate(wizardRoot, 'click', '#add-sitemap-btn', () => {
         const list = qs('#sitemap-list');
         const idx = document.querySelectorAll('.sitemap-input').length;
         const emptyMsg = list.querySelector('.text-muted.small');
@@ -404,14 +407,12 @@ function initEventListeners() {
         list.appendChild(div);
     });
 
-    delegate('#wizard-app', 'click', '.remove-sitemap', (e) => {
-        const btn = e.currentTarget;
+    delegate(wizardRoot, 'click', '.remove-sitemap', (_e, btn) => {
         const group = btn.closest('.input-group');
         if (group) group.remove();
     });
 
-    delegate('#wizard-app', 'click', '[data-action="toggle-channel"]', (e) => {
-        const item = e.currentTarget;
+    delegate(wizardRoot, 'click', '[data-action="toggle-channel"]', (_e, item) => {
         const cb = item.querySelector('.channel-checkbox');
         if (cb) {
             cb.checked = !cb.checked;
@@ -421,8 +422,7 @@ function initEventListeners() {
         }
     });
 
-    delegate('#wizard-app', 'change', '.channel-checkbox', (e) => {
-        const cb = e.currentTarget;
+    delegate(wizardRoot, 'change', '.channel-checkbox', (_e, cb) => {
         const item = cb.closest('[data-channel]');
         if (item) {
             item.classList.toggle('active', cb.checked);

@@ -309,6 +309,10 @@ class TestGetRoutes:
         resp = client.get("/settings")
         assert resp.status_code == 200
 
+    def test_favicon_returns_empty_204(self, client):
+        resp = client.get("/favicon.ico")
+        assert resp.status_code == 204
+
     def test_settings_with_flash_query_renders(self, client):
         resp = client.get("/settings?flash_type=success&flash_msg=test")
         assert resp.status_code == 200
