@@ -13,6 +13,7 @@ lives in ``image_gen.banner_embed`` (Unit 5).
 """
 
 from .adapter import ImageGenAdapter
+from .openai_sdk import OpenAIImageGenAdapter
 from .types import BannerArtifact
 
-__all__ = ["ImageGenAdapter", "BannerArtifact"]
+__all__ = ["ImageGenAdapter", "OpenAIImageGenAdapter", "BannerArtifact"]

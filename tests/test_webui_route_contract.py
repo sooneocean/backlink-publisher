@@ -1213,6 +1213,22 @@ class TestChannelBindSaveRoutes:
         assert resp.status_code == 403
 
 
+class TestAiDraftReviewRoutes:
+    """AI draft review action route smokes.
+
+    Full state mutation coverage lives in tests/test_webui_ai_generation.py; these
+    missing-CSRF probes satisfy the route-contract inventory.
+    """
+
+    def test_post_ai_accept_missing_csrf_returns_403(self, csrf_client):
+        resp = csrf_client.post("/ce:draft/ai-accept")
+        assert resp.status_code == 403
+
+    def test_post_ai_fallback_missing_csrf_returns_403(self, csrf_client):
+        resp = csrf_client.post("/ce:draft/ai-fallback")
+        assert resp.status_code == 403
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".

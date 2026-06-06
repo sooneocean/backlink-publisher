@@ -15,6 +15,7 @@ from ..types import (
 _LLM_API_KEY_ENV_VAR = "BACKLINK_LLM_API_KEY"
 _LLM_BASE_URL_ENV_VAR = "BACKLINK_LLM_BASE_URL"
 _LLM_MODEL_ENV_VAR = "BACKLINK_LLM_MODEL"
+_LLM_PROVIDER_ENV_VAR = "BACKLINK_LLM_PROVIDER"
 _LLM_TEMPERATURE_ENV_VAR = "BACKLINK_LLM_TEMPERATURE"
 _LLM_SYSTEM_PROMPT_ENV_VAR = "BACKLINK_LLM_SYSTEM_PROMPT"
 _LLM_USE_ARTICLE_GEN_ENV_VAR = "BACKLINK_LLM_USE_ARTICLE_GEN"
@@ -46,6 +47,7 @@ def _parse_llm_anchor_provider(
     env_api_key = os.environ.get(_LLM_API_KEY_ENV_VAR)
     env_base_url = os.environ.get(_LLM_BASE_URL_ENV_VAR)
     env_model = os.environ.get(_LLM_MODEL_ENV_VAR)
+    env_provider = os.environ.get(_LLM_PROVIDER_ENV_VAR)
     env_temp = os.environ.get(_LLM_TEMPERATURE_ENV_VAR)
     env_system = os.environ.get(_LLM_SYSTEM_PROMPT_ENV_VAR)
     env_use_article = os.environ.get(_LLM_USE_ARTICLE_GEN_ENV_VAR)
@@ -58,6 +60,7 @@ def _parse_llm_anchor_provider(
 
     base_url = env_base_url or section.get("base_url")
     model = env_model or section.get("model")
+    provider = _normalize_provider(env_provider or section.get("provider"))
     timeout_s = section.get("timeout_s", 30.0)
     
     # Resolve temperature: env > toml > default
@@ -125,6 +128,7 @@ def _parse_llm_anchor_provider(
         base_url=base_url,
         api_key=api_key,
         model=model,
+        provider=provider,
         timeout_s=float(timeout_s),
         temperature=temperature,
         system_prompt=system_prompt,
@@ -170,8 +174,7 @@ def _llm_provider_from_sidecar(config_dir: Path) -> LLMProviderConfig | None:
     precedence env > TOML > sidecar.
 
     The ``endpoint`` field (WebUI key) maps to ``base_url`` (config field). The
-    two image fields are carried through but are inert for article generation —
-    image gen runs off a separate ``[image_gen]`` config + ``frw-token.json``.
+    two image fields are carried through for the OpenAI/image2 cover-image path.
     """
     sidecar = config_dir / _LLM_SIDECAR_FILENAME
     if not sidecar.exists():
@@ -191,6 +194,7 @@ def _llm_provider_from_sidecar(config_dir: Path) -> LLMProviderConfig | None:
     endpoint = data.get("endpoint")
     api_key = data.get("api_key")
     model = data.get("model")
+    provider = _normalize_provider(data.get("provider"))
     # Required trio — all must be non-empty strings, else the sidecar is not a
     # usable provider config and we stay silent (the file ships with these blank
     # by default until the operator fills them in).
@@ -224,6 +228,7 @@ def _llm_provider_from_sidecar(config_dir: Path) -> LLMProviderConfig | None:
         base_url=endpoint,
         api_key=api_key.strip(),
         model=model.strip(),
+        provider=provider,
         timeout_s=30.0,
         temperature=temperature,
         # Empty strings (the WebUI defaults) and non-strings collapse to None so
@@ -234,3 +239,19 @@ def _llm_provider_from_sidecar(config_dir: Path) -> LLMProviderConfig | None:
         use_image_gen=bool(data.get("use_image_gen", False)),
         image_gen_api_key=_opt_str_field(data.get("image_gen_api_key")),
     )
+
+
+def _normalize_provider(value: object) -> str:
+    raw = value.strip().lower() if isinstance(value, str) else ""
+    if not raw:
+        return "openai-compatible"
+    aliases = {
+        "compatible": "openai-compatible",
+        "openai_compatible": "openai-compatible",
+        "openai-compatible": "openai-compatible",
+        "openai": "openai",
+        "openai-sdk": "openai",
+        "codex": "openai",
+        "codex-sdk": "openai",
+    }
+    return aliases.get(raw, raw)

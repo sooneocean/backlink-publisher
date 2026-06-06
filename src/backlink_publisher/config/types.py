@@ -78,7 +78,7 @@ class ThreeUrlConfig:
 
 @dataclass
 class LLMProviderConfig:
-    """OpenAI-compatible LLM endpoint used to generate anchor-text candidates.
+    """LLM endpoint used to generate anchor-text candidates and AI drafts.
 
     The provider is optional — the anchor resolver falls back to config-pinned
     typed pools when this is unset. ``base_url`` MUST be ``https://`` (enforced
@@ -89,6 +89,7 @@ class LLMProviderConfig:
     base_url: str
     api_key: str
     model: str
+    provider: str = "openai-compatible"
     timeout_s: float = 30.0
     temperature: float = 0.7
     system_prompt: str | None = None
@@ -116,15 +117,15 @@ class LLMProviderConfig:
 
 @dataclass(frozen=True)
 class ImageGenConfig:
-    """FRW image-gen (OpenAI-compatible ``/images/generations``) settings.
+    """Image generation settings.
 
     Populated from ``[image_gen]`` in config.toml.  ``None`` when the
     section is absent — image-gen is opt-in.
 
-    The API key is NOT modeled here; it lives in
-    ``~/.config/backlink-publisher/frw-token.json`` (0600) per SEC-3
-    (see ``backlink_publisher._util.secrets``).  Operator writes it
-    via ``frw-login`` and never via ``save_config``.
+    ``provider`` selects the runtime. ``openai-compatible`` keeps the legacy
+    HTTP ``/images/generations`` gateway path and reads ``frw-token.json``.
+    ``openai`` and ``image2`` use the first-party OpenAI SDK and can reuse the
+    LLM API key or the WebUI sidecar image key.
 
     ``banner_size`` is operator-tunable to handle endpoints that don't
     support the OG ``1200x630`` aspect (some OpenAI-compatible
@@ -134,6 +135,7 @@ class ImageGenConfig:
 
     base_url: str
     model: str
+    provider: str = "openai-compatible"
     banner_size: str = "1200x630"
     daily_cap: int = 50
     per_run_cap: int = 10

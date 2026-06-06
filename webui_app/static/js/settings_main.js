@@ -77,18 +77,22 @@
         event.preventDefault();
         const endpointEl = document.getElementById('llmEndpointInput');
         const modelEl = document.getElementById('llmModelInput');
+        const providerEl = document.getElementById('llmProviderInput');
         
         const presets = {
-            'openai': { url: 'https://api.openai.com/v1', model: 'gpt-4o' },
-            'deepseek': { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
-            'openrouter': { url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini' },
-            'groq': { url: 'https://api.groq.com/openai/v1', model: 'llama3-70b-8192' },
-            'local': { url: 'http://localhost:11434/v1', model: 'llama3' }
+            'openai': { url: 'https://api.openai.com/v1', model: 'gpt-5.1', provider: 'openai' },
+            'deepseek': { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', provider: 'openai-compatible' },
+            'openrouter': { url: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o-mini', provider: 'openai-compatible' },
+            'groq': { url: 'https://api.groq.com/openai/v1', model: 'llama3-70b-8192', provider: 'openai-compatible' },
+            'local': { url: 'http://localhost:11434/v1', model: 'llama3', provider: 'openai-compatible' }
         };
         
         if (presets[provider]) {
             endpointEl.value = presets[provider].url;
             modelEl.value = presets[provider].model;
+            if (providerEl) {
+                providerEl.value = presets[provider].provider;
+            }
             document.getElementById('llmTestResult').innerHTML = '';
             document.getElementById('modelSelectBtn').classList.add('d-none');
         }
