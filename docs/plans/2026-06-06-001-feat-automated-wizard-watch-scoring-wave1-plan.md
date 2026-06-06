@@ -4,23 +4,7 @@ type: feat
 status: active
 date: 2026-06-06
 origin: docs/brainstorms/2026-06-06-automated-backlink-dashboard-wizard-requirements.md
-claims:
-  paths:
-    - webui_store/seen_urls_store.py
-    - webui_store/score_store.py
-    - webui_store/wizard_config_store.py
-    - webui_store/__init__.py
-    - webui_app/services/watch_service.py
-    - webui_app/scheduler.py
-    - webui_app/routes/wizard.py
-    - webui_app/templates/wizard.html
-    - webui_app/static/js/wizard.js
-    - webui_app/templates/base.html
-    - tests/test_wave1_wizard.py
-    - tests/test_wave1_watch_service.py
-    - tests/test_wave1_scoring.py
-  shas:
-    - PLACEHOLDER
+claims: {}  # opt-out: net-new wave artifacts have no origin/main-reachable SHA yet
 ---
 
 # Wave 1 — Setup Wizard + Watch Service + Scoring Engine

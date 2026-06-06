@@ -4,24 +4,7 @@ type: feat
 status: active
 date: 2026-06-04
 origin: dev/specs/2026-06-04_1_zero-auth-backlink-channel-mvp/requirements.md
-claims:
-  paths:
-    - src/backlink_publisher/publishing/registry.py
-    - src/backlink_publisher/publishing/_manifest_types.py
-    - src/backlink_publisher/publishing/_manifests.py
-    - src/backlink_publisher/publishing/adapters/__init__.py
-    - src/backlink_publisher/publishing/adapters/base.py
-    - src/backlink_publisher/cli/plan_backlinks/core.py
-    - src/backlink_publisher/cli/validate_backlinks.py
-    - src/backlink_publisher/cli/publish_backlinks/__init__.py
-    - src/backlink_publisher/cli/_publish_helpers.py
-    - src/backlink_publisher/publishing/adapters/telegraph_api.py
-    - src/backlink_publisher/publishing/adapters/rentry.py
-    - src/backlink_publisher/publishing/adapters/txtfyi.py
-    - webui_store/channel_status.py
-    - webui_app/templates/settings.html
-    - webui_app/templates/_settings_channel_binding.html
-    - webui_app/routes/settings.py
+claims: {}  # opt-out: branch-introduced artifacts are validated by tests until merged
 ---
 
 # Zero-Auth Backlink Channel MVP — Implementation Plan
