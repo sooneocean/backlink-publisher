@@ -64,6 +64,8 @@ def _isolated_webui_state(tmp_path, monkeypatch):
     monkeypatch.setattr(ws.profiles_store, "path", state_dir / "campaign-profiles.json")
     monkeypatch.setattr(ws.drafts_store, "path", state_dir / "draft-queue.json")
     monkeypatch.setattr(ws.schedule_store, "path", state_dir / "schedule-settings.json")
+    monkeypatch.setattr(ws.wizard_config_store, "path", state_dir / "wizard-config.json")
+    ws.wizard_config_store.mark_skipped()
 
 
 @pytest.fixture(autouse=True)
@@ -169,6 +171,14 @@ def _fetch_csrf(client) -> str:
 
 
 class TestGetRoutes:
+    def test_first_time_root_redirects_to_wizard(self, client):
+        import webui_store as ws
+
+        ws.wizard_config_store.save({})
+        resp = client.get("/", follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/wizard")
+
     def test_root_returns_200(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
@@ -1230,6 +1240,49 @@ class TestAiDraftReviewRoutes:
     def test_post_ai_fallback_missing_csrf_returns_403(self, csrf_client):
         resp = csrf_client.post("/ce:draft/ai-fallback")
         assert resp.status_code == 403
+
+
+class TestWizardRoutes:
+    """Wizard route smokes. Full store behavior lives in tests/test_wave1_wizard.py."""
+
+    def test_get_wizard_returns_200(self, client):
+        resp = client.get("/wizard")
+        assert resp.status_code == 200
+
+    def test_get_wizard_status_returns_json(self, client):
+        resp = client.get("/api/wizard/status")
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_seed_sources_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/seed-sources",
+            json={"sitemap_urls": ["https://example.com/sitemap.xml"]},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_channels_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/channels",
+            json={"channels": [{"channel": "medium", "bound": False}]},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_rules_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/rules",
+            json={"polling_interval_seconds": 21600},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_launch_returns_json(self, client, monkeypatch):
+        monkeypatch.setattr("webui_app.scheduler._trigger_watch_cycle", lambda: None)
+        resp = client.post("/wizard/step/launch", json={})
+        assert resp.status_code == 200
+        assert resp.is_json
 
 
 class TestCopilotRoutes:
