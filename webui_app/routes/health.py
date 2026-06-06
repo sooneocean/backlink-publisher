@@ -41,15 +41,23 @@ def _reconciliation_gaps():
     success. Returns ``{}`` on any read error so the dashboard never 500s.
     """
     try:
+        import json
+
         from backlink_publisher.checkpoint import list_failed_items
         from backlink_publisher.events.store import EventStore
 
         pending = len(list_failed_items())
         rows = EventStore().query(
-            "SELECT COUNT(*) FROM quarantine_log WHERE failure_type = ?",
-            ("reconcile_gap",),
+            "SELECT raw_payload_json FROM quarantine_log",
         )
-        gaps = int(rows[0][0]) if rows else 0
+        gaps = 0
+        for row in rows:
+            try:
+                payload = json.loads(row[0] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if payload.get("failure_type") == "reconcile_gap":
+                gaps += 1
         return {"pending_checkpoints": pending, "quarantine_gaps": gaps}
     except Exception as exc:  # noqa: BLE001 — never 500 the page
         _log.warning("health: reconciliation gap check failed: %s", exc)
