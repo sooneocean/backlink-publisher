@@ -37,9 +37,13 @@
                         </div>
                         {% for item in draft_queue %}
                         {% set s = item.status %}
+                        {% set ai = item.get('ai_review') if item.get('ai_review') is mapping else none %}
+                        {% set ai_blocked = ai and ai.get('required') and not ai.get('accepted') %}
+                        {% set ai_fallback_available = ai and ai.get('status') == 'fallback_used' %}
                         <div class="history-item {% if s == 'published' %}success{% elif s == 'failed' %}failed{% elif s == 'scheduled' %}pending{% else %}{% endif %}"
                              data-id="{{ item.id }}"
                              data-status="{{ s }}"
+                             {% if ai_blocked %}data-ai-review-blocked="1"{% endif %}
                              style="{% if s == 'scheduled' %}border-left-color:var(--info);{% endif %}">
                             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
                                 <input class="form-check-input bulk-select draft-bulk-select"
@@ -76,6 +80,35 @@
                                 <i class="bi bi-info-circle me-1"></i>内容被拒（Cookie 有效） — 无需重绑定
                             </div>
                             {% endif %}
+                            {% if ai and ai.get('required') %}
+                            {% set ai_issues = ai.get('issues') or [] %}
+                            <div style="margin-top:8px;border:1px solid {% if ai.get('accepted') %}#bbf7d0{% else %}#fde68a{% endif %};background:{% if ai.get('accepted') %}#f0fdf4{% else %}#fffbeb{% endif %};padding:8px 10px;border-radius:6px;font-size:12px;">
+                                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                    <span style="font-weight:700;color:{% if ai.get('accepted') %}#15803d{% else %}#92400e{% endif %};">
+                                        <i class="bi {% if ai.get('accepted') %}bi-check-circle{% else %}bi-shield-exclamation{% endif %} me-1"></i>AI 審核
+                                    </span>
+                                    <span style="color:var(--secondary);">狀態：{{ ai.get('status') or 'unknown' }}</span>
+                                    {% if ai.get('provider') %}
+                                    <span style="color:var(--secondary);">Provider：{{ ai.get('provider') }}</span>
+                                    {% endif %}
+                                    <span style="color:var(--secondary);">Issues：{{ ai_issues | length }}</span>
+                                    {% if ai.get('cover_prompt_present') %}
+                                    <span style="color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;">封面 prompt</span>
+                                    {% endif %}
+                                </div>
+                                {% if ai_issues %}
+                                <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px;">
+                                    {% for issue in ai_issues[:3] %}
+                                    <div style="color:#78350f;">
+                                        <i class="bi bi-dot"></i>{{ issue.get('code') or 'issue' }}
+                                        {% if issue.get('severity') %}<span style="color:var(--secondary);">({{ issue.get('severity') }})</span>{% endif %}
+                                        {% if issue.get('message') %}<span>：{{ issue.get('message') }}</span>{% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
 
                             {% if item.article_urls %}
                             <div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">
@@ -91,6 +124,27 @@
                             <!-- 操作栏 -->
                             <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
                                 {% if s == 'pending' %}
+                                {% if ai_blocked %}
+                                <form method="POST" action="/ce:draft/ai-accept" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-success">
+                                        <i class="bi bi-check2-circle me-1"></i>接受 AI 草稿
+                                    </button>
+                                </form>
+                                {% if ai_fallback_available %}
+                                <form method="POST" action="/ce:draft/ai-fallback" style="margin:0;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="id" value="{{ item.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>使用 fallback
+                                    </button>
+                                </form>
+                                {% endif %}
+                                <span style="font-size:12px;color:#92400e;align-self:center;">
+                                    <i class="bi bi-lock me-1"></i>未審核前不可發布或排程
+                                </span>
+                                {% else %}
                                 <!-- 排程表单 -->
                                 <form method="POST" action="/ce:draft/schedule" style="margin:0;display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -115,6 +169,7 @@
                                         <i class="bi bi-send me-1"></i>立即发布
                                     </button>
                                 </form>
+                                {% endif %}
                                 {% elif s == 'scheduled' %}
                                 <form method="POST" action="/ce:draft/cancel" style="margin:0;">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
