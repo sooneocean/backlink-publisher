@@ -184,13 +184,12 @@ def test_bulk_publish_reports_ai_review_blocked_without_mutating(monkeypatch) ->
     assert scheduler.jobs == []
 
 
-def test_ai_accept_route_redirects_and_updates_state(monkeypatch) -> None:
+def test_ai_accept_route_redirects_and_updates_state(monkeypatch, disable_csrf) -> None:
     store = _DraftStore()
     monkeypatch.setattr("webui_app.api.drafts_api._drafts_store", store)
     created = DraftAPI().create(_plans_jsonl("rejected"), {}, platform="telegraph")
-    app = create_app()
+    app = disable_csrf
     app.config["TESTING"] = True
-    app.config["CSRF_ENABLED"] = False
 
     resp = app.test_client().post("/ce:draft/ai-accept", data={"id": created["id"]})
 
@@ -209,7 +208,6 @@ def test_draft_queue_renders_ai_review_controls_without_secret(monkeypatch) -> N
     )
     app = create_app()
     app.config["TESTING"] = True
-    app.config["CSRF_ENABLED"] = False
 
     with app.test_request_context("/?tab=draft"):
         body = render_template(
@@ -232,7 +230,9 @@ def test_draft_queue_renders_ai_review_controls_without_secret(monkeypatch) -> N
     assert "sk-should-not-render" not in body
 
 
-def test_settings_renders_ai_service_readiness_without_secret(tmp_path, monkeypatch) -> None:
+def test_settings_renders_ai_service_readiness_without_secret(
+    tmp_path, monkeypatch, disable_csrf
+) -> None:
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
     (tmp_path / "llm-settings.json").write_text(
         json.dumps(
@@ -246,9 +246,8 @@ def test_settings_renders_ai_service_readiness_without_secret(tmp_path, monkeypa
         ),
         encoding="utf-8",
     )
-    app = create_app()
+    app = disable_csrf
     app.config["TESTING"] = True
-    app.config["CSRF_ENABLED"] = False
 
     body = app.test_client().get("/settings").data.decode()
 

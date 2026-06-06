@@ -10,32 +10,23 @@ from typing import Any
 from backlink_publisher.config import Config
 from backlink_publisher._util.logger import plan_logger
 
+_SDK_IMAGE_PROVIDERS = {"openai", "image2"}
+
 
 def _build_banner_runtime(cfg: Config) -> dict[str, Any] | None:
     if cfg.image_gen is None or not cfg.image_gen.use_image_gen:
         return None
 
-    try:
-        from backlink_publisher._util.secrets import load_frw_token
-        api_key = load_frw_token()
-    except RuntimeError as exc:
-        plan_logger.warn(f"image_gen disabled for this run: {exc}")
+    api_key = _resolve_image_gen_key(cfg)
+    if not api_key:
         return None
 
-    from backlink_publisher.publishing.adapters.image_gen import ImageGenAdapter
     from backlink_publisher.publishing.adapters.image_gen.caps import (
         AutoDisableTracker,
     )
     from backlink_publisher.events.store import EventStore
 
-    adapter = ImageGenAdapter(
-        base_url=cfg.image_gen.base_url,
-        model=cfg.image_gen.model,
-        banner_size=cfg.image_gen.banner_size,
-        api_key=api_key,
-        timeout_s=cfg.image_gen.timeout_s,
-        max_retries=cfg.image_gen.max_retries,
-    )
+    adapter = _build_image_adapter(cfg, api_key)
     tracker = AutoDisableTracker(threshold=cfg.image_gen.auto_disable_threshold)
     store = EventStore()
     return {
@@ -45,6 +36,51 @@ def _build_banner_runtime(cfg: Config) -> dict[str, Any] | None:
         "config": cfg.image_gen,
         "run_counter": [0],
     }
+
+
+def _resolve_image_gen_key(cfg: Config) -> str | None:
+    assert cfg.image_gen is not None
+    llm = cfg.llm_anchor_provider
+    if cfg.image_gen.provider in _SDK_IMAGE_PROVIDERS:
+        if llm and llm.image_gen_api_key:
+            return llm.image_gen_api_key
+        if llm and llm.api_key:
+            return llm.api_key
+
+    try:
+        from backlink_publisher._util.secrets import load_frw_token
+
+        return load_frw_token()
+    except RuntimeError as exc:
+        plan_logger.warn(f"image_gen disabled for this run: {exc}")
+        return None
+
+
+def _build_image_adapter(cfg: Config, api_key: str) -> Any:
+    assert cfg.image_gen is not None
+    if cfg.image_gen.provider in _SDK_IMAGE_PROVIDERS:
+        from backlink_publisher.publishing.adapters.image_gen import (
+            OpenAIImageGenAdapter,
+        )
+
+        return OpenAIImageGenAdapter(
+            base_url=cfg.image_gen.base_url,
+            model=cfg.image_gen.model,
+            banner_size=cfg.image_gen.banner_size,
+            api_key=api_key,
+            timeout_s=cfg.image_gen.timeout_s,
+        )
+
+    from backlink_publisher.publishing.adapters.image_gen import ImageGenAdapter
+
+    return ImageGenAdapter(
+        base_url=cfg.image_gen.base_url,
+        model=cfg.image_gen.model,
+        banner_size=cfg.image_gen.banner_size,
+        api_key=api_key,
+        timeout_s=cfg.image_gen.timeout_s,
+        max_retries=cfg.image_gen.max_retries,
+    )
 
 
 def _generate_banner_for_payload(

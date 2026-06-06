@@ -270,10 +270,12 @@ client_secret = "your-client-secret"
 #     warning is emitted on every run if the file mode is looser
 #
 # [llm.anchor_provider]
+# provider = "openai"                      # openai = first-party SDK; openai-compatible = legacy HTTP gateway
 # base_url = "https://api.openai.com/v1"
 # # api_key = "sk-..."                   # prefer the BACKLINK_LLM_API_KEY env var
-# model = "gpt-4o-mini"
+# model = "gpt-5.1"
 # timeout_s = 30
+# use_article_gen = true                   # enable AI draft bodies in plan-backlinks
 
 # ── generate-backlink-text (opt-in content-drafting tool) ──────────────────
 # The `generate-backlink-text` CLI verb is an opt-in content-drafting tool
@@ -323,9 +325,10 @@ client_secret = "your-client-secret"
 # text-only backlinks.
 #
 # [image_gen]
-# base_url = "https://api.openai.com/v1"      # any OpenAI-compatible /images/generations endpoint
-# model = "dall-e-3"                          # provider-specific; check your gateway's /models
-# banner_size = "1200x630"                    # OG default; fall back to 1024x1024 if endpoint rejects non-square
+# provider = "image2"                         # image2/openai = OpenAI SDK; openai-compatible = legacy HTTP gateway
+# base_url = "https://api.openai.com/v1"      # OpenAI SDK base URL or compatible /images/generations endpoint
+# model = "gpt-image-1.5"                     # GPT Image model; use gpt-image-1 or gpt-image-1-mini for lower cost
+# banner_size = "1536x1024"                   # OpenAI cover-friendly size; compatible gateways may prefer 1200x630
 # daily_cap = 50                              # image-gen calls per UTC day; soft fail (skip + warn) past cap
 # per_run_cap = 10                            # image-gen calls per plan-backlinks invocation
 # timeout_s = 30

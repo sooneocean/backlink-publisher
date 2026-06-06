@@ -31,6 +31,7 @@ def _seed(config_dir, **overrides):
         "api_key": "sk-existing",
         "endpoint": "https://good.test/v1",
         "model": "gpt-4o-mini",
+        "provider": "openai-compatible",
         "temperature": 0.7,
         "system_prompt": "",
         "use_article_gen": False,
@@ -75,6 +76,7 @@ def test_save_accepts_https_endpoint(client, tmp_path, monkeypatch):
             "endpoint": "https://api.test/v1",
             "api_key": "sk-new",
             "model": "gpt-4o-mini",
+            "provider": "openai",
             "use_article_gen": "on",
         },
     )
@@ -83,6 +85,7 @@ def test_save_accepts_https_endpoint(client, tmp_path, monkeypatch):
     assert "flash_type=success" in resp.location
     stored = _read(tmp_path)
     assert stored["endpoint"] == "https://api.test/v1"
+    assert stored["provider"] == "openai"
     assert stored["use_article_gen"] is True
 
 

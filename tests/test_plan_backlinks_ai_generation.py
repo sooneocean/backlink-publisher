@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 from backlink_publisher.cli.plan_backlinks._engine import plan_rows
+from backlink_publisher.cli.plan_backlinks._payload import _build_article_provider
 from backlink_publisher.config.types import Config, LLMProviderConfig
 
 
@@ -113,3 +114,20 @@ def test_no_key_or_failed_provider_falls_back_to_template(monkeypatch) -> None:
     assert payload["ai_generation"]["status"] == "fallback_used"
     assert "sk-secret" not in json.dumps(payload["ai_generation"])
     assert payload["content_markdown"].startswith("#")
+
+
+def test_openai_provider_builds_sdk_article_provider() -> None:
+    cfg = Config(
+        llm_anchor_provider=LLMProviderConfig(
+            provider="openai",
+            base_url="https://api.openai.com/v1",
+            api_key="sk-test",
+            model="gpt-5.1",
+            use_article_gen=True,
+        )
+    )
+
+    provider = _build_article_provider(cfg)
+
+    assert provider.provider_name == "openai-sdk"
+    assert provider.model == "gpt-5.1"

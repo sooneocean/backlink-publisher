@@ -52,6 +52,7 @@ def _load_llm_settings() -> dict:
         'api_key': '',
         'endpoint': '',
         'model': '',
+        'provider': 'openai-compatible',
         'temperature': 0.7,
         'system_prompt': '',
         'use_article_gen': False,
