@@ -136,14 +136,14 @@ class TestRegistration:
         from backlink_publisher.publishing.registry import registered_platforms
         assert "mataroa" in registered_platforms()
 
-    def test_dofollow_uncertain(self):
+    def test_dofollow_confirmed(self):
         from backlink_publisher.publishing.registry import dofollow_status
-        assert dofollow_status("mataroa") == "uncertain"
+        assert dofollow_status("mataroa") is True
 
     def test_referral_value_high(self):
         from backlink_publisher.publishing.registry import referral_value
         assert referral_value("mataroa") == "high"
 
-    def test_rationale_min_length(self):
+    def test_no_rationale_required_for_confirmed_dofollow(self):
         from backlink_publisher.publishing.registry import dofollow_rationale
-        assert len(dofollow_rationale("mataroa").strip()) >= 80
+        assert dofollow_rationale("mataroa") is None

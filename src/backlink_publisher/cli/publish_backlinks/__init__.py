@@ -108,11 +108,10 @@ def main(argv: list[str] | None = None) -> None:
             if health.has_failures():
                 publish_logger.warning(health.summary())
             else:
-                publish_logger.info("credential health: all platforms %s", "/".join(
-                    r.status for r in health.results
-                ))
+                statuses = "/".join(r.status for r in health.results)
+                publish_logger.info(f"credential health: all platforms {statuses}")
         except Exception as exc:
-            publish_logger.warning("credential health check skipped: %s", exc)
+            publish_logger.warning(f"credential health check skipped: {exc}")
 
     for idx, row in enumerate(rows, start=1):
         platform = args.platform or row.get("platform", "")

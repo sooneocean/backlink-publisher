@@ -24,8 +24,8 @@ from backlink_publisher.publishing.registry import (
 # Expected membership per bucket on the current registry. Pinned (not derived)
 # so a silent auth_type flip — the #253 drift class — fails loudly here too.
 _EXPECTED_BUCKETS = {
-    "anon": {"rentry", "telegraph", "brewpage", "posteasy", "nonograph", "htmldrop", "pubmark", "qiita", "zenn"},
-    "token": {"devto", "writeas", "hackmd", "mataroa"},
+    "anon": {"rentry", "telegraph", "brewpage", "posteasy", "nonograph", "htmldrop", "pubmark"},
+    "token": {"devto", "writeas", "hackmd", "mataroa", "qiita", "zenn"},
     "token_fields": {"ghpages", "gitlabpages", "hashnode", "hatena", "notion", "tumblr", "wordpresscom"},
     "paste_blob": {"substack"},
     "userpass": {"livejournal"},

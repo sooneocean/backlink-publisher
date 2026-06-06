@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from flask import Blueprint, request, session
 
 from ..helpers.contexts import _render
@@ -11,15 +13,15 @@ bp = Blueprint("main", __name__)
 
 @bp.route('/')
 def index():
-    # Redirect to wizard if not completed and not skipped
-    try:
-        from webui_store import wizard_config_store as _wcfg
-        wc = _wcfg._get()
-        if not wc.get("completed") and not wc.get("skipped"):
-            from flask import redirect, url_for
-            return redirect(url_for("wizard.wizard_page"))
-    except Exception:
-        pass
+    if os.environ.get("BACKLINK_PUBLISHER_WIZARD_REDIRECT") == "1":
+        try:
+            from webui_store import wizard_config_store as _wcfg
+            wc = _wcfg._get()
+            if not wc.get("completed") and not wc.get("skipped"):
+                from flask import redirect, url_for
+                return redirect(url_for("wizard.wizard_page"))
+        except Exception:
+            pass
 
     config = session.get('config', {})
     tab = request.args.get('tab', '')

@@ -171,9 +171,10 @@ def _fetch_csrf(client) -> str:
 
 
 class TestGetRoutes:
-    def test_first_time_root_redirects_to_wizard(self, client):
+    def test_first_time_root_redirects_to_wizard_when_enabled(self, client, monkeypatch):
         import webui_store as ws
 
+        monkeypatch.setenv("BACKLINK_PUBLISHER_WIZARD_REDIRECT", "1")
         ws.wizard_config_store.save({})
         resp = client.get("/", follow_redirects=False)
         assert resp.status_code == 302
