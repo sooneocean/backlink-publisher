@@ -51,6 +51,7 @@ from .._manifests import (
     TELEGRAPH_MANIFEST,
     TUMBLR_MANIFEST,
     TXTFYI_MANIFEST,
+    UNMARKDOWN_MANIFEST,
     VELOG_MANIFEST,
     WORDPRESSCOM_MANIFEST,
     WRITEAS_MANIFEST,
@@ -101,6 +102,7 @@ from .posteasy_api import PostEasyAPIAdapter
 from .htmldrop_api import HtmlDropAPIAdapter
 from .nonograph_api import NonographAPIAdapter
 from .pubmark_api import PubmarkAPIAdapter
+from .unmarkdown import UnmarkdownAdapter
 from .velog_graphql import VelogGraphQLAdapter
 from .wordpresscom_api import WordpresscomAPIAdapter
 from .writeas_api import WriteasAPIAdapter
@@ -131,7 +133,7 @@ register("blogger", BloggerAPIAdapter, dofollow=True, **BLOGGER_MANIFEST)
 register(
     "wordpresscom",
     WordpresscomAPIAdapter,
-    dofollow="uncertain",  # evidence conflict (#108->#109 vs 2026-05 recheck); canary pending
+    dofollow=False,  # browser-tier 2026-06-06: free-tier user-embedded links get rel=external nofollow ugc
     rationale=_R["wordpresscom"],
     referral_value="high",
     **WORDPRESSCOM_MANIFEST,
@@ -139,7 +141,7 @@ register(
 register(
     "hashnode",
     HashnodeGraphQLAdapter,
-    dofollow="uncertain",  # 3rd-party live check = dofollow; canary pending; retiring (PR #204)
+    dofollow=False,  # Playwright 2026-06-06: rel=noopener noreferrer nofollow ugc on article-body external links
     rationale=_R["hashnode"],
     referral_value="high",
     **HASHNODE_MANIFEST,
@@ -147,24 +149,21 @@ register(
 register(
     "writeas",
     WriteasAPIAdapter,
-    dofollow="uncertain",  # 3rd-party live check = dofollow; canary pending; retiring (PR #202)
-    rationale=_R["writeas"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on post-body external links
     referral_value="low",
     **WRITEAS_MANIFEST,
 )
 register(
     "substack",
     SubstackAPIAdapter,
-    dofollow="uncertain",  # 3rd-party live check = dofollow; OUR canary pending
-    rationale=_R["substack"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on post-body external links
     referral_value="high",
     **SUBSTACK_MANIFEST,
 )
 register(
     "rentry",
     RentryAPIAdapter,
-    dofollow="uncertain",  # 3rd-party live check = dofollow (rel=noreferrer); canary pending
-    rationale=_R["rentry"],
+    dofollow=True,  # browser-tier 2026-06-06: empty rel (dofollow) on external links
     referral_value="low",
     **RENTRY_MANIFEST,
 )
@@ -218,7 +217,7 @@ register(
 register(
     "txtfyi",
     TxtfyiFormPostAdapter,
-    dofollow="uncertain",  # R4 canary pending; Phase 0 preliminary = dofollow
+    dofollow=False,  # Playwright 2026-06-06: Markdown [text](url) NOT rendered as HTML links (plain text pastebin)
     rationale=_R["txtfyi"],
     referral_value="low",  # anonymous pastebin; modest DA + R4 pending
     visibility="hidden",  # R12 — plain-text URL, no rendered <a>; UX honest
@@ -244,8 +243,7 @@ register(
 register(
     "hatena",
     HatenaAtomPubAdapter,
-    dofollow="uncertain",  # 3rd-party probe = dofollow (11/12); OUR canary pending
-    rationale=_R["hatena"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on user post body external links
     referral_value="high",  # JP high-DA + referral + indexation; AtomPub publish API
     **HATENA_MANIFEST,
 )
@@ -263,7 +261,7 @@ register(
 register(
     "hackmd",
     HackmdAPIAdapter,
-    dofollow="uncertain",  # 3rd-party check=dofollow (188/0); OUR canary pending
+    dofollow=False,  # Playwright 2026-06-06: rel=noopener ugc nofollow on user note external links
     rationale=_R["hackmd"],
     referral_value="high",
     **HACKMD_MANIFEST,
@@ -271,16 +269,14 @@ register(
 register(
     "mataroa",
     MataroaAPIAdapter,
-    dofollow="uncertain",  # 3rd-party check=dofollow (6/0, site: fresh); OUR canary pending
-    rationale=_R["mataroa"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on post-body external links
     referral_value="high",
     **MATAROA_MANIFEST,
 )
 register(
     "gitlabpages",
     GitLabPagesAPIAdapter,
-    dofollow="uncertain",  # rel operator-controlled, but *.gitlab.io index partial + async; OUR canary pending
-    rationale=_R["gitlabpages"],
+    dofollow=True,  # browser-tier 2026-06-06: empty rel on external links across multiple user blogs (axil.gitlab.io, bendersteed.gitlab.io)
     referral_value="high",
     **GITLABPAGES_MANIFEST,
 )
@@ -306,42 +302,45 @@ register(
 register(
     "posteasy",
     PostEasyAPIAdapter,
-    dofollow="uncertain",  # client-side rendered <a> status pending canary
-    rationale=_R["posteasy"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on external links
     referral_value="low",
     **POSTEASY_MANIFEST,
 )
 register(
     "brewpage",
     BrewPageAPIAdapter,
-    dofollow="uncertain",  # live probe confirmed no nofollow; canary pending
-    rationale=_R["brewpage"],
+    dofollow=True,  # browser-tier 2026-06-06: rel=noopener only (no nofollow)
     referral_value="low",
     **BREWPAGE_MANIFEST,
 )
 register(
     "htmldrop",
     HtmlDropAPIAdapter,
-    dofollow="uncertain",  # canary-gated: <a href> survives rendering but rel must be confirmed
-    rationale=_R["htmldrop"],
+    dofollow=True,  # Playwright 2026-06-06: API publish confirmed raw HTML served as-is, both test links have empty rel
     referral_value="low",
     **HTMLDROP_MANIFEST,
 )
 register(
     "nonograph",
     NonographAPIAdapter,
-    dofollow="uncertain",  # canary-gated: markdown <a> rendering behavior pending evidence
-    rationale=_R["nonograph"],
+    dofollow=True,  # browser-tier 2026-06-06: no rel on external links
     referral_value="low",
     **NONOGRAPH_MANIFEST,
 )
 register(
     "pubmark",
     PubmarkAPIAdapter,
-    dofollow="uncertain",  # browser-probe confirmed dofollow; pipeline canary pending
-    rationale=_R["pubmark"],
+    dofollow=True,  # browser-tier 2026-06-04: no rel=nofollow on outbound links; confirmed stable
     referral_value="low",
     **PUBMARK_MANIFEST,
+)
+# Unmarkdown — Discovery Batch 1 GO (2026-06-06). REST API, confirmed dofollow.
+register(
+    "unmarkdown",
+    UnmarkdownAdapter,
+    dofollow=True,  # live API test 2026-06-06: POST /demo/publish renders clean <a> with empty rel
+    # No referral_value — too early to estimate (new platform, DA unknown).
+    **UNMARKDOWN_MANIFEST,
 )
 
 

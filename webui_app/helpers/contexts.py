@@ -459,4 +459,12 @@ def _render(template_name: str, **kwargs):
         )
     if 'incomplete_run' not in kwargs:
         kwargs['incomplete_run'] = _load_incomplete_run()
+    if 'wizard_config' not in kwargs:
+        try:
+            from webui_store import wizard_config_store as _wizard_config_store
+            kwargs['wizard_config'] = _wizard_config_store._get()
+        except Exception:
+            kwargs['wizard_config'] = {"completed": False}
+    if 'system_active' not in kwargs:
+        kwargs['system_active'] = kwargs['wizard_config'].get("completed", False)
     return render_template(template_name, **kwargs)

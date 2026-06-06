@@ -1,7 +1,9 @@
 [console_scripts]
 audit-state = backlink_publisher.cli.audit_state:main
 bind-channel = backlink_publisher.cli.bind_channel:main
+bp-mcp = backlink_publisher.mcp.server:main
 canary-targets = backlink_publisher.cli.canary_targets:main
+canonical-expand = backlink_publisher.cli.canonical_expand:main
 channel-scorecard = backlink_publisher.cli.channel_scorecard:main
 comment = backlink_publisher.cli.comment:main
 cull-channels = backlink_publisher.cli.cull_channels:main
@@ -15,7 +17,9 @@ phase0-seal = backlink_publisher.cli.phase0_seal:main
 plan-backlinks = backlink_publisher.cli.plan_backlinks:main
 plan-check = backlink_publisher.cli.plan_check:main
 plan-gap = backlink_publisher.cli.plan_gap:main
+pr-opportunities = backlink_publisher.cli.pr_opportunities:main
 preflight-targets = backlink_publisher.cli.preflight_targets:main
+probe-citations = backlink_publisher.cli.probe_citations:main
 publish-backlinks = backlink_publisher.cli.publish_backlinks:main
 recheck-backlinks = backlink_publisher.cli.recheck_backlinks:main
 recheck-overlay = backlink_publisher.cli.recheck_overlay:main

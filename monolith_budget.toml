@@ -62,9 +62,42 @@ ceiling = 120
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): main() split into two engine calls (report_from_profile + report_from_rows) extracted to _report_engine.py so the in-process PipelineAPI.report_anchors path shares it. report_anchors.py stayed at 89 SLOC — holds argparse + load_config + config_echo banner + engine call + stdout print + stderr breach lines + emit_envelope_and_exit shell only. Ceiling 120 = round_up_to_10(89+30) per policy."
 
 [files."src/backlink_publisher/cli/_publish_helpers.py"]
-ceiling = 480
-rationale = "refactor 2026-06-01: extracted the CLI layer (_build_parser argparse + _handle_checkpoint_ops + _handle_auth_expired) to cli/_publish_cli.py. The _do_sleep/_sleep_with_throttle and verify_published/_do_verify mock seams stay here (tests patch them at this module). _publish_helpers re-exports the 3 moved names. SLOC 634->442. Ceiling 480 = round_up_to_10(442+30)."
+ceiling = 100
+rationale = "refactor 2026-06-06 P0 split: extracted 7 specialized modules (_verify, _canary, _throttle, _checkpoint, _banner, _reconciler, _epilogue, _lease) reducing this file to a thin re-export module (73 SLOC). Test patches on check_url/verify_published/_do_sleep/_canary_gate still fire via re-exports. Ceiling 100 = round_up_to_10(73+30)."
 
 [files."src/backlink_publisher/cli/generate_backlink_text.py"]
 ceiling = 390
 rationale = "refactor 2026-06-01: extracted the input-parsing + deterministic-validation cluster (9 funcs + their constants) to cli/_candidates.py; this module now holds CLI/argparse + LLM orchestration (main/_resolve_client/_run_dry_run/_run_generate) and re-exports the moved names for the tests that import them. SLOC 541->357. Ceiling 390 = round_up_to_10(357+30)."
+
+# New modules from P0 split of _publish_helpers.py (2026-06-06)
+[files."src/backlink_publisher/cli/_publish_verify.py"]
+ceiling = 100
+rationale = "P0 split from _publish_helpers.py: verification helpers (_do_verify, _check_row_reachability). Test patches on check_url/verify_published still fire via re-exports from _publish_helpers. SLOC 59, ceiling 100 = round_up_to_10(59+30)."
+
+[files."src/backlink_publisher/cli/_publish_canary.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: canary gate (_canary_gate). Test patches still fire via re-exports from _publish_helpers. SLOC 41, ceiling 80 = round_up_to_10(41+40) to allow for interface expansion."
+
+[files."src/backlink_publisher/cli/_publish_throttle.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: throttle helpers (_load_throttle_config, _do_sleep, _sleep_with_throttle, _medium_throttle_sleep). Test patches on _do_sleep still fire via re-exports from _publish_helpers. SLOC 32, ceiling 80 = round_up_to_10(32+50)."
+
+[files."src/backlink_publisher/cli/_publish_checkpoint.py"]
+ceiling = 100
+rationale = "P0 split from _publish_helpers.py: checkpoint recording helpers (_try_update_ckpt_failed, _build_failure_row, _build_skip_row). SLOC 56, ceiling 100 = round_up_to_10(56+30)."
+
+[files."src/backlink_publisher/cli/_publish_banner.py"]
+ceiling = 110
+rationale = "P0 split from _publish_helpers.py: banner emission and publish-path drift recording (_make_banner_emit, _error_class, _record_publish_failure, _record_publish_path). SLOC 85, ceiling 110 = round_up_to_10(85+30)."
+
+[files."src/backlink_publisher/cli/_publish_reconciler.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: reconciler helpers (_run_reconciler, _write_reconciler_report). SLOC 34, ceiling 80 = round_up_to_10(34+50)."
+
+[files."src/backlink_publisher/cli/_publish_epilogue.py"]
+ceiling = 140
+rationale = "P0 split from _publish_helpers.py: publish epilogue (_publish_epilogue). SLOC 100, ceiling 140 = round_up_to_10(100+40)."
+
+[files."src/backlink_publisher/cli/_publish_lease.py"]
+ceiling = 110
+rationale = "P0 split from _publish_helpers.py: lease management and gate banner helpers (_gate_banner_sentinel, _release_acquired_leases, _acquire_publish_leases, _maybe_emit_gate_banner, _check_token_drift). SLOC 62, ceiling 110 = round_up_to_10(62+30)."

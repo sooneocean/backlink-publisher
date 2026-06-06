@@ -15,6 +15,8 @@ Platforms evaluated and ruled out. One file per platform.
 | [GitLab Snippets](2026-06-01-discovery-batch.md) | 2026-06-01 | GitLab-only content barely indexed by Google |
 | [paste.rs](2026-06-01-discovery-batch.md) | 2026-06-05 | No Google indexation of paste pages |
 | [ix.io](2026-06-01-discovery-batch.md) | 2026-06-05 | Service is down |
+| [JustPaste.it](justpasteit.md) | 2026-06-06 | URLs render as plain text, no clickable backlinks |
+| [LarkPen](larkpen.md) | 2026-06-06 | No indexed user content to inspect |
 
 ## Adding an entry
 

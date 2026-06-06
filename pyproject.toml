@@ -30,6 +30,7 @@ dev = ["pytest>=8.4", "pytest-mock>=3.15", "pytest-timeout>=2.4", "pytest-socket
 # webwright is pinned to exact version — upstream is a 3-week-old project in rapid iteration;
 # loose constraints risk silent breaking changes. Upgrade manually after evaluating changelog.
 dev-webwright = ["webwright==0.0.7"]
+mcp-server = ["mcp>=1.0.0"]
 
 [project.scripts]
 plan-backlinks = "backlink_publisher.cli.plan_backlinks:main"
@@ -58,6 +59,7 @@ recheck-overlay = "backlink_publisher.cli.recheck_overlay:main"
 canonical-expand = "backlink_publisher.cli.canonical_expand:main"
 pr-opportunities = "backlink_publisher.cli.pr_opportunities:main"
 probe-citations = "backlink_publisher.cli.probe_citations:main"
+bp-mcp = "backlink_publisher.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

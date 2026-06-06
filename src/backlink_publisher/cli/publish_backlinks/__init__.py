@@ -98,6 +98,22 @@ def main(argv: list[str] | None = None) -> None:
     config = load_config()
     config_echo.emit_banner(config, "publish-backlinks")
 
+    # Pre-flight credential health check — verify/refresh tokens before
+    # the publish loop starts, catching mid-run AuthExpiredError early.
+    if not args.dry_run:
+        platforms_in_run: set[str] = {args.platform} if args.platform else {r.get("platform", "") for r in rows}
+        try:
+            from backlink_publisher.credentials import check_credentials
+            health = check_credentials(config, list(platforms_in_run))
+            if health.has_failures():
+                publish_logger.warning(health.summary())
+            else:
+                publish_logger.info("credential health: all platforms %s", "/".join(
+                    r.status for r in health.results
+                ))
+        except Exception as exc:
+            publish_logger.warning("credential health check skipped: %s", exc)
+
     for idx, row in enumerate(rows, start=1):
         platform = args.platform or row.get("platform", "")
         platform_msg = reject_unsupported_platform(platform)

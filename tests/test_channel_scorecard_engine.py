@@ -142,8 +142,10 @@ def test_divergence_high_value_no_live_links(store):
     assert "declared-high-value:no-live-links" in devto.divergence
 
 
-def test_declared_uncertain_branch_and_divergence(tmp_path):
-    # substack is dofollow="uncertain"; a live link → "uncertain has live links" flag.
+def test_declared_dofollow_no_divergence_when_live_dofollow_confirmed(tmp_path):
+    # Substack is now dofollow=True (canary blitz 2026-06-06 resolved all uncertain).
+    # A live link on a confirmed-dofollow platform → _classify("substack") returns
+    # "dofollow" → live_dofollow=1 → no divergence for the dofollow axis.
     s = EventStore(path=tmp_path / "u.db")
     _article(s, "https://substack.example/u1")
     hist = [{"id": "u1", "platform": "substack", "target_url": T,
@@ -151,9 +153,11 @@ def test_declared_uncertain_branch_and_divergence(tmp_path):
              "status": "published", "verified_at": FRESH}]
     rows = build_channel_scorecard(store=s, history=hist)
     sub = _row(rows, "substack")
-    assert sub.declared_dofollow == "uncertain"   # the uncertain _declared branch
+    assert sub.declared_dofollow == "dofollow"      # substack is now True
     assert sub.live_links == 1
-    assert "uncertain-dofollow:has-live-links(run-canary-to-confirm)" in sub.divergence
+    assert sub.live_dofollow == 1                   # _classify returns dofollow
+    assert "declared-dofollow:no-live-dofollow-observed" not in sub.divergence  # confirmed
+    assert "declared-high-value:no-live-links" not in sub.divergence            # live > 0
 
 
 # ── invariants + edges ───────────────────────────────────────────────────────

@@ -685,3 +685,14 @@ PUBMARK_MANIFEST: dict[str, Any] = dict(
         icon="bi-pencil-square",
     ),
 )
+
+# Unmarkdown — markdown publishing platform with REST API (Discovery Batch 1).
+UNMARKDOWN_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Unmarkdown",
+        domain="unmarkdown.com",
+        category="general-blog",
+        icon="bi-pencil",
+    ),
+    visibility="experimental",
+)

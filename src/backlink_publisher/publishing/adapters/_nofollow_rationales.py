@@ -11,17 +11,6 @@ not adapters/__init__.py.
 from __future__ import annotations
 
 NOFOLLOW_RATIONALES: dict[str, str] = {
-    "hatena": (
-        "Hatena Blog post bodies render outbound <a> with no rel by default — a "
-        "2026-05-29 3rd-party live probe (scripts/channel_probe.py) sampled 11/12 "
-        "body links dofollow, 1 nofollow, with no redirect interstitial. One of "
-        "Japan's largest blog hosts (high DA) and the only one of the three GO "
-        "candidates with a documented AtomPub publish API. Registered "
-        'dofollow="uncertain" pending an OUR-pipeline canary confirming our own '
-        "placed link renders dofollow; operator flips to True via "
-        "verify_link_attributes (livejournal/txtfyi workflow). referral_value="
-        "high regardless: JP DA + referral traffic + indexation speed."
-    ),
     "devto": (
         'Dev.to applies rel="nofollow ugc" to outbound links since '
         "~2022 per platform policy; every external <a> is decorated "
@@ -73,18 +62,14 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "chars enforced server-side."
     ),
     "txtfyi": (
-        'Registered dofollow="uncertain" pending the R4 canary loop '
-        "(Plan 2026-05-25-001 Unit 7): Phase 0 probe confirmed txt.fyi serves "
-        "raw static HTML with no server-side link rewriting, so outbound <a> "
-        'elements are expected to carry no rel="nofollow" server-side, but '
-        "the definitive status is confirmed only by publishing a canary and "
-        "reading verify_link_attributes on the live page, then amending this "
-        'register() to dofollow=True. referral_value="low" reflects '
-        "txt.fyi's anonymous-pastebin character: the site has modest DA and "
-        "is not indexed aggressively (robots.txt disallow), but links on "
-        "dofollow static pages still pass equity to any crawler that reaches "
-        "them. No credentials needed; the form-POST adapter composes the "
-        "Unit 4 http_form_post helpers for a zero-dependency publish path."
+        "Playwright 2026-06-06 confirmed txt.fyi is a plain-text pastebin "
+        "that does NOT render Markdown link syntax [text](url) as clickable "
+        "<a> HTML elements. Backlinks placed in the page body appear only "
+        "as raw URL text — no PageRank transfer through plain text. "
+        "Adapter retained for AI citation discovery (crawlers can still "
+        "read and cite text URLs from the indexed page) but no dofollow "
+        "backlink value. referral_value=\"low\"; visibility=\"hidden\" "
+        "prevents operator confusion."
     ),
     # --- Phase 1 channel-expansion dofollow truth audit (2026-05-26) ---
     # The 16 Phase-1 adapters shipped with bare ``dofollow=True`` and no
@@ -105,44 +90,13 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         'referral_value="high" reflects wordpress.com\'s DA ~94 and strong '
         "referral reach regardless of the rel outcome."
     ),
-    "substack": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-05 third-party live check of a published Substack post found "
-        "external body <a> carry no rel attribute (= dofollow), but a "
-        "third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). Confirm by publishing a canary and "
-        "reading verify_link_attributes on the live post, then amend to "
-        'dofollow=True. referral_value="high": high-DA newsletter platform '
-        "with strong referral reach."
-    ),
     "hashnode": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-05 third-party live check found Hashnode post-body external <a> "
-        "carry no rel attribute (= dofollow), but a third-party spot-check "
-        "does not discharge the canary burden (livejournal/txtfyi "
-        "precedent). NOTE: Hashnode is concurrently slated for retirement "
-        "(PR #204) and its GraphQL publish path hits a paywall — coordinate "
-        'before investing further. referral_value="high": high-DA dev '
-        "blogging platform."
-    ),
-    "writeas": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-05 third-party live check found write.as post-body external <a> "
-        "(including embeds) carry no rel attribute (= dofollow), but a "
-        "third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). NOTE: write.as is concurrently "
-        "slated for retirement (PR #202) — coordinate before investing "
-        'further. referral_value="low": minimalist low-DA blogging host.'
-    ),
-    "rentry": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-05 third-party live check found rentry.co paste links carry "
-        'only rel="noreferrer noopener" with no nofollow (= dofollow), but '
-        "a third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). Confirm by publishing a canary and "
-        "reading verify_link_attributes, then amend to dofollow=True. "
-        'referral_value="low": anonymous markdown paste with low DA and '
-        "frequent noindex, so equity is weak even if dofollow holds."
+        "Playwright 2026-06-06 confirmed article-body external links carry "
+        'rel="noopener noreferrer nofollow ugc" server-side (observed on '
+        "davidyau1.hashnode.dev post with a MySQL documentation link). "
+        "Hashnode applies nofollow to all user-embedded external links "
+        "regardless of account tier. Adapter retained for referral traffic "
+        'and topical signals from a high-DA dev platform (DA ~90+).'
     ),
     "livejournal": (
         "Pipeline canary 2026-05-29: link_attr_verification target_nofollow=True — "
@@ -151,31 +105,12 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "high-DA legacy blogging platform; nofollow does not eliminate referral or brand value."
     ),
     "hackmd": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-06-01 third-party live check (verify_link_attributes on a real public "
-        'note) sampled 188 outbound anchors with 0 nofollow and <meta robots="index,'
-        'follow"> (DA ~71). A third-party spot-check does not discharge the canary '
-        "burden (hashnode/substack/hatena precedent): publish an OUR note, read "
-        'verify_link_attributes, then amend to dofollow=True. referral_value="high": '
-        "well-indexed high-DA docs host with real referral traffic."
-    ),
-    "mataroa": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary. A '
-        "2026-06-01 third-party live check (verify_link_attributes on real posts) "
-        "found outbound external links carry no rel (= dofollow) and site:mataroa.blog "
-        "returns fresh indexed content. The platform currently tolerates marketing "
-        "posts, so it could tighten — confirm via an OUR canary and read "
-        "verify_link_attributes before amending to dofollow=True. referral_value="
-        '"high": indexed minimalist blog host with open token API.'
-    ),
-    "gitlabpages": (
-        'Registered dofollow="uncertain" though the rel is operator-controlled '
-        "(GitLab Pages serves our own static HTML verbatim, no nofollow injection). "
-        "The uncertainty is indexation, not rel: *.gitlab.io indexation is only "
-        '"partial" per the 2026-06-01 discovery run, the publish is async (CI '
-        "pages pipeline), and a shared free subdomain carries search-trust risk. "
-        "An OUR-post canary confirming the served page is index,follow gates the "
-        'flip to dofollow=True. referral_value="high": high-DA operator-owned host.'
+        "Playwright 2026-06-06 confirmed user note external links carry "
+        'rel="noopener ugc nofollow" server-side (observed on a HackMD '
+        "markdown cheatsheet note with rendered Markdown links). HackMD "
+        "applies nofollow to all user-embedded external links regardless "
+        "of note visibility or account tier. Adapter retained for referral "
+        'traffic and topical signals from a well-indexed docs host (DA ~71).'
     ),
     "qiita": (
         "Qiita applies rel=nofollow noopener to every outbound external link "
@@ -190,54 +125,5 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "the 2026-06-01 discovery run (36/137 non-nofollow links, all "
         "Zenn-internal). Zero PageRank transfer. Value = entity signal + "
         'JP referral traffic on a top JP dev platform (DA ~90+). referral_value="high".'
-    ),
-    "posteasy": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
-        "(Plan 2026-06-04-001 Wave 1b): PostEasy renders Markdown content "
-        "client-side via Next.js hydration, which auto-links URLs as <a> "
-        "elements, but the rel attribute (nofollow vs none) depends on the "
-        "platform's markdown renderer configuration and cannot be determined "
-        "without publishing a real canary post and reading "
-        "verify_link_attributes on the live page. 90-day TTL post expiration. "
-        'referral_value="low": anonymous microblog, modest DA.'
-    ),
-    "brewpage": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
-        "(Plan 2026-06-04-001 Wave 1c): a 2026-06-04 live probe confirmed "
-        "BrewPage serves rendered HTML with <a href> elements and no "
-        'rel="nofollow" decoration, but a third-party spot-check does not '
-        "discharge the canary burden (hashnode/substack precedent). Confirm "
-        "by publishing a canary and reading verify_link_attributes on the "
-        "live page, then amend to dofollow=True. 15-day default, 30-day max "
-        'TTL. referral_value="low": short-TTL instant hosting, modest DA.'
-    ),
-    "htmldrop": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
-        "(Plan 2026-06-04-001 Wave 3b): HtmlDrop serves raw HTML including "
-        "<a> elements, so links survive rendering. However, the rel "
-        "attribute policy (nofollow vs none) is not documented and must be "
-        "verified by publishing a real canary post and reading "
-        "verify_link_attributes on the live page. 24-hour TTL for anonymous "
-        'posts. referral_value="low": short-TTL paste service, modest DA.'
-    ),
-    "pubmark": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
-        "(Plan 2026-06-04-001 Wave pubmark): a 2026-06-04 live browser "
-        "probe confirmed Pubmark renders Markdown links as <a href> with "
-        "no rel attribute (rel=null) — dofollow by construction for the "
-        "sampled post. A pipeline canary must confirm stability across "
-        "multiple publishes before marking dofollow=True. Free plan limits "
-        "to 5 published documents per IP/session; the adapter accepts this "
-        'limit transparently. referral_value="low": modest DA, anonymous '
-        "publishing."
-    ),
-    "nonograph": (
-        'Registered dofollow="uncertain" pending an OUR-pipeline canary '
-        "(Plan 2026-06-04-001 Wave 3a): Nonograph renders Markdown content "
-        "to static HTML. URLs in markdown become <a> elements, but the rel "
-        "attribute policy depends on the server-side renderer configuration "
-        "and must be confirmed by publishing a real canary post and reading "
-        "verify_link_attributes on the live page. Permanent storage (no TTL). "
-        'referral_value="low": anonymous publishing, modest DA.'
     ),
 }

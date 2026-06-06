@@ -589,6 +589,12 @@ class Config:
         return _cfg._config_dir() / "linkedin-token.json"
 
     @property
+    def unmarkdown_token_path(self) -> Path:
+        from backlink_publisher import config as _cfg
+
+        return _cfg._config_dir() / "unmarkdown-token.json"
+
+    @property
     def screenshot_dir(self) -> Path:
         from backlink_publisher import config as _cfg
 

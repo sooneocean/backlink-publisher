@@ -248,8 +248,8 @@ _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     "blogger": "oauth",
     # LIVE-BROWSER — driven browser login (Chrome/Playwright)
     "velog": "live_browser", "medium": "live_browser", "mastodon": "live_browser",
-    # NO-OP — platforms with no binding credential flow
-    "qiita": "anon", "zenn": "anon",
+    # TOKEN — single secret field (Qiita/Zenn require API tokens despite early anon classification)
+    "qiita": "token", "zenn": "token",
 }
 # Which auth_types are consistent with a declared ``bind[].backend``. Used by
 # the consistency test only (not at runtime). ``cookie`` backend currently
@@ -416,6 +416,15 @@ def register(
         policy=policy,
         visibility=visibility,
     )
+    if ui is not None:
+        _UI_META_BY_PLATFORM[platform] = ui
+    _BIND_BY_PLATFORM[platform] = bind_tuple
+    if policy is not None:
+        _POLICY_BY_PLATFORM[platform] = policy
+    if visibility != "active":
+        _VISIBILITY_BY_PLATFORM[platform] = visibility
+    elif platform in _VISIBILITY_BY_PLATFORM:
+        del _VISIBILITY_BY_PLATFORM[platform]
 
 
 def registered_platforms() -> list[str]:

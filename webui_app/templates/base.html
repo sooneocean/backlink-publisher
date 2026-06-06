@@ -19,6 +19,16 @@
     {% block head_extra %}{% endblock %}
 </head>
 <body>
+    {# System active indicator — shown on every page when automation is running #}
+    {% if system_active %}
+    <div id="system-status-badge" style="position:fixed;top:8px;right:8px;z-index:9999;background:rgba(16,185,129,0.9);color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:5px;">
+        <i class="bi bi-check-circle-fill"></i> System Active
+    </div>
+    {% else %}
+    <div id="system-status-badge" style="position:fixed;top:8px;right:8px;z-index:9999;background:rgba(108,117,125,0.85);color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:5px;">
+        <i class="bi bi-slash-circle"></i> Not Configured
+    </div>
+    {% endif %}
     {% block content %}{% endblock %}
     {# Server -> client bootstrap data island(s). Usually one window.__<page>Bootstrap;
        index is the documented exception (two: __indexBootstrap + __batchTabHint). #}
