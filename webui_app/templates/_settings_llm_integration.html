@@ -20,6 +20,27 @@
                 <p class="text-muted" style="font-size:13px;">
                     配置自定义 LLM 端口以获得更优质的文章生成效果。支持所有 OpenAI 兼容格式的 API。
                 </p>
+                <div class="border rounded p-2 mb-3" data-ai-service-readiness>
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <strong style="font-size:13px;">AI 生成服務狀態</strong>
+                        <div class="d-flex gap-2 flex-wrap">
+                            {% if llm_settings.use_article_gen %}
+                            <span class="badge bg-success">全文生成已啟用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">全文生成未啟用</span>
+                            {% endif %}
+                            {% if llm_settings.use_image_gen %}
+                            <span class="badge bg-success">封面生成已啟用</span>
+                            {% else %}
+                            <span class="badge bg-secondary">封面生成未啟用</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="mt-2 text-muted" style="font-size:12px;">
+                        <span>Endpoint: {{ llm_settings.endpoint or '未設定' }}</span>
+                        <span class="ms-3">Model: {{ llm_settings.model or '未設定' }}</span>
+                    </div>
+                </div>
                 <form method="POST" action="/settings/save-llm-config">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                     <input type="hidden" name="action" id="llmFormAction" value="">

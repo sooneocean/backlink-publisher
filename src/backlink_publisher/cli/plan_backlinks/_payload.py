@@ -10,7 +10,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from backlink_publisher.config import Config, get_anchor_keywords
+from backlink_publisher.content_generation.service import generate_draft
+from backlink_publisher.content_generation.types import GenerationRequest
 from backlink_publisher._util.errors import InputValidationError
+from backlink_publisher.llm.client import _redact_for_log
 from backlink_publisher._util.logger import plan_logger
 from backlink_publisher._util.markdown import (
     links_to_markdown,
@@ -141,29 +144,54 @@ def _generate_payload(
 
     body_tmpl = tmpl["body_paragraphs"].get(url_mode, tmpl["body_paragraphs"]["A"])
 
+    fallback_body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
+    ai_generation: dict[str, Any] | None = None
+    cover_prompt: str | None = None
     if config and config.llm_anchor_provider and config.llm_anchor_provider.use_article_gen:
-        try:
-            llm_p = OpenAICompatibleProvider(
-                base_url=config.llm_anchor_provider.base_url,
-                api_key=config.llm_anchor_provider.api_key,
-                model=config.llm_anchor_provider.model,
-                temperature=config.llm_anchor_provider.temperature,
-                system_prompt=config.llm_anchor_provider.system_prompt,
-                article_system_prompt=config.llm_anchor_provider.article_system_prompt,
-            )
-            body = llm_p.generate_article_body(
-                domain_label=domain_label,
+        llm_p = OpenAICompatibleProvider(
+            base_url=config.llm_anchor_provider.base_url,
+            api_key=config.llm_anchor_provider.api_key,
+            model=config.llm_anchor_provider.model,
+            timeout_s=config.llm_anchor_provider.timeout_s,
+            temperature=config.llm_anchor_provider.temperature,
+            system_prompt=config.llm_anchor_provider.system_prompt,
+            article_system_prompt=config.llm_anchor_provider.article_system_prompt,
+        )
+        generation = generate_draft(
+            GenerationRequest(
+                target_url=target_url,
                 main_domain=main_domain,
-                anchors=anchors,
-                topic=topic_val,
+                platform=platform,
                 language=target_language,
-            )
+                anchors=tuple(anchors),
+                topic=topic_val,
+                title=title,
+                context={"domain_label": domain_label, "url_mode": url_mode},
+            ),
+            provider=llm_p,
+            fallback_body=fallback_body,
+        )
+        body = generation.body_markdown
+        cover_prompt = generation.cover_prompt
+        ai_generation = {
+            "status": generation.status,
+            "provider": generation.provider,
+            "validation_accepted": generation.validation.accepted,
+            "issues": [
+                {
+                    "code": issue.code,
+                    "severity": issue.severity,
+                    "message": _redact_for_log(issue.message),
+                }
+                for issue in generation.validation.issues
+            ],
+        }
+        if generation.status == "reviewable":
             plan_logger.info(f"LLM article body generated for {main_domain}")
-        except Exception as e:
-            plan_logger.warn(f"LLM article generation failed, falling back to template: {e}")
-            body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
+        elif generation.status == "fallback_used":
+            plan_logger.warn("LLM article generation unavailable, falling back to template")
     else:
-        body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
+        body = fallback_body
 
     if tdk_title or tdk_description:
         tdk_section = f"\n\n---\n**关于 {domain_label}**\n"
@@ -259,7 +287,7 @@ def _generate_payload(
     seed_str = f"{target_url}:{main_domain}:{url_mode}:{platform}"
     article_id = hashlib.sha256(seed_str.encode()).hexdigest()[:16]
 
-    return {
+    payload = {
         "id": article_id,
         "platform": platform,
         "language": target_language,
@@ -282,3 +310,8 @@ def _generate_payload(
             "canonical_url": target_url,
         },
     }
+    if ai_generation is not None:
+        payload["ai_generation"] = ai_generation
+    if cover_prompt:
+        payload["cover_prompt"] = cover_prompt
+    return payload
