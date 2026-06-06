@@ -76,8 +76,11 @@ def _generate_banner_for_payload(
 
     title = payload.get("title", "")
     body = payload.get("content_markdown", "")
+    payload_prompt = str(payload.get("cover_prompt") or "").strip()
 
-    if llm_provider is not None:
+    if payload_prompt:
+        prompt = payload_prompt
+    elif llm_provider is not None:
         try:
             prompt = llm_provider.generate_image_prompt(title, body)
         except Exception as exc:

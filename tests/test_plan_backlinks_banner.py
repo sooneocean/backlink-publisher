@@ -19,9 +19,44 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backlink_publisher.cli.plan_backlinks import main as plan_main
+from backlink_publisher.cli.plan_backlinks._banners import _generate_banner_for_payload
+from backlink_publisher.config.types import ImageGenConfig
+from backlink_publisher.publishing.adapters.image_gen.types import BannerArtifact
 
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+class _Tracker:
+    disabled = False
+
+    def record_success(self):
+        pass
+
+    def record_failure(self):
+        pass
+
+
+class _Store:
+    def append(self, *args, **kwargs):
+        pass
+
+    def query(self, *args, **kwargs):
+        return [{"n": 0}]
+
+
+class _PromptRecorder:
+    def __init__(self):
+        self.prompts: list[str] = []
+
+    def generate(self, prompt: str) -> BannerArtifact:
+        self.prompts.append(prompt)
+        return BannerArtifact(
+            data=_PNG,
+            mime="image/png",
+            source_url=None,
+            prompt_sha="promptsha1234567",
+        )
 
 
 @pytest.fixture
@@ -124,6 +159,37 @@ def _get_ok_bytes(content: bytes, mime: str) -> MagicMock:
     resp.headers = {"Content-Type": mime}
     resp.raise_for_status = MagicMock()
     return resp
+
+
+def test_banner_uses_ai_cover_prompt(monkeypatch, tmp_path):
+    recorder = _PromptRecorder()
+    runtime = {
+        "adapter": recorder,
+        "tracker": _Tracker(),
+        "store": _Store(),
+        "config": ImageGenConfig(
+            base_url="https://image.test/v1",
+            model="banner-m",
+        ),
+        "run_counter": [0],
+    }
+    monkeypatch.setattr(
+        "backlink_publisher.publishing.adapters.image_gen.storage.save_banner",
+        lambda artifact: tmp_path / "banner.png",
+    )
+
+    banner = _generate_banner_for_payload(
+        {
+            "title": "Fallback Title",
+            "content_markdown": "Body",
+            "cover_prompt": "Use this exact AI cover prompt.",
+        },
+        runtime=runtime,
+        llm_provider=None,
+    )
+
+    assert recorder.prompts == ["Use this exact AI cover prompt."]
+    assert banner["path"] == str(tmp_path / "banner.png")
 
 
 # ── banner = None when image_gen not configured ─────────────────────────────

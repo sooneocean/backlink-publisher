@@ -8,6 +8,7 @@ directly.  Every mutating method returns a dict with ``ok`` / ``error`` /
 from __future__ import annotations
 
 import uuid
+import json
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -41,6 +42,60 @@ def _remove_scheduled_job(job_id: str) -> bool:
                          reason=type(exc).__name__)
         return False
     return True
+
+
+def _ai_review_state_from_plans(plans_jsonl: str) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for line in plans_jsonl.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+
+    ai_rows = [
+        row.get("ai_generation")
+        for row in rows
+        if isinstance(row.get("ai_generation"), dict)
+    ]
+    if not ai_rows:
+        return {"required": False, "accepted": True, "status": "not_applicable", "issues": []}
+
+    issues = [
+        issue
+        for ai in ai_rows
+        for issue in (ai.get("issues") or [])
+        if isinstance(issue, dict)
+    ]
+    accepted = all(
+        ai.get("status") == "reviewable" and ai.get("validation_accepted") is True
+        for ai in ai_rows
+    )
+    status = "reviewable" if accepted else "rejected"
+    return {
+        "required": True,
+        "accepted": accepted,
+        "status": status,
+        "issues": issues,
+    }
+
+
+def _ai_publish_gate(item: dict[str, Any] | None) -> dict[str, Any] | None:
+    ai_review = (item or {}).get("ai_review")
+    if not isinstance(ai_review, dict):
+        return None
+    if ai_review.get("required") and not ai_review.get("accepted"):
+        return {
+            "ok": False,
+            "error_code": "AI_DRAFT_REVIEW_REQUIRED",
+            "flash_type": "warning",
+            "flash_msg": "AI 草稿尚未通過審核，不能發布。",
+        }
+    return None
 
 
 # ── DraftAPI ───────────────────────────────────────────────────────────────
@@ -88,6 +143,7 @@ class DraftAPI:
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "article_urls": [],
             "error": None,
+            "ai_review": _ai_review_state_from_plans(plans_jsonl),
         }
         try:
             _drafts_store.insert_first(item)
@@ -129,6 +185,10 @@ class DraftAPI:
         """
         if not item_id or not scheduled_at_str:
             return {"ok": False, "flash_msg": "参数缺失"}
+
+        gated = _ai_publish_gate(_drafts_store.get_item(item_id))
+        if gated is not None:
+            return gated
 
         try:
             requested_dt = datetime.fromisoformat(scheduled_at_str)
@@ -180,6 +240,11 @@ class DraftAPI:
         """Immediately schedule a draft to publish in ~5 seconds."""
         if not item_id:
             return {"ok": False, "flash_msg": "参数缺失"}
+
+        item = _drafts_store.get_item(item_id)
+        gated = _ai_publish_gate(item)
+        if gated is not None:
+            return gated
 
         run_date = datetime.now() + timedelta(seconds=5)
         try:
@@ -332,6 +397,9 @@ class DraftAPI:
                 item = _drafts_store.get_item(item_id)
                 if not item:
                     continue
+                gated = _ai_publish_gate(item)
+                if gated is not None:
+                    raise RuntimeError(gated["error_code"])
 
                 run_date = base + timedelta(seconds=5 + i * 5)
                 # Track original state for rollback
