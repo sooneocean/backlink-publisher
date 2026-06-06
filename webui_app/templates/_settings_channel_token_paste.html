@@ -81,7 +81,7 @@
         {% if _bound %}
         <button type="submit" name="clear" value="1"
                 class="btn btn-outline-danger" style="margin-left:8px;"
-                onclick="return confirm('清除 {{ _channel }} token 文件？');">
+                data-confirm="清除 {{ _channel }} token 文件？">
             清除
         </button>
         {% endif %}

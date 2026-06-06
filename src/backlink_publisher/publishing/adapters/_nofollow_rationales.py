@@ -12,7 +12,7 @@ from __future__ import annotations
 
 NOFOLLOW_RATIONALES: dict[str, str] = {
     "devto": (
-        "Dev.to applies rel=\"nofollow ugc\" to outbound links since "
+        'Dev.to applies rel="nofollow ugc" to outbound links since '
         "~2022 per platform policy; every external <a> is decorated "
         "server-side regardless of account tier or post format. "
         "DevtoAPIAdapter (Plan 2026-05-21-003 Phase 2 Unit 7) is the "
@@ -31,7 +31,7 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "Plan 2026-05-21-003 Phase 2 Unit 6."
     ),
     "mastodon": (
-        "Mastodon hardcodes rel=\"nofollow noopener noreferrer\" on "
+        'Mastodon hardcodes rel="nofollow noopener noreferrer" on '
         "outbound links across all instances — federation-default and "
         "not disableable per-post or per-account. Re-registered in "
         "Plan 2026-05-21-001 Unit 4c as a chrome publish channel — "
@@ -40,7 +40,6 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "instance_url; security policy: use a throwaway account only, "
         "never a personal Mastodon identity."
     ),
-
     "tumblr": (
         "Tumblr rewrites all outbound <a> href via t.umblr.com/redirect "
         "which strips link equity — server-side and compulsory for all "
@@ -52,7 +51,7 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "content_markdown. Tags are comma-separated, capped at 20."
     ),
     "linkedin": (
-        "LinkedIn applies rel=\"nofollow ugc\" to outbound links in user posts "
+        'LinkedIn applies rel="nofollow ugc" to outbound links in user posts '
         "and articles server-side irrespective of account type — verified across "
         "multiple accounts and post formats. The platform is retained for brand "
         "exposure, B2B referral traffic, and topical relevance signalling rather "
@@ -63,18 +62,14 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "chars enforced server-side."
     ),
     "txtfyi": (
-        "Registered dofollow=\"uncertain\" pending the R4 canary loop "
-        "(Plan 2026-05-25-001 Unit 7): Phase 0 probe confirmed txt.fyi serves "
-        "raw static HTML with no server-side link rewriting, so outbound <a> "
-        "elements are expected to carry no rel=\"nofollow\" server-side, but "
-        "the definitive status is confirmed only by publishing a canary and "
-        "reading verify_link_attributes on the live page, then amending this "
-        "register() to dofollow=True. referral_value=\"low\" reflects "
-        "txt.fyi's anonymous-pastebin character: the site has modest DA and "
-        "is not indexed aggressively (robots.txt disallow), but links on "
-        "dofollow static pages still pass equity to any crawler that reaches "
-        "them. No credentials needed; the form-POST adapter composes the "
-        "Unit 4 http_form_post helpers for a zero-dependency publish path."
+        "Playwright 2026-06-06 confirmed txt.fyi is a plain-text pastebin "
+        "that does NOT render Markdown link syntax [text](url) as clickable "
+        "<a> HTML elements. Backlinks placed in the page body appear only "
+        "as raw URL text — no PageRank transfer through plain text. "
+        "Adapter retained for AI citation discovery (crawlers can still "
+        "read and cite text URLs from the indexed page) but no dofollow "
+        "backlink value. referral_value=\"low\"; visibility=\"hidden\" "
+        "prevents operator confusion."
     ),
     # --- Phase 1 channel-expansion dofollow truth audit (2026-05-26) ---
     # The 16 Phase-1 adapters shipped with bare ``dofollow=True`` and no
@@ -84,60 +79,51 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
     # livejournal/txtfyi precedent — third-party spot-checks do not
     # discharge the canary burden). Zero stay dofollow=True.
     "wordpresscom": (
-        "Registered dofollow=\"uncertain\": evidence conflicts. This "
+        'Registered dofollow="uncertain": evidence conflicts. This '
         "project's PR #108->#109 (the 9-minute revert) observed that free "
         "*.wordpress.com tier adds rel=nofollow to outbound links, but a "
         "2026-05 re-check found nofollow applied only opt-in per-link "
-        "(\"Mark as nofollow\" checkbox), not automatically — WordPress.com "
+        '("Mark as nofollow" checkbox), not automatically — WordPress.com '
         "may have changed policy. The definitive status is resolved only by "
         "publishing a canary on a free-tier blog and reading "
         "verify_link_attributes, then amending this register(). "
-        "referral_value=\"high\" reflects wordpress.com's DA ~94 and strong "
+        'referral_value="high" reflects wordpress.com\'s DA ~94 and strong '
         "referral reach regardless of the rel outcome."
     ),
-    "substack": (
-        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
-        "2026-05 third-party live check of a published Substack post found "
-        "external body <a> carry no rel attribute (= dofollow), but a "
-        "third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). Confirm by publishing a canary and "
-        "reading verify_link_attributes on the live post, then amend to "
-        "dofollow=True. referral_value=\"high\": high-DA newsletter platform "
-        "with strong referral reach."
-    ),
     "hashnode": (
-        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
-        "2026-05 third-party live check found Hashnode post-body external <a> "
-        "carry no rel attribute (= dofollow), but a third-party spot-check "
-        "does not discharge the canary burden (livejournal/txtfyi "
-        "precedent). NOTE: Hashnode is concurrently slated for retirement "
-        "(PR #204) and its GraphQL publish path hits a paywall — coordinate "
-        "before investing further. referral_value=\"high\": high-DA dev "
-        "blogging platform."
-    ),
-    "writeas": (
-        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
-        "2026-05 third-party live check found write.as post-body external <a> "
-        "(including embeds) carry no rel attribute (= dofollow), but a "
-        "third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). NOTE: write.as is concurrently "
-        "slated for retirement (PR #202) — coordinate before investing "
-        "further. referral_value=\"low\": minimalist low-DA blogging host."
-    ),
-    "rentry": (
-        "Registered dofollow=\"uncertain\" pending an OUR-pipeline canary. A "
-        "2026-05 third-party live check found rentry.co paste links carry "
-        "only rel=\"noreferrer noopener\" with no nofollow (= dofollow), but "
-        "a third-party spot-check does not discharge the canary burden "
-        "(livejournal/txtfyi precedent). Confirm by publishing a canary and "
-        "reading verify_link_attributes, then amend to dofollow=True. "
-        "referral_value=\"low\": anonymous markdown paste with low DA and "
-        "frequent noindex, so equity is weak even if dofollow holds."
+        "Playwright 2026-06-06 confirmed article-body external links carry "
+        'rel="noopener noreferrer nofollow ugc" server-side (observed on '
+        "davidyau1.hashnode.dev post with a MySQL documentation link). "
+        "Hashnode applies nofollow to all user-embedded external links "
+        "regardless of account tier. Adapter retained for referral traffic "
+        'and topical signals from a high-DA dev platform (DA ~90+).'
     ),
     "livejournal": (
         "Pipeline canary 2026-05-29: link_attr_verification target_nofollow=True — "
         "LiveJournal platform-wide injects rel=nofollow on external body links. "
-        "Registered dofollow=False. Kept as referral channel: referral_value=\"high\" — "
+        'Registered dofollow=False. Kept as referral channel: referral_value="high" — '
         "high-DA legacy blogging platform; nofollow does not eliminate referral or brand value."
+    ),
+    "hackmd": (
+        "Playwright 2026-06-06 confirmed user note external links carry "
+        'rel="noopener ugc nofollow" server-side (observed on a HackMD '
+        "markdown cheatsheet note with rendered Markdown links). HackMD "
+        "applies nofollow to all user-embedded external links regardless "
+        "of note visibility or account tier. Adapter retained for referral "
+        'traffic and topical signals from a well-indexed docs host (DA ~71).'
+    ),
+    "qiita": (
+        "Qiita applies rel=nofollow noopener to every outbound external link "
+        "server-side — confirmed on 12 real Qiita articles in the 2026-06-01 "
+        "discovery run (12/86 non-nofollow links, all internal to Qiita). "
+        "Zero PageRank transfer. Value = entity signal + JP referral traffic "
+        'on a top JP dev platform (DA ~90+). referral_value="high".'
+    ),
+    "zenn": (
+        "Zenn applies rel=nofollow noopener noreferrer to every outbound "
+        "external link server-side — confirmed on 36 real Zenn articles in "
+        "the 2026-06-01 discovery run (36/137 non-nofollow links, all "
+        "Zenn-internal). Zero PageRank transfer. Value = entity signal + "
+        'JP referral traffic on a top JP dev platform (DA ~90+). referral_value="high".'
     ),
 }

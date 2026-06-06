@@ -16,7 +16,7 @@ import pstats
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 from backlink_publisher.config.loader import _cache_dir
 
@@ -66,7 +66,7 @@ def profile_if_enabled(args: object | None = None) -> Iterator[None]:
         print(stream.getvalue(), flush=True)
 
 
-def add_profile_arg(parser: object) -> None:
+def add_profile_arg(parser: Any) -> None:
     """Add --profile flag to an argparse parser.
 
     Args:

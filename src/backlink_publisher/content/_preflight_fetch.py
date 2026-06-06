@@ -69,6 +69,13 @@ _META_NAME_RE = re.compile(rb"""name\s*=\s*["']?([a-zA-Z-]+)""", re.IGNORECASE)
 _META_CONTENT_RE = re.compile(rb"""content\s*=\s*["']?([^"'>]*)""", re.IGNORECASE)
 _H1_RE = re.compile(rb"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _H1_SENTINEL = b"</h1>"
+#: Streaming stops at ``</h1>`` (in ``<body>``), which normally lies past
+#: ``</head>`` — so the robots ``<meta>`` is captured in the common case. If
+#: ``</head>`` is NOT in the captured prefix (e.g. a stray pre-head ``<h1>`` cut
+#: the stream early, or the head is pathologically large), a late ``noindex``
+#: meta could have been missed — consumers must treat ``noindex=False`` as
+#: indeterminate, not a clean "indexable". ``head_complete`` surfaces that.
+_HEAD_SENTINEL = b"</head>"
 #: Split robots directives on commas / whitespace / colons (the last covers
 #: ``X-Robots-Tag: googlebot: noindex``) so ``noindex`` matches as a token, not
 #: a substring (guards against ``noindexing`` false positives).
@@ -94,6 +101,10 @@ class PreflightFacts:
     tls_unverified: bool = False
     reason: Optional[str] = None
     x_robots_tag: Optional[str] = None
+    #: ``</head>`` was present in the captured body prefix, so the robots
+    #: ``<meta>`` scan saw the whole head. ``False`` means the head may have
+    #: been truncated — ``noindex=False`` is then indeterminate, not clean.
+    head_complete: bool = False
 
 
 def _is_http_url(url: str) -> bool:
@@ -252,6 +263,7 @@ def _build_facts_from_response(resp: Any, normalized: str) -> "PreflightFacts":
         tls_unverified=False,
         reason=None,
         x_robots_tag=x_robots,
+        head_complete=_HEAD_SENTINEL in body.lower(),
     )
 
 

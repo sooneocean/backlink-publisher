@@ -366,6 +366,31 @@ def _mock_content_fetch(request, monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _mock_recheck_indexability_fetch(request, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default the recheck indexability axis to a zero-network ``unknown``.
+
+    ``probe_liveness`` issues a second ``fetch_target`` call for every page it
+    reads, to read ``PreflightFacts.noindex`` (the indexability axis). Without a
+    default stub, every CLI/WebUI recheck test that reaches a readable page would
+    drive a real ``getaddrinfo``/SSRF resolution. Patches the *consumer* reference
+    (``recheck.probe.fetch_target``) only — NOT the producer module — so
+    ``test_preflight_fetch.py`` and ``cli/canary_targets`` (which read the real
+    ``fetch_target``/their own fetch) are unaffected. Tests that exercise the real
+    indexability read inject their own ``fetch_fn`` (last-wins) or mark
+    ``real_content_fetch``. Mirrors ``_mock_content_fetch``.
+    """
+    if request.node.get_closest_marker("real_content_fetch"):
+        return
+    from backlink_publisher.content._preflight_fetch import PreflightFacts
+
+    monkeypatch.setattr(
+        "backlink_publisher.recheck.probe.fetch_target",
+        lambda url, *, timeout=None: PreflightFacts(reason="network_error"),
+        raising=True,
+    )
+
+
 try:
     import pytest_socket  # noqa: F401
 except ImportError:  # pragma: no cover

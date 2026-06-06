@@ -170,5 +170,6 @@ class TestSettingsRouteIncludesPartial:
         html = resp.get_data(as_text=True)
         assert 'id="bind-section-blogger"' in html
         assert 'id="bind-section-medium"' in html
-        assert 'src="/static/js/bind_channel.js"' in html
+        # Plan 007 U2/U3: static refs now carry a ?v=<asset_version> cache-bust.
+        assert "js/bind_channel.js" in html
         assert '<meta name="csrf-token"' in html

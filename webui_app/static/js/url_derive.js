@@ -16,8 +16,9 @@
 //
 // Companion: webui_app/routes/url_verify.py (POST /url-verify)
 // Plan ref: docs/plans/2026-05-20-002-feat-homepage-url-autoderive-v1-plan.md
-(function () {
-  'use strict';
+// Plan 007 U6: native ES module — index.js imports bindPasteInput (was the
+// window.urlDerive global, consumed by an index inline <script>).
+'use strict';
 
   const META_CSRF = document.querySelector('meta[name="csrf-token"]');
   const CSRF_TOKEN = META_CSRF ? META_CSRF.content : '';
@@ -302,13 +303,5 @@
     clearStatusOnEdit(targets.work, statusEls.work);
   }
 
-  // ── Public API (window-attached for inline init in index.html) ──────
-
-  window.urlDerive = {
-    derivePathTiers: derivePathTiers,
-    bindPasteInput: bindPasteInput,
-    verifyAll: verifyAll,
-    verifyTier: verifyTier,
-    _CATEGORY_TOKEN: _CATEGORY_TOKEN,
-  };
-})();
+// ── Public API (ES module exports; was the window.urlDerive global) ──────
+export { derivePathTiers, bindPasteInput, verifyAll, verifyTier, _CATEGORY_TOKEN };

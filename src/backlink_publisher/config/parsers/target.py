@@ -47,6 +47,47 @@ def _parse_target_anchor_keywords(targets_section: Any) -> dict[str, list[str]]:
     return result
 
 
+def _parse_target_string_list_field(
+    targets_section: Any, field_name: str,
+) -> dict[str, list[str]]:
+    """Parse a per-target ``list[str]`` field out of ``[targets."<domain>"]``.
+
+    Generic helper mirroring :func:`_parse_target_anchor_keywords`'s tolerance
+    contract: missing / malformed entries are skipped with a warning rather
+    than aborting the whole config load. Keys are normalised by stripping
+    trailing slashes so lookups work regardless of how the user wrote the
+    domain. Used for the GEO ``probe_queries`` and ``brand_aliases`` fields
+    (Plan 2026-05-29-006 Unit 1).
+
+    Unlike anchor keywords these values are not Markdown-link anchors, so no
+    ``_UNSAFE_IN_ANCHOR`` scrubbing is applied — only whitespace is stripped
+    and empties dropped.
+    """
+    if not isinstance(targets_section, dict):
+        return {}
+    result: dict[str, list[str]] = {}
+    for raw_domain, entry in targets_section.items():
+        if not isinstance(entry, dict):
+            _log.warning(
+                "[targets.%r] is not a table, skipping", raw_domain,
+            )
+            continue
+        values = entry.get(field_name)
+        if values is None:
+            continue
+        if not isinstance(values, list) or not all(isinstance(v, str) for v in values):
+            _log.warning(
+                "[targets.%r].%s must be a list of strings, skipping",
+                raw_domain, field_name,
+            )
+            continue
+        cleaned = [v.strip() for v in values]
+        cleaned = [v for v in cleaned if v]  # drop empties after stripping
+        key = raw_domain.rstrip("/")
+        result[key] = cleaned
+    return result
+
+
 def _clean_pool(value: Any) -> list[str]:
     """Strip unsafe chars + drop empties from a list-of-string pool entry."""
     if not isinstance(value, list) or not all(isinstance(v, str) for v in value):

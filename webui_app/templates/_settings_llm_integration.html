@@ -7,12 +7,12 @@
                         快速填入预设
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end" style="font-size:12px;">
-                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('openai')">OpenAI (gpt-4o)</a></li>
-                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('deepseek')">DeepSeek (deepseek-chat)</a></li>
-                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('openrouter')">OpenRouter (auto)</a></li>
-                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('groq')">Groq (llama3-70b)</a></li>
+                        <li><a class="dropdown-item" href="#" data-action="llm-preset" data-preset="openai">OpenAI (gpt-4o)</a></li>
+                        <li><a class="dropdown-item" href="#" data-action="llm-preset" data-preset="deepseek">DeepSeek (deepseek-chat)</a></li>
+                        <li><a class="dropdown-item" href="#" data-action="llm-preset" data-preset="openrouter">OpenRouter (auto)</a></li>
+                        <li><a class="dropdown-item" href="#" data-action="llm-preset" data-preset="groq">Groq (llama3-70b)</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" onclick="applyLlmPreset('local')">Local (Ollama/LMStudio)</a></li>
+                        <li><a class="dropdown-item" href="#" data-action="llm-preset" data-preset="local">Local (Ollama/LMStudio)</a></li>
                     </ul>
                 </div>
             </div>
@@ -68,7 +68,7 @@
                                        placeholder="{% if llm_settings.api_key %}已设置 (留空保留现值){% else %}sk-...{% endif %}"
                                        value="">
                                 <button type="button" class="btn btn-outline-secondary"
-                                        onclick="toggleLlmSecret()">
+                                        data-action="toggle-llm-secret">
                                     <i class="bi bi-eye" id="llmSecretEye"></i>
                                 </button>
                             </div>
@@ -97,13 +97,13 @@
                             <input type="range" class="form-range" name="temperature" 
                                    min="0" max="2" step="0.1" 
                                    value="{{ llm_settings.temperature }}"
-                                   oninput="document.getElementById('tempValue').innerText = this.value">
+                                   data-action="temp-slider">
                             <div class="form-text">0 = 严谨稳定，2 = 极具创意。建议 0.7 左右。</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label d-flex justify-content-between">
                                 <span>Custom System Prompt (系统提示词)</span>
-                                <a href="#" class="btn-xs text-primary text-decoration-none" style="font-size:12px;" onclick="resetLlmPrompt()">
+                                <a href="#" class="btn-xs text-primary text-decoration-none" style="font-size:12px;" data-action="llm-reset-prompt">
                                     <i class="bi bi-arrow-counterclockwise"></i> 恢复默认
                                 </a>
                             </label>
@@ -169,10 +169,10 @@
                         <button type="submit" class="btn btn-primary btn-sm">
                             <i class="bi bi-floppy me-1"></i>保存 LLM 设定
                         </button>
-                        <button type="button" class="btn btn-outline-info btn-sm" onclick="testLlmConnection()">
+                        <button type="button" class="btn btn-outline-info btn-sm" data-action="llm-test">
                             <i class="bi bi-broadcast me-1"></i>测试连接
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearLlmSettings()">
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-action="llm-clear">
                             <i class="bi bi-x-circle me-1"></i>清除配置
                         </button>
                         <span id="llmTestResult" class="ms-2" style="font-size:13px;align-self:center;"></span>

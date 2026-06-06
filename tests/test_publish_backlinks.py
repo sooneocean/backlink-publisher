@@ -100,6 +100,51 @@ def _make_result(platform="medium", adapter="medium-api", mode="draft") -> Adapt
     )
 
 
+def test_adapter_result_publish_output_carries_backlink_outcome_reason():
+    result = AdapterResult(
+        status="published",
+        adapter="txtfyi-form",
+        platform="txtfyi",
+        published_url="https://txt.fyi/example",
+        _provider_meta={
+            "backlink_outcome": "published_but_ineffective",
+            "backlink_outcome_reason": "link_not_found:plain_text_only",
+        },
+    )
+
+    out = result.to_publish_output(_make_valid_payload(platform="txtfyi"), "2026-06-05T00:00:00Z")
+
+    assert out["backlink_outcome"] == "published_but_ineffective"
+    assert out["backlink_outcome_reason"] == "link_not_found:plain_text_only"
+
+
+def test_attach_backlink_outcome_stores_failure_reason(monkeypatch):
+    from backlink_publisher.publishing import _registry_dispatch
+    from backlink_publisher.publishing._verify_html import RenderedLinkResult
+
+    result = AdapterResult(
+        status="published",
+        adapter="txtfyi-form",
+        platform="txtfyi",
+        published_url="https://txt.fyi/example",
+    )
+    payload = _make_valid_payload(platform="txtfyi")
+
+    monkeypatch.setattr(
+        _registry_dispatch,
+        "verify_rendered_link",
+        lambda **_: RenderedLinkResult(
+            effective=False,
+            failure_reason="link_not_found:plain_text_only",
+        ),
+    )
+
+    _registry_dispatch._attach_backlink_outcome(result, payload)
+
+    assert result._provider_meta["backlink_outcome"] == "published_but_ineffective"
+    assert result._provider_meta["backlink_outcome_reason"] == "link_not_found:plain_text_only"
+
+
 @patch("backlink_publisher.cli.publish_backlinks.adapter_publish")
 def test_publish_dry_run(mock_pub):
     """--dry-run calls adapter with dry_run=True and outputs plan without publishing."""

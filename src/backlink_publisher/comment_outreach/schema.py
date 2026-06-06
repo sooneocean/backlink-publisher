@@ -24,7 +24,12 @@ from urllib.parse import urlsplit
 PLATFORM_ENUM = {"x", "facebook", "linkedin", "reddit", "medium", "blog", "forum", "other"}
 DECISION_ENUM = {"accept", "review", "reject"}
 ACTION_ENUM = {"manual_comment_brief", "skip"}
-STATUS_ENUM = {"pending", "approved", "rejected", "posted", "skipped", "hidden", "removed"}
+STATUS_ENUM = {
+    # comment-outreach lifecycle
+    "pending", "approved", "rejected", "posted", "skipped", "hidden", "removed",
+    # CRM funnel states (earned-link / PR / email outreach)
+    "contacted", "replied", "won", "lost",
+}
 
 #: Tri-state boolean fields shared across entities.
 _TRISTATE_FIELDS = ("indexed", "comment_open", "link_allowed")

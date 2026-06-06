@@ -41,6 +41,21 @@ FAIL_ON_DEAD_EXIT_CODE = 6
 _PER_TARGET_TIMEOUT = 10.0  # seconds per probe (bounds redirect-chain accumulation)
 _BATCH_BUDGET_S = 600.0     # total wall-clock ceiling for the probe batch (SEC1)
 
+#: A readable channel whose indexability is `unknown` at/above this fraction is
+#: flagged "unverifiable by simple fetch" (R6b) — so an anti-bot channel reads as
+#: visibly inert, not falsely green. 0.5: a majority-unknown channel told us
+#: nothing useful about indexability.
+_INDEXABILITY_UNKNOWN_RATE_FLAG = 0.5
+
+#: R3e caveat — page-level noindex from OUR UA is necessary-not-sufficient for
+#: indexing and could be UA-cloaked; we never query Google/GSC. Mirrors
+#: docs/runbooks/2026-05-27-canary-targets-operations.md §7.
+_INDEXABILITY_CAVEAT = (
+    "  note: page-level noindex/X-Robots-Tag seen by our UA only — "
+    "necessary-not-sufficient for indexing, not a Googlebot guarantee "
+    "(possible UA cloaking). No GSC/Google query."
+)
+
 
 def main(argv: list[str] | None = None) -> None:
     import argparse
@@ -62,6 +77,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--fail-on-dead", action="store_true",
         help="exit 6 if any deterministic dead backlink (host_gone/link_stripped) is found",
+    )
+    parser.add_argument(
+        "--fail-on-unindexable", action="store_true",
+        help=("exit 6 if any backlink sits on a confirmed-blocked (noindex) page; "
+              "indeterminate (unknown) pages never trip it (opt-in; default off)"),
     )
     parser.add_argument("--host", metavar="HOST", help="only recheck backlinks on this host")
     parser.add_argument("--run-id", metavar="ID", help="only recheck backlinks from this run_id")
@@ -129,13 +149,31 @@ def main(argv: list[str] | None = None) -> None:
     _log.recon("recheck_reconciliation", checked=len(results), written=written, **tally)
     write_jsonl(iter(results), sys.stdout)
     print(_summary_line(len(results), written, tally), file=sys.stderr)
+    for line in _indexability_summary(results):
+        print(line, file=sys.stderr)
 
+    # Fail gates (both reuse exit code 6). --fail-on-dead is checked first: a dead
+    # link is strictly worse than a live-but-noindex one, and both map to the same
+    # code, so the exit code stays deterministic when both flags trip.
     dead = tally["host_gone"] + tally["link_stripped"]
     if args.fail_on_dead and dead > 0:
         emit_envelope_and_exit(
             "DeadBacklinksDetected",
             FAIL_ON_DEAD_EXIT_CODE,
             f"recheck-backlinks: {dead} deterministic dead backlink(s) detected",
+        )
+
+    # Opt-in indexability gate: only a live, present dofollow link on a CONFIRMED
+    # blocked (noindex) page trips it (the equity-waste case — same count as the
+    # summary headline). unknown (fail-open) never trips; a stripped/nofollow link
+    # is excluded. Reuses --fail-on-dead's exit code (R9).
+    blocked = _alive_blocked_count(results)
+    if args.fail_on_unindexable and blocked > 0:
+        emit_envelope_and_exit(
+            "UnindexableBacklinksDetected",
+            FAIL_ON_DEAD_EXIT_CODE,
+            f"recheck-backlinks: {blocked} live dofollow backlink(s) on "
+            f"confirmed-unindexable (noindex) page(s)",
         )
 
 
@@ -197,6 +235,67 @@ def _summary_line(checked: int, written: int, tally: dict[str, int]) -> str:
         f"dofollow-lost {tally[verdicts.DOFOLLOW_LOST]} "
         f"({written} event(s) written)"
     )
+
+
+def _alive_blocked_count(results: list[dict]) -> int:
+    """Live, present, dofollow links sitting on a confirmed noindex page — the
+    pure equity-waste case the summary headline and --fail-on-unindexable both
+    target. A link_stripped page has no surviving backlink and a dofollow_lost
+    one already passes zero equity, so only ``alive`` counts (the gate and the
+    headline must agree on this; counting all blocked verdicts over-reports)."""
+    from backlink_publisher.recheck import indexability, verdicts
+
+    return sum(
+        1 for r in results
+        if r.get("verdict") == verdicts.ALIVE
+        and r.get("indexability") == indexability.BLOCKED
+    )
+
+
+def _indexability_summary(results: list[dict]) -> list[str]:
+    """stderr indexability block (R6/R6b/R3e). The headline `alive·blocked` count
+    is always shown (so 0 is visible); per-channel "unverifiable" flags and the
+    UA-cloaking caveat appear only when there is an indexability signal — no
+    false alarm on a clean run. Never on stdout (that stays JSONL data)."""
+    from backlink_publisher.recheck import indexability, verdicts
+
+    readable = {verdicts.ALIVE, verdicts.LINK_STRIPPED, verdicts.DOFOLLOW_LOST}
+    alive_blocked = _alive_blocked_count(results)
+    blocked_total = unknown_total = 0
+    chan_readable: dict[str, int] = {}
+    chan_unknown: dict[str, int] = {}
+    for r in results:
+        idx = r.get("indexability", indexability.UNKNOWN)
+        verdict = r.get("verdict")
+        if idx == indexability.BLOCKED:
+            blocked_total += 1
+        elif idx == indexability.UNKNOWN:
+            unknown_total += 1
+        # Per-channel unknown-rate over pages we actually READ — a dead page's
+        # unknown indexability is expected and must not inflate the rate.
+        if verdict in readable:
+            chan = r.get("platform") or "unknown"
+            chan_readable[chan] = chan_readable.get(chan, 0) + 1
+            if idx == indexability.UNKNOWN:
+                chan_unknown[chan] = chan_unknown.get(chan, 0) + 1
+
+    lines = [
+        f"recheck-backlinks: indexability — alive·blocked {alive_blocked} "
+        f"(zero-equity dofollow), unknown {unknown_total}"
+    ]
+    flagged = [
+        (chan, chan_unknown.get(chan, 0), total)
+        for chan, total in sorted(chan_readable.items())
+        if total and chan_unknown.get(chan, 0) / total >= _INDEXABILITY_UNKNOWN_RATE_FLAG
+    ]
+    for chan, unk, total in flagged:
+        lines.append(
+            f"  channel {chan}: indexability unverifiable by simple fetch "
+            f"({unk}/{total} unknown, {unk / total:.0%})"
+        )
+    if alive_blocked or blocked_total or flagged:
+        lines.append(_INDEXABILITY_CAVEAT)
+    return lines
 
 
 @contextlib.contextmanager

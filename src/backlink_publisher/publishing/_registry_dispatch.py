@@ -20,10 +20,40 @@ from backlink_publisher._util.errors import (
     ExternalServiceError,
 )
 
+from ._verify_html import verify_rendered_link
 from .registry import _REGISTRY
 
 if TYPE_CHECKING:
     from .adapters.base import AdapterResult
+
+
+def _attach_backlink_outcome(result: AdapterResult, payload: dict[str, Any]) -> None:
+    """Post-publish rendered-link check — best-effort, never fails the publish.
+
+    Fetches the published page and classifies the backlink outcome into the
+    BacklinkOutcome taxonomy. Stores the result in ``_provider_meta`` so the
+    publish output and WebUI can distinguish real backlinks from dead ends.
+    """
+    target_url = payload.get("target_url", "")
+    published_url = result.published_url
+    if result.status not in ("published", "drafted") or not published_url or not target_url:
+        return
+    try:
+        vr = verify_rendered_link(published_url=published_url, target_url=target_url)
+        if vr.effective:
+            outcome = "effective_backlink"
+            reason = None
+        else:
+            outcome = "published_but_ineffective"
+            reason = vr.failure_reason
+    except Exception as exc:
+        outcome = "failed"
+        reason = f"verify_failed:{type(exc).__name__}"
+    meta = dict(result._provider_meta) if result._provider_meta else {}
+    meta["backlink_outcome"] = outcome
+    if reason is not None:
+        meta["backlink_outcome_reason"] = reason
+    object.__setattr__(result, "_provider_meta", meta)
 
 
 def dispatch(
@@ -101,7 +131,18 @@ def dispatch(
                 )
                 if new_body != payload.get("content_markdown"):
                     payload = {**payload, "content_markdown": new_body}
-            return adapter.publish(payload, mode, config)
+            result = adapter.publish(payload, mode, config)
+
+            # Post-publish rendered-link verification — Wave 2 (zero-auth MVP).
+            # After a successful publish, fetch the live page and check whether
+            # the target URL appears as a dofollow <a href>. The outcome is
+            # stored in _provider_meta so downstream consumers (publish output,
+            # WebUI, events) can distinguish real backlinks from dead-end pages.
+            # Verification is best-effort: network errors are logged, never
+            # turned into publish failures.
+            _attach_backlink_outcome(result, payload)
+
+            return result
         except AuthExpiredError:
             # Plan 2026-05-20-016 Unit 0b: credentials were valid enough to
             # reach the adapter but have expired — operator must re-bind.

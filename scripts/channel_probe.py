@@ -21,6 +21,13 @@ it emits ``needs-browser-tier`` and the exact checks the browser step must run
 
 This mirrors the spike-script convention (`*_spike.py`, `*_diagnose.py`):
 read-only, no config writes, JSON-or-human output, advisory.
+
+SSRF safety (R14, funnel-brainstorm 2026-06-01): every URL — including each
+redirect hop — is validated via net_safety._check_url_for_ssrf before fetch.
+This guard MUST remain in place before the script is ever driven on
+machine-sourced candidate lists (SERP / LLM / family-enum). The guard is
+fail-open (falls back to an unguarded warning) when the package is absent so
+the script remains usable outside an installed venv for hand-curated URLs.
 """
 
 from __future__ import annotations
@@ -30,6 +37,7 @@ import json
 import sys
 from dataclasses import asdict, dataclass, field
 from typing import Optional
+from urllib.parse import urljoin
 
 import requests
 
@@ -40,6 +48,16 @@ try:
     from backlink_publisher.content._preflight_fetch import USER_AGENT as _PREFLIGHT_UA
 except Exception:  # noqa: BLE001 — diagnostic must run even if package is absent
     _PREFLIGHT_UA = "backlink-publisher/0.1 preflight-targets"
+
+# SSRF guard — same function used by the production pipeline's preflight fetch.
+# Fail-open: if the package is absent, the guard is skipped (manual hand-curated
+# URLs only, never machine-sourced). Warn loudly so the operator knows the risk.
+try:
+    from backlink_publisher._util.net_safety import _check_url_for_ssrf as _ssrf_check
+    _SSRF_GUARD_ACTIVE = True
+except Exception:  # noqa: BLE001
+    _ssrf_check = None  # type: ignore[assignment]
+    _SSRF_GUARD_ACTIVE = False
 
 GOOGLEBOT_UA = (
     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
@@ -58,6 +76,7 @@ USER_AGENTS = {
 _CF_MARKERS = ("just a moment", "cf-chl", "attention required", "cloudflare")
 _LOGIN_MARKERS = ('type="password"', "forgot password", "sign in to", "log in to")
 _TIMEOUT = 20
+_MAX_REDIRECTS = 10
 
 
 @dataclass
@@ -79,14 +98,52 @@ class UrlResult:
     hits: list[Hit] = field(default_factory=list)
 
 
+def _validate_url_ssrf(url: str) -> Optional[str]:
+    """Return blocked reason if URL is SSRF-dangerous, else None.
+
+    Returns None (safe) when the guard is not active (package absent).
+    """
+    if _ssrf_check is None:
+        return None
+    return _ssrf_check(url)
+
+
 def _probe(url: str, ua_key: str, ua: str) -> Hit:
+    # SSRF guard: validate initial URL before any network contact.
+    blocked = _validate_url_ssrf(url)
+    if blocked:
+        return Hit(ua=ua_key, status=None, error=f"ssrf-blocked:{blocked}")
+
     try:
+        # Follow redirects manually so every hop passes the SSRF gate.
         resp = requests.get(
             url,
             headers={"User-Agent": ua, "Accept": "text/html,*/*"},
             timeout=_TIMEOUT,
-            allow_redirects=True,
+            allow_redirects=False,
         )
+        redirect_count = 0
+        while resp.is_redirect and redirect_count < _MAX_REDIRECTS:
+            next_url = resp.headers.get("Location", "").strip()
+            if not next_url:
+                break
+            # Resolve relative redirects against the current response URL.
+            if not next_url.startswith(("http://", "https://")):
+                next_url = urljoin(resp.url, next_url)
+            blocked = _validate_url_ssrf(next_url)
+            if blocked:
+                return Hit(
+                    ua=ua_key,
+                    status=None,
+                    error=f"ssrf-redirect-blocked:{blocked}",
+                )
+            resp = requests.get(
+                next_url,
+                headers={"User-Agent": ua, "Accept": "text/html,*/*"},
+                timeout=_TIMEOUT,
+                allow_redirects=False,
+            )
+            redirect_count += 1
     except requests.RequestException as exc:
         return Hit(ua=ua_key, status=None, error=f"{type(exc).__name__}: {exc}")
 
@@ -218,6 +275,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = ap.parse_args(argv)
 
+    if not _SSRF_GUARD_ACTIVE:
+        print(
+            "WARNING: SSRF guard inactive (backlink_publisher package not installed). "
+            "Use only with hand-curated, trusted URLs.",
+            file=sys.stderr,
+        )
+
     results: list[UrlResult] = []
     for url in args.urls:
         if not url.startswith(("http://", "https://")):
@@ -230,6 +294,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     verdict, signals, next_checks = _triage(results)
     payload = {
         "preflight_ua": _PREFLIGHT_UA,
+        "ssrf_guard_active": _SSRF_GUARD_ACTIVE,
         "results": [asdict(r) for r in results],
         "signals": signals,
         "verdict": verdict,
@@ -243,6 +308,8 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     # Human-readable
     print(f"Channel probe — preflight UA: {_PREFLIGHT_UA}\n")
+    if not _SSRF_GUARD_ACTIVE:
+        print("⚠  SSRF guard inactive — use only with trusted, hand-curated URLs.\n")
     for r in results:
         print(f"  {r.url}")
         for h in r.hits:

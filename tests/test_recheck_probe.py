@@ -14,8 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
-from backlink_publisher.recheck import verdicts
+from backlink_publisher.content._preflight_fetch import PreflightFacts
+from backlink_publisher.recheck import indexability, verdicts
 from backlink_publisher.recheck.probe import probe_liveness, recheck_link
+
+INDEXABILITY_OK = indexability.OK
+INDEXABILITY_BLOCKED = indexability.BLOCKED
+INDEXABILITY_UNKNOWN = indexability.UNKNOWN
 
 LIVE = "https://medium.com/p/abc"
 TARGET = "https://my.site/"
@@ -34,6 +39,19 @@ def _inspect(**overrides):
     }
     base.update(overrides)
     return lambda url, target, **kw: dict(base)
+
+
+def _facts_fn(**overrides):
+    """Build a fake ``fetch_target`` returning canned PreflightFacts (clean 200)."""
+    base = {
+        "status": 200,
+        "reason": None,
+        "noindex": False,
+        "head_complete": True,
+        "x_robots_tag": None,
+    }
+    base.update(overrides)
+    return lambda url, *, timeout=None: PreflightFacts(**base)
 
 
 # ── liveness verdicts ────────────────────────────────────────────────────────
@@ -173,6 +191,165 @@ def test_probe_merges_verdict_and_identity():
     assert out["verdict"] == verdicts.ALIVE
     assert out["article_id"] == 5
     assert out["host"] == "medium.com"
+
+
+# ── indexability axis (orthogonal metadata; verdict UNCHANGED) ───────────────
+
+def test_indexability_blocked_meta_noindex_keeps_alive():
+    # HTTP 200 + meta-robots noindex → blocked(meta_noindex); liveness still alive.
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(), fetch_fn=_facts_fn(noindex=True),
+    )
+    assert out["verdict"] == verdicts.ALIVE  # orthogonal — verdict UNCHANGED
+    assert out["indexability"] == INDEXABILITY_BLOCKED
+    assert out["indexability_reason"] == "meta_noindex"
+
+
+def test_indexability_blocked_x_robots_header():
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(noindex=True, x_robots_tag="googlebot: noindex"),
+    )
+    assert out["verdict"] == verdicts.ALIVE
+    assert out["indexability"] == INDEXABILITY_BLOCKED
+    assert out["indexability_reason"] == "x_robots"
+
+
+def test_indexability_ok_clean_head():
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(noindex=False, head_complete=True),
+    )
+    assert out["verdict"] == verdicts.ALIVE
+    assert out["indexability"] == INDEXABILITY_OK
+    assert out["indexability_reason"] is None
+
+
+def test_indexability_ok_when_directive_present_but_not_noindex():
+    # X-Robots-Tag: all / follow,index / none all resolve to facts.noindex=False
+    # upstream (single-source); presence of a directive alone never blocks.
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(noindex=False, x_robots_tag="all"),
+    )
+    assert out["indexability"] == INDEXABILITY_OK
+
+
+def test_indexability_unknown_when_head_truncated_never_ok():
+    # Captured prefix lacks </head> (stray pre-head <h1>): meta could be below the
+    # cut, so a clean-looking page must downgrade to unknown, NEVER false-ok.
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(noindex=False, head_complete=False),
+    )
+    assert out["indexability"] == INDEXABILITY_UNKNOWN
+    assert out["indexability"] != INDEXABILITY_OK
+
+
+def test_indexability_unknown_on_non_200_facts():
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(status=403, reason="http_403", noindex=False),
+    )
+    assert out["indexability"] == INDEXABILITY_UNKNOWN
+
+
+def test_indexability_unknown_on_fetch_error_never_blocked():
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=_facts_fn(status=None, reason="network_error"),
+    )
+    assert out["indexability"] == INDEXABILITY_UNKNOWN
+    assert out["indexability"] != INDEXABILITY_BLOCKED
+
+
+def test_indexability_unknown_and_never_raises_when_fetch_raises():
+    def _boom(url, *, timeout=None):
+        raise RuntimeError("fetch boom")
+
+    out = probe_liveness(LIVE, TARGET, inspect_fn=_inspect(), fetch_fn=_boom)
+    assert out["verdict"] == verdicts.ALIVE  # liveness unaffected by index probe
+    assert out["indexability"] == INDEXABILITY_UNKNOWN
+
+
+def test_indexability_skipped_and_unknown_when_host_gone():
+    # An unreadable (dead) page must not trigger a second fetch — and indexability
+    # defaults to unknown for a page we never read.
+    calls = []
+
+    def _spy_fetch(url, *, timeout=None):
+        calls.append(url)
+        return PreflightFacts(noindex=True)  # would be "blocked" if ever called
+
+    out = probe_liveness(
+        LIVE, TARGET,
+        inspect_fn=_inspect(page_readable=False, reason="http_404"),
+        fetch_fn=_spy_fetch,
+    )
+    assert out["verdict"] == verdicts.HOST_GONE
+    assert out["indexability"] == INDEXABILITY_UNKNOWN
+    assert calls == []  # no second fetch on a confirmed-dead page
+
+
+def test_indexability_computed_even_when_link_stripped():
+    # A readable page whose anchor was stripped is still a successfully-read page;
+    # indexability is computed (orthogonal to the stripped-link verdict).
+    out = probe_liveness(
+        LIVE, TARGET,
+        inspect_fn=_inspect(target_anchor_found=False),
+        fetch_fn=_facts_fn(noindex=True),
+    )
+    assert out["verdict"] == verdicts.LINK_STRIPPED
+    assert out["indexability"] == INDEXABILITY_BLOCKED
+
+
+def test_indexability_single_source_with_canary_facts():
+    # Parity: probe_liveness reads the SAME PreflightFacts.noindex fact that
+    # cli/canary_targets._classify consumes — a noindex body yields blocked here
+    # exactly as canary would gate link-alive on `not noindex`.
+    from backlink_publisher.content import _preflight_fetch as pf
+
+    body = (
+        b'<html><head><meta name="robots" content="noindex,nofollow">'
+        b"<title>T</title></head><body><h1>H</h1></body></html>"
+    )
+
+    class _Resp:
+        def getcode(self):
+            return 200
+
+        def geturl(self):
+            return LIVE
+
+        def info(self):
+            import email.message
+
+            return email.message.Message()
+
+        def read(self, n):
+            return body if n else b""
+
+        def close(self):
+            pass
+
+    facts = pf._build_facts_from_response(_Resp(), LIVE)
+    assert facts.noindex is True  # canary gates link-alive on `not noindex`
+    out = probe_liveness(
+        LIVE, TARGET, inspect_fn=_inspect(),
+        fetch_fn=lambda url, *, timeout=None: facts,
+    )
+    assert out["indexability"] == INDEXABILITY_BLOCKED
+
+
+def test_recheck_link_carries_indexability_to_emit():
+    # The fields must survive recheck_link's {**base, **verdict} merge so the
+    # single emit seam can persist them.
+    rec = {"live_url": LIVE, "target_url": TARGET, "host": "medium.com",
+           "article_id": 5, "platform": "medium"}
+    out = recheck_link(rec, probe=True, inspect_fn=_inspect(),
+                       fetch_fn=_facts_fn(noindex=True))
+    assert out["indexability"] == INDEXABILITY_BLOCKED
+    assert out["indexability_reason"] == "meta_noindex"
 
 
 # ── engine unification: WebUI recheck shares this one engine ─────────────────

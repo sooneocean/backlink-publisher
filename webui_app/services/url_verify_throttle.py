@@ -20,8 +20,9 @@ Atomicity invariants (load-bearing for security review)
   another thread into appending past 6.
 * The session-window slot is appended **before** the concurrency/host gates so
   the reservation is visible to peers. If a downstream gate fails the slot is
-  popped under the same guard — the rollback is observable as
-  ``len(window) == 0`` from the caller's perspective.
+  removed **by value** (``remove(now)``) under the same guard — this targets
+  exactly the caller's own timestamp, even if concurrent callers on the same
+  session appended additional entries between the reservation and the rollback.
 * ``release`` only releases the concurrency semaphore and the host lock; it
   does NOT pop the window slot (the slot models accepted requests over time
   and slides out naturally after 10s).
@@ -127,12 +128,14 @@ def try_acquire(session_id: str, host: str) -> Optional[str]:
     # --- Process-wide concurrency cap ---
     if not _concurrency_sem.acquire(blocking=False):
         with _window_locks_guard:
-            # Pop our own reservation (LIFO — we just appended).
+            # Remove our own reservation by value so concurrent appends from
+            # the same session (which land after ours in the deque) are not
+            # accidentally removed by a LIFO pop().
             w = _session_windows.get(session_id)
             if w:
                 try:
-                    w.pop()
-                except IndexError:
+                    w.remove(now)
+                except ValueError:
                     pass
         return "upstream_overloaded"
 
@@ -155,8 +158,8 @@ def try_acquire(session_id: str, host: str) -> Optional[str]:
             w = _session_windows.get(session_id)
             if w:
                 try:
-                    w.pop()
-                except IndexError:
+                    w.remove(now)
+                except ValueError:
                     pass
         return "host_busy"
 

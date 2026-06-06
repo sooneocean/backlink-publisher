@@ -112,6 +112,29 @@ def _scheduler_enabled_for(config: Config, main_domain: str) -> bool:
     return _inner(config, main_domain)
 
 
+def _apply_zero_cost_and_emit(
+    payload: dict[str, Any],
+    row: dict[str, Any],
+    branch: str,
+) -> dict[str, Any]:
+    """Apply zero-cost citability levers (freshness + entity_claim) to payload.
+
+    Used for zh_short and work_themed branches (R11). Mutates content_markdown
+    in-place and records applied levers in metadata.
+    """
+    from ._citability import apply_zero_cost_levers
+    from ._templates import _domain_label_of
+    lang = payload.get("language") or row.get("language", "en")
+    main_domain = payload.get("main_domain") or row.get("main_domain", "")
+    domain_label = _domain_label_of(main_domain.rstrip("/"))
+    body = payload.get("content_markdown") or ""
+    augmented, applied = apply_zero_cost_levers(body, domain_label, language=lang)
+    payload = dict(payload)
+    payload["content_markdown"] = augmented
+    payload["_citability_levers"] = applied
+    return payload
+
+
 def _dispatch_row(
     row: dict[str, Any],
     config: Config,
@@ -127,6 +150,7 @@ def _dispatch_row(
     if three_url_cfg is not None and use_native_schedulers:
         from backlink_publisher.cli.plan_backlinks import _plan_work_themed_row
         for payload in _plan_work_themed_row(row, three_url_cfg, count=work_count):
+            payload = _apply_zero_cost_and_emit(payload, row, "work_themed")
             _emit_link_count_recon(payload, branch="work_themed")
             yield payload
         return
@@ -140,6 +164,7 @@ def _dispatch_row(
         from backlink_publisher.cli.plan_backlinks import _plan_zh_short_row
         payload = _plan_zh_short_row(row, config, llm_provider, rng=rng)
         if payload is not None:
+            payload = _apply_zero_cost_and_emit(payload, row, "zh_short")
             _emit_link_count_recon(payload, branch="zh_short")
             yield payload
             return
@@ -257,6 +282,9 @@ def plan_rows(
                 metadata["branded_pool"] = list(branded_pool)
                 metadata["config_sha"] = config_sha
                 metadata.update(dofollow_tier_metadata(payload["platform"]))
+                # Promote _citability_levers from payload top-level into metadata.
+                if "_citability_levers" in payload:
+                    metadata["citability_levers"] = payload.pop("_citability_levers")
                 payload["metadata"] = metadata
 
                 if image_gen_runtime is not None:

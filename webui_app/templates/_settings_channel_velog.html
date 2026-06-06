@@ -58,7 +58,7 @@
 <!-- 操作按钮 -->
 <div class="d-flex align-items-center gap-3 flex-wrap">
     <a href="#" class="btn btn-outline-primary btn-sm"
-       onclick="runVelogLogin(event)"
+       data-action="velog-login"
        title="在终端启动 velog-login — 会弹出 Chromium 完成社交登录">
         <i class="bi bi-box-arrow-in-right me-1"></i>
         {% if vs.state == 'err' %}绑定 velog{% else %}重新绑定{% endif %}
@@ -80,20 +80,6 @@
         {% if vs.cap == 30 %}已解锁 30 篇/天。{% else %}解锁日期：2026-06-02。{% endif %}
     </small>
 </div>
-
-<script>
-function runVelogLogin(e) {
-    e.preventDefault();
-    const csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    fetch('/api/velog/login', {method: 'POST', headers: {'X-CSRFToken': csrf}})
-        .then(r => r.json())
-        .then(d => {
-            if (d.ok) {
-                alert('velog-login 已启动。\n请在弹出的 Chromium 窗口完成登录，完成后刷新本页。');
-            } else {
-                alert('启动失败：' + (d.error || '未知错误'));
-            }
-        })
-        .catch(() => alert('网络错误，请手动在终端运行：\nvelog-login'));
-}
-</script>
+{# runVelogLogin moved to settings.js (Plan 007 U3); the bind button carries
+   data-action="velog-login", and channel-binding.js dispatches a velog:login
+   DOM event that settings.js handles. #}

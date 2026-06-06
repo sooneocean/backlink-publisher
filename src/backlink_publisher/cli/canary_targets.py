@@ -186,18 +186,28 @@ def _build_receipt(
     return receipt
 
 
-def _build_cohort() -> list[str]:
+def _build_cohort(include_uncertain: bool = False) -> list[str]:
     """Cohort = registered platforms declared ``dofollow_status is True``.
+
+    When *include_uncertain* is ``True``, platforms declared as ``"uncertain"``
+    are also included — used by the Canary Blitz (``--include-uncertain``)
+    to verify unresolved dofollow candidates via the same canary protocol.
 
     Imports the adapters package for its register() side effects so the
     registry is populated before we read it (mirrors validate-backlinks idiom).
-    Deliberately uses ``dofollow_status is True`` — NOT ``referral_value`` (an
-    orthogonal axis that is None for the dofollow tier → empty set, R5).
+    Deliberately uses ``dofollow_status is True`` by default — NOT
+    ``referral_value`` (an orthogonal axis that is None for the dofollow tier
+    → empty set, R5).
     """
     import backlink_publisher.publishing.adapters  # noqa: F401  populate registry
     from backlink_publisher.publishing import registry
 
-    return [p for p in registry.registered_platforms() if registry.dofollow_status(p) is True]
+    return [
+        p
+        for p in registry.registered_platforms()
+        if registry.dofollow_status(p) is True
+        or (include_uncertain and registry.dofollow_status(p) == "uncertain")
+    ]
 
 
 def _is_stale(platform: str, verdict: str) -> bool:
@@ -225,7 +235,8 @@ def main(argv: list[str] | None = None) -> None:
             "own anchor is still present + dofollow on a readable page. JSONL "
             "receipts on stdout; RECON summary on stderr; always exit 0. "
             "mode=evergreen (existing-link survival, NOT publish-path health); "
-            "NOT an indexability oracle."
+            "NOT an indexability oracle. Use --include-uncertain for the Canary "
+            "Blitz (probe uncertain-dofollow platforms)."
         ),
     )
     parser.add_argument(
@@ -233,6 +244,12 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         metavar="NAME",
         help="Limit the run to a single cohort platform (default: all).",
+    )
+    parser.add_argument(
+        "--include-uncertain",
+        action="store_true",
+        default=False,
+        help="Also check platforms with dofollow_status='uncertain' (Canary Blitz).",
     )
     parser.add_argument(
         "--log-level",
@@ -252,22 +269,34 @@ def main(argv: list[str] | None = None) -> None:
             )
         set_log_level(args.log_level)
 
-        cohort = _build_cohort()
+        cohort = _build_cohort(include_uncertain=args.include_uncertain)
 
         # R6 fail-loud: an empty cohort means the dofollow predicate regressed
         # and silently disabled the canary — surface it, never run empty.
         if not cohort:
+            hint = ""
+            if not args.include_uncertain:
+                hint = (
+                    " Try --include-uncertain if you want to probe uncertain "
+                    "platforms (Canary Blitz)."
+                )
             raise UsageError(
                 "canary-targets: dofollow cohort is empty — no platform has "
-                "dofollow_status is True. The canary would silently cover "
-                "nothing. Check the adapter registry / dofollow declarations."
-            )
+                "dofollow_status is True." + hint + (
+                " The canary would silently cover nothing. Check the adapter "
+                "registry / dofollow declarations."
+            ))
 
         if args.platform is not None:
             if args.platform not in cohort:
+                hint = (
+                    " (use --include-uncertain if it is registered as uncertain)"
+                    if not args.include_uncertain
+                    else ""
+                )
                 raise UsageError(
                     f"canary-targets: --platform {args.platform!r} is not in the "
-                    f"dofollow cohort {sorted(cohort)}."
+                    f"cohort {sorted(cohort)}.{hint}"
                 )
             cohort = [args.platform]
 
@@ -309,10 +338,30 @@ def main(argv: list[str] | None = None) -> None:
             failed = _failed_checks(facts, anchor, configured=True)
             record_verdict(platform, verdict)
 
+            # Wave 4 zero-auth MVP: best-effort rendered-link verification.
+            # Adds backlink_outcome to the receipt when the page is readable
+            # and the post_url is set (no-op for not-configured paths).
+            backlink_outcome: str | None = None
+            try:
+                from backlink_publisher.publishing._verify_html import verify_rendered_link
+                vr = verify_rendered_link(
+                    published_url=cfg["post_url"],
+                    target_url=cfg["expected_target"],
+                )
+                if vr.effective:
+                    backlink_outcome = "effective_backlink"
+                else:
+                    backlink_outcome = "published_but_ineffective"
+            except Exception:  # noqa: BLE001 — best-effort; never fails the canary
+                backlink_outcome = "failed"
+
             is_stale = verdict == STATUS_ADVISORY and _is_stale(platform, verdict)
             if is_stale:
                 stale.append(platform)
-            receipts.append(_build_receipt(platform, verdict, failed, stale=is_stale))
+            receipt = _build_receipt(platform, verdict, failed, stale=is_stale)
+            if backlink_outcome:
+                receipt["backlink_outcome"] = backlink_outcome
+            receipts.append(receipt)
             counts[verdict] += 1
 
         write_jsonl(receipts)

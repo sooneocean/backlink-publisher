@@ -1,7 +1,9 @@
 # backlink-publisher
 
-A local-first, terminal-native backlink publishing pipeline for Blogger and Medium.  
-Generates, validates, and publishes short backlink articles — fully pipe-friendly, cron-safe, and non-interactive.
+A local-first, terminal-native backlink publishing pipeline.
+Generates, validates, and publishes short backlink articles across **20+ platforms** (Blogger, Medium, Telegraph, Velog, Substack, dev.to, Notion, GitHub/GitLab Pages, and more) — fully pipe-friendly, cron-safe, and non-interactive.
+
+Adding a new platform is a single `register("x", XAdapter)` line — the CLI, schema, throttle gating, and tier matrix all read the adapter registry dynamically (see [AGENTS.md → Adding a new publisher adapter](AGENTS.md#adding-a-new-publisher-adapter)). A Flask **WebUI** (`python webui.py`) wraps the same pipeline for operators who prefer a browser to a terminal.
 
 ## Workspace Layout
 
@@ -418,13 +420,31 @@ zero exit code is not mistaken for "no breach detected".
 
 ## Publisher Adapters
 
-Publishing is API-first with a browser fallback for Medium.
+Publishing is API-first with a browser fallback where no API exists. **20+ platforms** are registered in `publishing/adapters/__init__.py`; the table below groups them by link equity. Adding one more is a single `register(...)` call — see [AGENTS.md → Adding a new publisher adapter](AGENTS.md#adding-a-new-publisher-adapter).
 
-| Platform | Primary | Fallback | Auth |
+Each registration declares a `dofollow` verdict — `True` / `False` / `"uncertain"` — plus a `referral_value` (`high` / `low`). `"uncertain"` means a third-party probe saw dofollow but **our own** publish-path canary hasn't confirmed it yet; `canary-targets` re-fetches live posts to settle these verdicts over time.
+
+| Platform | dofollow | Transport | Auth |
 |---|---|---|---|
-| **Blogger** | Blogger API v3 (OAuth2) | — | OAuth2 token |
-| **Medium** | Medium API v1 (Integration Token) | Playwright browser automation | Integration token / browser |
-| **Velog** | Internal GraphQL `writePost` | — | Cookie jar (30-day window) |
+| **Blogger** | ✅ dofollow | Blogger API v3 | OAuth2 token |
+| **Medium** | ✅ dofollow | Medium API v1 + Playwright fallback | Integration token / browser |
+| **Telegraph** | ✅ dofollow | telegra.ph API | anonymous |
+| **Velog** | ✅ dofollow | internal GraphQL `writePost` | cookie jar (30-day) |
+| **GitHub Pages** | ✅ dofollow | GitHub Contents API (`*.github.io`) | Bearer PAT |
+| **WordPress.com** | ❔ uncertain | WordPress.com REST v1.1 | OAuth2 token |
+| **Substack** | ❔ uncertain | internal publish API | cookie jar |
+| **Hatena** | ❔ uncertain | AtomPub | API key |
+| **HackMD** | ❔ uncertain | HackMD API | API token |
+| **Mataroa** | ❔ uncertain | Mataroa API | API key |
+| **GitLab Pages** | ❔ uncertain | GitLab Repository Files API (`*.gitlab.io`) | PAT (PRIVATE-TOKEN) |
+| **Rentry / txt.fyi** | ❔ uncertain | anonymous paste POST | none |
+| **Hashnode / Write.as** | ❔ uncertain | API (retiring) | API token |
+| **dev.to / Notion** | ⛔ nofollow | API | API token |
+| **LinkedIn¹ / Tumblr / LiveJournal / Mastodon** | ⛔ nofollow | API / cookie jar | per-platform |
+
+¹ LinkedIn is registered `visibility="experimental"`.
+
+> nofollow platforms are kept for **referral traffic, topical relevance, and indexation speed** — `referral_value` records why. Use `equity-ledger` / `plan-gap` to steer fresh links toward the dofollow tier.
 
 ### Blogger Setup
 
@@ -552,48 +572,62 @@ If a publish fails with `channel 'X' credentials expired`, open Settings (`/sett
 | `Medium selector changed` | Update selectors in `src/backlink_publisher/adapters/_medium_selectors.py` |
 | Failed publish saved screenshot | Check `~/.cache/backlink-publisher/screenshots/` for error screenshots |
 
+## CLI command reference
+
+23 console entrypoints are declared in `pyproject.toml` `[project.scripts]`. The pipeline core is `plan-backlinks → validate-backlinks → publish-backlinks`; the rest are read-only analysis, channel-binding, and re-verification helpers:
+
+| Command | Role |
+|---|---|
+| `plan-backlinks` | Generate article payloads from seed JSONL |
+| `validate-backlinks` | Validate + enrich payloads |
+| `publish-backlinks` | Publish via platform adapters |
+| `report-anchors` | Anchor-profile + distribution alarm |
+| `footprint` | Link-footprint analysis |
+| `equity-ledger` | Per-target backlink scorecard (read-only) |
+| `plan-gap` | Deficit-driven re-plan from the ledger (read-only) |
+| `audit-state` | Dual-state divergence auditor (read-only) |
+| `preflight-targets` | Destination-page health check before publish |
+| `cull-channels` / `channel-scorecard` | Channel-quality advisories (read-only) |
+| `canary-targets` | Re-fetch dofollow posts to confirm links survive (advisory) |
+| `recheck-backlinks` / `recheck-overlay` | Re-verify published links + overlay deltas |
+| `bind-channel` | Bind a destination to a publishing channel |
+| `velog-login` / `medium-login` / `frw-login` | Interactive per-platform login helpers |
+| `generate-backlink-text` | LLM-assisted content drafting |
+| `comment` | Comment-outreach driver |
+| `gate-probe` | Probe gate/throttle decisions |
+| `plan-check` / `plan-gap` | Plan-doc drift validator + coverage gap |
+| `phase0-seal` | Phase 0 seal operations |
+
 ## Project Structure
 
 ```
-backlink-publisher/
+backlink-publisher/                 # canonical git repo (this dir)
 ├── config.example.toml
 ├── pyproject.toml
-├── README.md
+├── README.md / README.zh.md
+├── AGENTS.md                        # authoritative contributor guide
+├── webui.py                         # Flask WebUI launcher (:8888)
 ├── src/backlink_publisher/
-│   ├── __init__.py
-│   ├── adapters/
-│   │   ├── __init__.py          # dispatcher (publish, verify_adapter_setup)
-│   │   ├── base.py              # AdapterResult dataclass
-│   │   ├── blogger_api.py       # Blogger API v3 adapter
-│   │   ├── medium_api.py        # Medium API v1 adapter
-│   │   ├── medium_browser.py    # Playwright browser fallback
-│   │   └── _medium_selectors.py # CSS selector constants
-│   ├── cli/
-│   │   ├── plan_backlinks.py
-│   │   ├── validate_backlinks.py
-│   │   └── publish_backlinks.py
-│   ├── config.py
-│   ├── schema.py
-│   ├── errors.py
-│   ├── jsonl.py
-│   ├── linkcheck.py
-│   ├── language_check.py
-│   └── markdown_utils.py
-├── tests/
-│   ├── test_adapter_base.py
-│   ├── test_adapter_blogger_api.py
-│   ├── test_adapter_medium_api.py
-│   ├── test_adapter_medium_browser.py
-│   ├── test_adapter_dispatcher.py
-│   ├── test_config.py
-│   ├── test_markdown_render.py
-│   ├── test_throttle.py
-│   ├── test_plan_backlinks.py
-│   ├── test_validate_backlinks.py
-│   ├── test_publish_backlinks.py
-│   └── test_edge_cases.py
+│   ├── cli/                         # 23 console entrypoints
+│   │   └── plan_backlinks/          # plan-backlinks decomposed into a package
+│   ├── publishing/
+│   │   ├── adapters/__init__.py     # adapter registry — register("x", …)
+│   │   ├── registry.py              # dynamic platform lookup
+│   │   ├── browser_publish/         # Playwright fallbacks
+│   │   └── reliability/             # throttle / circuit-breaker
+│   ├── anchor/                      # anchor-keyword scheduler + alarm
+│   ├── content/                     # article rendering
+│   ├── linkcheck/                   # URL reachability + SSRF guard
+│   ├── canary/ · ledger/ · gap/     # equity-ledger / plan-gap engines
+│   ├── audit/ · recheck/ · scorecard/
+│   ├── config/ · schema.py · http.py · _util/
+│   └── llm/                         # optional LLM anchor provider
+├── webui_app/                       # Flask app (routes + services/)
+├── webui_store/                     # WebUI state singletons
+├── tests/                           # pytest suite (PYTHONHASHSEED=0)
+├── monolith_budget.toml             # radon SLOC ceilings
+├── complexity_budget.toml           # radon cyclomatic-complexity ceilings
 └── fixtures/
-    └── seed.jsonl
 ```
 
 ## For contributors

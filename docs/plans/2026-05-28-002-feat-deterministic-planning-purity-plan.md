@@ -1,7 +1,8 @@
 ---
 title: "feat: Document deterministic planning / non-deterministic execution principle"
 type: feat
-status: active
+status: completed
+shipped: 628bed2d
 date: 2026-05-28
 origin: docs/brainstorms/2026-05-28-deterministic-planning-purity-requirements.md
 claims:

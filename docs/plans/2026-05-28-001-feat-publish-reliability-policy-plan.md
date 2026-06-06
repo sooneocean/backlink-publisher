@@ -1,7 +1,8 @@
 ---
 title: "feat: Publish Reliability Policy Layer — Browser-Tier Hardening"
 type: feat
-status: ready
+status: completed
+shipped: caa03d6 (#285)
 date: 2026-05-28
 origin: docs/brainstorms/2026-05-27-publish-reliability-policy-requirements.md
 claims: {}  # opt-out: no unmerged SHAs; PR #279 (dedup) already merged

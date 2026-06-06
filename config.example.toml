@@ -309,6 +309,30 @@ client_secret = "your-client-secret"
 # path_template = "_posts/{date}-{slug}.md"
 
 # ────────────────────────────────────────────────────────────
+# [gitlabpages] — GitLab Pages adapter (Plan 2026-06-01-007 Wave 1)
+# ────────────────────────────────────────────────────────────
+# Like [ghpages], the PAT lives in a separate 0600 file (SEC-3):
+#   ~/.config/backlink-publisher/gitlabpages-token.json  ({"token": "<pat>"})
+# PAT needs `api` scope (or a project-scoped write_repository).
+#
+# PRECONDITION (GitLab Pages has NO auto-Jekyll): the target project must
+# already contain a CI job named exactly `pages` that emits a public/ artifact.
+# The adapter commits pre-rendered HTML to public/<slug>/index.html; without a
+# `pages` job the file is committed but never served. Minimal job:
+#
+#   pages:
+#     stage: deploy
+#     script: [ "echo deploying" ]
+#     artifacts: { paths: [ public ] }
+#     rules: [ { if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' } ]
+#
+# [gitlabpages]
+# project = "your-namespace/your-pages-project"
+# branch = "main"
+# path_template = "public/{slug}/index.html"
+# pages_base_url = ""   # set ONLY for the unique-domain case (e.g. "https://proj-a1b2c3.gitlab.io")
+
+# ────────────────────────────────────────────────────────────
 # [image_gen] — AI banner image generation (Plan 2026-05-20-001)
 # ────────────────────────────────────────────────────────────
 # When configured, plan-backlinks generates a 1200×630 OG banner per

@@ -3,35 +3,78 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from pathlib import Path
 
 from backlink_publisher._util.logger import plan_logger
 from .types import (
     Config,
-    DEFAULT_WORK_TEMPLATES,
     GhpagesConfig,
+    GitlabPagesConfig,
     ImageGenConfig,
     MastodonConfig,
     ThreeUrlConfig,
 )
-
-if sys.version_info >= (3, 11):
-    pass
-else:
-    pass
 
 from .loader import load_config
 from ._config_io import _resolve_config_dir, _snapshot_config, _atomic_write_text
 from .tokens import save_medium_integration_token
 from ._toml_utils import (
     _SAVE_CONFIG_KNOWN_ROOTS,
+    _emit_target_section,
     _preserve_unknown_sections,
     _toml_str,
     _toml_list,
 )
 
 _log = logging.getLogger(__name__)
+
+
+def _emit_ghpages_section(lines: list[str], cfg: "GhpagesConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[ghpages]")
+    lines.append(f"repo          = {_toml_str(cfg.repo)}")
+    lines.append(f"branch        = {_toml_str(cfg.branch)}")
+    lines.append(f"path_template = {_toml_str(cfg.path_template)}")
+    lines.append("")
+
+
+def _emit_gitlabpages_section(
+    lines: list[str], cfg: "GitlabPagesConfig | None"
+) -> None:
+    if cfg is None:
+        return
+    lines.append("[gitlabpages]")
+    lines.append(f"project        = {_toml_str(cfg.project)}")
+    lines.append(f"branch         = {_toml_str(cfg.branch)}")
+    lines.append(f"path_template  = {_toml_str(cfg.path_template)}")
+    lines.append(f"pages_base_url = {_toml_str(cfg.pages_base_url)}")
+    lines.append("")
+
+
+def _emit_mastodon_section(lines: list[str], cfg: "MastodonConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[mastodon]")
+    lines.append(f"instance_url = {_toml_str(cfg.instance_url)}")
+    lines.append("")
+
+
+def _emit_image_gen_section(lines: list[str], cfg: "ImageGenConfig | None") -> None:
+    if cfg is None:
+        return
+    lines.append("[image_gen]")
+    lines.append(f"base_url = {_toml_str(cfg.base_url)}")
+    lines.append(f"model = {_toml_str(cfg.model)}")
+    lines.append(f"banner_size = {_toml_str(cfg.banner_size)}")
+    lines.append(f"daily_cap = {cfg.daily_cap}")
+    lines.append(f"per_run_cap = {cfg.per_run_cap}")
+    lines.append(f"timeout_s = {cfg.timeout_s}")
+    lines.append(f"max_retries = {cfg.max_retries}")
+    lines.append(f"strict = {'true' if cfg.strict else 'false'}")
+    lines.append(f"auto_disable_threshold = {cfg.auto_disable_threshold}")
+    lines.append(f"use_image_gen = {'true' if cfg.use_image_gen else 'false'}")
+    lines.append("")
 
 
 def _sync_medium_integration_token(token: str) -> None:
@@ -59,7 +102,10 @@ def save_config(
     target_anchor_keywords: dict[str, list[str]] | None = None,
     target_three_url: dict[str, ThreeUrlConfig] | None = None,
     ghpages_config: GhpagesConfig | None = None,
+    gitlabpages_config: GitlabPagesConfig | None = None,
     mastodon_config: MastodonConfig | None = None,
+    target_probe_queries: dict[str, list[str]] | None = None,
+    target_brand_aliases: dict[str, list[str]] | None = None,
     image_gen_config: ImageGenConfig | None = None,
 ) -> None:
     config_path = path or (_resolve_config_dir() / "config.toml")
@@ -102,7 +148,21 @@ def save_config(
     else:
         three_url_by_domain = dict(target_three_url)
 
+    if target_probe_queries is None:
+        probe_queries_by_domain = dict(existing.target_probe_queries)
+    else:
+        probe_queries_by_domain = dict(target_probe_queries)
+
+    if target_brand_aliases is None:
+        brand_aliases_by_domain = dict(existing.target_brand_aliases)
+    else:
+        brand_aliases_by_domain = dict(target_brand_aliases)
+
     ghpages_cfg = ghpages_config if ghpages_config is not None else existing.ghpages
+    gitlabpages_cfg = (
+        gitlabpages_config if gitlabpages_config is not None
+        else existing.gitlabpages
+    )
     mastodon_cfg = mastodon_config if mastodon_config is not None else existing.mastodon
     image_gen_cfg = (
         image_gen_config if image_gen_config is not None else existing.image_gen
@@ -129,65 +189,27 @@ def save_config(
     lines.append("")
 
     all_target_domains = sorted(
-        set(kws_by_domain) | set(three_url_by_domain)
+        set(kws_by_domain)
+        | set(three_url_by_domain)
+        | set(probe_queries_by_domain)
+        | set(brand_aliases_by_domain)
     )
     for domain in all_target_domains:
-        lines.append(f"[targets.{_toml_str(domain)}]")
-        if domain in kws_by_domain:
-            kws = kws_by_domain[domain]
-            lines.append(f"anchor_keywords = {_toml_list(kws)}")
-        if domain in three_url_by_domain:
-            tu = three_url_by_domain[domain]
-            lines.append(f"main_url = {_toml_str(tu.main_url)}")
-            lines.append(f"list_url = {_toml_str(tu.list_url)}")
-            lines.append(f"work_urls = {_toml_list(tu.work_urls)}")
-            lines.append(f"branded_pool = {_toml_list(tu.branded_pool)}")
-            lines.append(f"partial_pool = {_toml_list(tu.partial_pool)}")
-            lines.append(f"exact_pool = {_toml_list(tu.exact_pool)}")
-            if tu.work_anchor_templates != list(DEFAULT_WORK_TEMPLATES):
-                lines.append(
-                    f"work_anchor_templates = {_toml_list(tu.work_anchor_templates)}"
-                )
-            if tu.list_path_blocklist is not None:
-                lines.append(
-                    f"list_path_blocklist = {_toml_list(tu.list_path_blocklist)}"
-                )
-            if tu.insecure_tls:
-                lines.append("insecure_tls = true")
-        lines.append("")
-
-    if ghpages_cfg is not None:
-        lines.append("[ghpages]")
-        lines.append(f"repo          = {_toml_str(ghpages_cfg.repo)}")
-        lines.append(f"branch        = {_toml_str(ghpages_cfg.branch)}")
-        lines.append(f"path_template = {_toml_str(ghpages_cfg.path_template)}")
-        lines.append("")
-
-    if mastodon_cfg is not None:
-        lines.append("[mastodon]")
-        lines.append(f"instance_url = {_toml_str(mastodon_cfg.instance_url)}")
-        lines.append("")
-
-    if image_gen_cfg is not None:
-        lines.append("[image_gen]")
-        lines.append(f"base_url = {_toml_str(image_gen_cfg.base_url)}")
-        lines.append(f"model = {_toml_str(image_gen_cfg.model)}")
-        lines.append(f"banner_size = {_toml_str(image_gen_cfg.banner_size)}")
-        lines.append(f"daily_cap = {image_gen_cfg.daily_cap}")
-        lines.append(f"per_run_cap = {image_gen_cfg.per_run_cap}")
-        lines.append(f"timeout_s = {image_gen_cfg.timeout_s}")
-        lines.append(f"max_retries = {image_gen_cfg.max_retries}")
-        lines.append(
-            f"strict = {'true' if image_gen_cfg.strict else 'false'}"
-        )
-        lines.append(
-            "auto_disable_threshold = "
-            f"{image_gen_cfg.auto_disable_threshold}"
-        )
-        lines.append(
-            f"use_image_gen = {'true' if image_gen_cfg.use_image_gen else 'false'}"
+        lines.extend(
+            _emit_target_section(
+                domain,
+                kws_by_domain,
+                probe_queries_by_domain,
+                brand_aliases_by_domain,
+                three_url_by_domain,
+            )
         )
         lines.append("")
+
+    _emit_ghpages_section(lines, ghpages_cfg)
+    _emit_gitlabpages_section(lines, gitlabpages_cfg)
+    _emit_mastodon_section(lines, mastodon_cfg)
+    _emit_image_gen_section(lines, image_gen_cfg)
 
     known_subsections: set[tuple[str, str]] = set()
     if client_id or client_secret:
@@ -195,7 +217,10 @@ def save_config(
     for domain in all_target_domains:
         known_subsections.add(("targets", _toml_str(domain)))
     on_disk_target_domains = (
-        set(existing.target_anchor_keywords) | set(existing.target_three_url)
+        set(existing.target_anchor_keywords)
+        | set(existing.target_three_url)
+        | set(existing.target_probe_queries)
+        | set(existing.target_brand_aliases)
     )
     for domain in on_disk_target_domains - set(all_target_domains):
         known_subsections.add(("targets", _toml_str(domain)))

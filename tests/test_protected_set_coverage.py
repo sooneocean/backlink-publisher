@@ -61,6 +61,8 @@ PROTECTED_GLOBS: frozenset[str] = frozenset(
         "*-meta.json.tentative",
         # Canary health state (contains per-platform drift history, operator platform data)
         "canary-health.json",
+        # Asset version stamp (written to config dir by _compute_asset_version)
+        "asset-version.stamp",
     }
 )
 

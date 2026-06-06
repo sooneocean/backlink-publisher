@@ -331,7 +331,68 @@ def _emit_confirmed_history_row(
     return events, articles, skipped, False
 
 
-# ── History reducer ───────────────────────────────────────────────
+def _emit_drafts_confirmed(
+    draft_id: str,
+    article_urls: list,
+    language: str | None,
+    target_url: str | None,
+    host: str | None,
+    ts_raw: str | None,
+    ts_utc: str | None,
+    store: EventStore,
+    conn: sqlite3.Connection,
+    pending_quarantines: list[dict[str, Any]],
+) -> tuple[int, int, int]:
+    """Emit PUBLISH_CONFIRMED event(s) for one drafts row.
+
+    Returns (events_inserted, articles_inserted, skipped_due_to_dedup).
+    """
+    if not isinstance(article_urls, list) or not article_urls:
+        store.append(
+            kinds.PUBLISH_CONFIRMED,
+            {"live_url": None, "draft_id": draft_id},
+            target_url=target_url,
+            host=host,
+            ts_raw=ts_raw,
+            ts_utc=ts_utc,
+            conn=conn,
+            pending_quarantines=pending_quarantines,
+        )
+        return 1, 0, 0
+
+    events_inserted = 0
+    articles_inserted = 0
+    skipped = 0
+    for live_url in article_urls:
+        if not isinstance(live_url, str) or not live_url:
+            continue
+        article = article_payload(
+            live_url=live_url,
+            target_url=target_url,
+            host=host_of(live_url),
+            lang=language if isinstance(language, str) and language else None,
+            published_at_raw=ts_raw,
+            published_at_utc=ts_utc,
+        )
+        try:
+            article_id = store.add_article(article, conn=conn)
+        except sqlite3.IntegrityError:
+            skipped += 1
+            continue
+        articles_inserted += 1
+        store.append(
+            kinds.PUBLISH_CONFIRMED,
+            {"live_url": live_url, "draft_id": draft_id},
+            target_url=target_url,
+            host=host_of(live_url),
+            article_id=article_id,
+            ts_raw=ts_raw,
+            ts_utc=ts_utc,
+            conn=conn,
+            pending_quarantines=pending_quarantines,
+        )
+        events_inserted += 1
+    return events_inserted, articles_inserted, skipped
 
 
 def _project_history(
@@ -487,49 +548,16 @@ def _project_drafts(path: Path, store: EventStore) -> ProjectionResult:
 
             if outcome is kinds.PUBLISH_CONFIRMED:
                 article_urls = row.get("article_urls") or []
-                if not isinstance(article_urls, list) or not article_urls:
-                    store.append(
-                        kinds.PUBLISH_CONFIRMED,
-                        {"live_url": None, "draft_id": draft_id},
-                        target_url=target_url,
-                        host=host,
-                        ts_raw=ts_raw,
-                        ts_utc=ts_utc,
-                        conn=conn,
-                        pending_quarantines=pending_quarantines,
-                    )
-                    events_inserted += 1
-                    continue
-                for live_url in article_urls:
-                    if not isinstance(live_url, str) or not live_url:
-                        continue
-                    _lang = row.get("language")
-                    article = article_payload(
-                        live_url=live_url,
-                        target_url=target_url,
-                        host=host_of(live_url),
-                        lang=_lang if isinstance(_lang, str) and _lang else None,
-                        published_at_raw=ts_raw,
-                        published_at_utc=ts_utc,
-                    )
-                    try:
-                        article_id = store.add_article(article, conn=conn)
-                    except sqlite3.IntegrityError:
-                        skipped_due_to_dedup += 1
-                        continue
-                    articles_inserted += 1
-                    store.append(
-                        kinds.PUBLISH_CONFIRMED,
-                        {"live_url": live_url, "draft_id": draft_id},
-                        target_url=target_url,
-                        host=host_of(live_url),
-                        article_id=article_id,
-                        ts_raw=ts_raw,
-                        ts_utc=ts_utc,
-                        conn=conn,
-                        pending_quarantines=pending_quarantines,
-                    )
-                    events_inserted += 1
+                _lang = row.get("language")
+                ev, art, sk = _emit_drafts_confirmed(
+                    draft_id, article_urls,
+                    _lang if isinstance(_lang, str) and _lang else None,
+                    target_url, host, ts_raw, ts_utc,
+                    store, conn, pending_quarantines,
+                )
+                events_inserted += ev
+                articles_inserted += art
+                skipped_due_to_dedup += sk
 
             elif outcome is kinds.DRAFT_SCHEDULED:
                 if prior_status == "scheduled":

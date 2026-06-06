@@ -17,14 +17,16 @@ from backlink_publisher.publishing.registry import (
     active_platforms,
     auth_type,
     platforms_by_auth_type,
+    zero_auth_backlink_platforms,
+    zero_auth_platforms,
 )
 
 # Expected membership per bucket on the current registry. Pinned (not derived)
 # so a silent auth_type flip — the #253 drift class — fails loudly here too.
 _EXPECTED_BUCKETS = {
-    "anon": {"rentry", "telegraph", "txtfyi"},
-    "token": {"devto", "writeas"},
-    "token_fields": {"ghpages", "hashnode", "notion", "tumblr", "wordpresscom"},
+    "anon": {"rentry", "telegraph", "brewpage", "posteasy", "nonograph", "htmldrop", "pubmark", "qiita", "zenn"},
+    "token": {"devto", "writeas", "hackmd", "mataroa"},
+    "token_fields": {"ghpages", "gitlabpages", "hashnode", "hatena", "notion", "tumblr", "wordpresscom"},
     "paste_blob": {"substack"},
     "userpass": {"livejournal"},
     "oauth": {"blogger"},
@@ -66,3 +68,19 @@ def test_reflects_live_registry_not_a_snapshot():
     classification is read through ``auth_type`` at call time."""
     for p in platforms_by_auth_type("paste_blob"):
         assert auth_type(p) == "paste_blob"
+
+
+def test_zero_auth_backlink_platforms_are_not_the_auth_bucket():
+    """Product-level zero-auth backlink candidates are narrower than the
+    low-level anonymous auth bucket: nofollow anonymous publishers remain
+    auth_type=anon but are not MVP backlink candidates."""
+    assert zero_auth_platforms() == platforms_by_auth_type("anon")
+    assert zero_auth_backlink_platforms() == frozenset({
+        "brewpage",
+        "htmldrop",
+        "nonograph",
+        "posteasy",
+        "pubmark",
+        "rentry",
+        "telegraph",
+    })

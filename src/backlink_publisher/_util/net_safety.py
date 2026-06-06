@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Optional
+from typing import Any, Optional
 from urllib.error import URLError
 from urllib.request import HTTPRedirectHandler, OpenerDirector, build_opener
+
+from urllib.request import Request
 
 from backlink_publisher._util.url import safe_urlparse
 
@@ -22,6 +24,7 @@ _BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("::1/128"),
     ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("168.63.129.16/32"),  # Azure wireserver (DHCP, key mgmt, health probes)
     ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("100.64.0.0/10"),
     ipaddress.ip_network("224.0.0.0/4"),
@@ -63,7 +66,7 @@ def _resolve_host_ips(host: str) -> tuple[list[str], Optional[str]]:
     for fam, _typ, _proto, _canon, sockaddr in infos:
         ip = sockaddr[0] if sockaddr else None
         if ip and ip not in ips:
-            ips.append(ip)
+            ips.append(str(ip))
     if not ips:
         return [], "dns_failure"
     return ips, None
@@ -95,7 +98,15 @@ def _check_url_for_ssrf(url: str) -> Optional[str]:
 
 
 class _SSRFSafeRedirectHandler(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> Request | None:
         # ``newurl`` is the server-controlled Location header (untrusted) — a
         # malformed authority must block the hop (URLError), not crash the
         # downgrade check with a ValueError. Guard it before any parse use.
@@ -125,7 +136,7 @@ def _make_ssrf_opener(max_redirects: int = 10) -> OpenerDirector:
     ``content_fetch._check_once`` when a caller threads down a custom cap.
     """
     handler = _SSRFSafeRedirectHandler()
-    handler.max_redirections = max_redirects
+    setattr(handler, "max_redirections", max_redirects)
     return build_opener(handler)
 
 

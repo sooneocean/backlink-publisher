@@ -1,7 +1,8 @@
 ---
 title: "feat: LiveJournal canary closeout + Bloglovin retirement"
 type: feat
-status: active
+status: completed
+shipped: db82b045 (#303)
 date: 2026-05-29
 origin: docs/brainstorms/2026-05-28-livejournal-prod-enablement-bloglovin-retire-requirements.md
 claims: {}

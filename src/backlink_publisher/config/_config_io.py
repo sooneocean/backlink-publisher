@@ -40,12 +40,12 @@ def _redact_toml_credential_values(toml_text: str) -> str:
     return _REDACT_RE.sub(r'\1"****"\2', toml_text)
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     from backlink_publisher import config as _cfg
     return _cfg._config_dir()
 
 
-def _resolve_cache_dir():
+def _resolve_cache_dir() -> Path:
     from backlink_publisher import config as _cfg
     return _cfg._cache_dir()
 

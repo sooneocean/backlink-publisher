@@ -11,6 +11,16 @@ bp = Blueprint("main", __name__)
 
 @bp.route('/')
 def index():
+    # Redirect to wizard if not completed and not skipped
+    try:
+        from webui_store import wizard_config_store as _wcfg
+        wc = _wcfg._get()
+        if not wc.get("completed") and not wc.get("skipped"):
+            from flask import redirect, url_for
+            return redirect(url_for("wizard.wizard_page"))
+    except Exception:
+        pass
+
     config = session.get('config', {})
     tab = request.args.get('tab', '')
     flash_type = request.args.get('flash_type', '')

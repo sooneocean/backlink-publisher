@@ -6,9 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
@@ -38,8 +46,19 @@ jobs:
         run: python -m radon --version
 
       - name: Run tests
+        # -n auto (pytest-xdist) parallelises across the runner's cores. The suite
+        # is determinism-verified under workers: PYTHONHASHSEED=0 is set per worker
+        # via pytest-env (+ job env above for subprocess tests), the footprint gate
+        # hard-fails on seed != 0, and every store/lock path resolves to a per-worker
+        # sandbox. --timeout=30 is per-test (pytest-timeout) and unaffected by xdist.
+        # --strict-markers + --strict-config are passed on the CLI here, NOT via
+        # pyproject [tool.pytest.ini_options] addopts: this repo's conftest does
+        # heavy module-level imports (HOME redirect + registry/adapters) that load
+        # before an addopts strict flag takes effect, so from addopts an unknown
+        # marker silently downgrades to a warning. On the CLI it correctly errors at
+        # collection. Verified 2026-06-01 (Wave 3 — test-framework maturation).
         run: |
-          python -m pytest tests/ -v --tb=short --timeout=30
+          python -m pytest tests/ -v --tb=short --timeout=30 -n auto --strict-markers --strict-config
 
       - name: Check code style
         run: |

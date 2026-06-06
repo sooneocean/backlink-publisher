@@ -304,7 +304,7 @@ def test_receipt_contains_no_secret_substrings(tmp_path, monkeypatch, capsys):
     assert "token" not in blob.lower() or "not_configured" in blob  # no query-string keys either
     assert "cookie" not in blob.lower()
     # Allowlist: only the expected keys.
-    assert set(receipts[0].keys()) <= {"platform", "verdict", "mode", "failed_checks", "checked_at", "note"}
+    assert set(receipts[0].keys()) <= {"platform", "verdict", "mode", "failed_checks", "checked_at", "note", "backlink_outcome"}
 
 
 # --------------------------------------------------------------------------
@@ -331,6 +331,72 @@ def test_integration_health_store_updated_for_whole_cohort(tmp_path, monkeypatch
     assert get_health("blogger")["status"] == "link-alive"
     assert get_health("velog")["status"] == "drift-confirmed"
     assert set(list_all().keys()) == {"blogger", "velog"}
+
+
+# --------------------------------------------------------------------------
+# ★ Canary Blitz: --include-uncertain flag (Plan 2026-06-06 R2/R5)
+# --------------------------------------------------------------------------
+
+
+def test__build_cohort_default_excludes_uncertain():
+    """Default _build_cohort() returns only dofollow=True platforms."""
+    from backlink_publisher.publishing import registry
+
+    with patch.object(registry, "registered_platforms",
+                      return_value=["plat_yes", "plat_no", "plat_maybe"]), \
+         patch.object(registry, "dofollow_status") as mock_status:
+        mock_status.side_effect = {"plat_yes": True, "plat_no": False, "plat_maybe": "uncertain"}.get
+        cohort = ct._build_cohort(include_uncertain=False)
+    assert cohort == ["plat_yes"]
+
+
+def test__build_cohort_include_uncertain_includes_both():
+    """With include_uncertain=True, dofollow=True AND 'uncertain' are included."""
+    from backlink_publisher.publishing import registry
+
+    with patch.object(registry, "registered_platforms",
+                      return_value=["plat_yes", "plat_no", "plat_maybe"]), \
+         patch.object(registry, "dofollow_status") as mock_status:
+        mock_status.side_effect = {"plat_yes": True, "plat_no": False, "plat_maybe": "uncertain"}.get
+        cohort = ct._build_cohort(include_uncertain=True)
+    assert sorted(cohort) == ["plat_maybe", "plat_yes"]
+
+
+def test__build_cohort_include_uncertain_empty_when_all_nofollow():
+    """When no True or uncertain platforms exist, cohort is empty regardless."""
+    from backlink_publisher.publishing import registry
+
+    with patch.object(registry, "registered_platforms",
+                      return_value=["plat_no"]), \
+         patch.object(registry, "dofollow_status") as mock_status:
+        mock_status.side_effect = {"plat_no": False}.get
+        cohort = ct._build_cohort(include_uncertain=True)
+    assert cohort == []
+
+
+def test_cli_include_uncertain_flag_argv_accepted(tmp_path, monkeypatch, capsys):
+    """--include-uncertain is accepted as a CLI flag and flows through to
+    _build_cohort (verified by patching the function and asserting argv)."""
+    from backlink_publisher.publishing import registry
+    # The _run helper patches _build_cohort so we can't verify the flag's
+    # cohort effect through it. Instead verify argparse-acceptance + that
+    # _build_cohort is called with include_uncertain=True.
+    _orig = ct._build_cohort
+    call_kwargs = {}
+
+    def _patched_build_cohort(**kw):
+        call_kwargs.update(kw)
+        return _orig(**kw)
+
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    with patch.object(registry, "registered_platforms", return_value=["blogger"]), \
+         patch.object(registry, "dofollow_status", return_value=True), \
+         patch.object(ct, "_build_cohort", _patched_build_cohort), \
+         patch.object(ct, "fetch_target", return_value=_facts()), \
+         patch.object(ct, "inspect_target_anchor", return_value=_anchor()), \
+         patch.object(ct, "_sleep", lambda *a, **k: None):
+        ct.main(["--include-uncertain"])
+    assert call_kwargs.get("include_uncertain") is True
 
 
 # --------------------------------------------------------------------------

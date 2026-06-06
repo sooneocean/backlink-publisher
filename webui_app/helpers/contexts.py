@@ -321,11 +321,20 @@ def _settings_context(flash=None):
         # legacy fallback path but redundant once we read from
         # ``active_platforms()`` directly.
         from backlink_publisher.publishing.registry import active_platforms
-        from ..binding_status import get_channel_status
+        from ..binding_status import (
+            get_channel_status,
+            _get_latest_backlink_outcome_details,
+        )
         dashboard_channels = [
             (name, get_channel_status(name, cfg))
             for name in active_platforms()
         ]
+        # Inject the latest backlink outcome into each channel status dict so
+        # templates can render outcome badges without extra store reads.
+        for name, status in dashboard_channels:
+            details = _get_latest_backlink_outcome_details(name)
+            if details:
+                status.update(details)
     except Exception:
         dashboard_channels = []
 
@@ -451,4 +460,12 @@ def _render(template_name: str, **kwargs):
         )
     if 'incomplete_run' not in kwargs:
         kwargs['incomplete_run'] = _load_incomplete_run()
+    if 'wizard_config' not in kwargs:
+        try:
+            from webui_store import wizard_config_store as _wizard_config_store
+            kwargs['wizard_config'] = _wizard_config_store._get()
+        except Exception:
+            kwargs['wizard_config'] = {"completed": False}
+    if 'system_active' not in kwargs:
+        kwargs['system_active'] = kwargs['wizard_config'].get("completed", False)
     return render_template(template_name, **kwargs)

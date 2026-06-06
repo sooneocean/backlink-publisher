@@ -208,6 +208,7 @@ def test_draft_queue_renders_ai_review_controls_without_secret(monkeypatch) -> N
     )
     app = create_app()
     app.config["TESTING"] = True
+    app.config["CSRF_ENABLED"] = False
 
     with app.test_request_context("/?tab=draft"):
         body = render_template(

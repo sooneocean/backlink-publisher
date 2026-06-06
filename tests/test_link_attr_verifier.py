@@ -326,6 +326,73 @@ def test_medium_api_draft_mode_skips_verifier():
     mock_verify.assert_not_called()
 
 
+def test_posteasy_publish_wires_target_link_verification():
+    from backlink_publisher.config import Config
+    from backlink_publisher.publishing.adapters.posteasy_api import PostEasyAPIAdapter
+
+    api_resp = MagicMock()
+    api_resp.status_code = 201
+    api_resp.json.return_value = {
+        "post": {
+            "id": "post-123",
+            "title": "PostEasy test",
+            "createdAt": "2026-06-05T00:00:00Z",
+            "expiresAt": "2026-09-03T00:00:00Z",
+        }
+    }
+    page_resp = _mock_resp(_html('<a href="https://x.com/">target</a>'))
+
+    with patch(
+        "backlink_publisher.publishing.adapters.posteasy_api.requests.post",
+        return_value=api_resp,
+    ), patch("backlink_publisher.http.get", return_value=page_resp):
+        payload = _make_payload("publish", "posteasy01")
+        payload["links"] = [{"url": "https://x.com/", "required": True}]
+        result = PostEasyAPIAdapter().publish(
+            payload,
+            mode="publish",
+            config=Config(),
+        )
+
+    meta = result._provider_meta["link_attr_verification"]
+    assert meta["verification"] == "ok"
+    assert meta["target_found"] is True
+    assert meta["target_missing_urls"] == []
+
+
+def test_brewpage_publish_wires_target_link_verification():
+    from backlink_publisher.config import Config
+    from backlink_publisher.publishing.adapters.brewpage_api import BrewPageAPIAdapter
+
+    api_resp = MagicMock()
+    api_resp.status_code = 201
+    api_resp.headers = {}
+    api_resp.json.return_value = {
+        "id": "brew-123",
+        "link": "https://brewpage.app/p/brew-123",
+        "ownerToken": "owner-token",
+        "expiresAt": "2026-06-20T00:00:00Z",
+    }
+    page_resp = _mock_resp(_html('<a href="https://x.com/">target</a>'))
+
+    with patch(
+        "backlink_publisher.publishing.adapters.brewpage_api.requests.post",
+        return_value=api_resp,
+    ), patch("backlink_publisher.http.get", return_value=page_resp):
+        payload = _make_payload("publish", "brewpage01")
+        payload["links"] = [{"url": "https://x.com/", "required": True}]
+        result = BrewPageAPIAdapter().publish(
+            payload,
+            mode="publish",
+            config=Config(),
+        )
+
+    meta = result._provider_meta["link_attr_verification"]
+    assert meta["verification"] == "ok"
+    assert meta["target_found"] is True
+    assert meta["target_missing_urls"] == []
+
+
 def test_verifier_skipped_result_no_warn(caplog):
     """When verifier returns skipped, no WARN about stripping should fire."""
     from backlink_publisher.publishing.adapters.medium_api import MediumAPIAdapter

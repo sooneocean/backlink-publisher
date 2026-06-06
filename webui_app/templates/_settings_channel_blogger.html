@@ -32,7 +32,7 @@
                             <input type="text" class="form-control form-control-sm" value="http://localhost" readonly
                                    style="font-family:monospace;font-size:12px;background:#fff;flex:1;">
                             <button class="btn btn-success btn-sm" type="button"
-                                    onclick="navigator.clipboard.writeText('http://localhost').then(()=>{this.textContent='✓';setTimeout(()=>{this.innerHTML='<i class=\'bi bi-clipboard\'></i>'},1500)})">
+                                    data-action="copy-localhost">
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
@@ -52,7 +52,7 @@
                                    value="{{ callback_uri }}" readonly
                                    style="font-family:monospace;font-size:12px;background:#fff;">
                             <button class="btn btn-warning btn-sm" type="button"
-                                    onclick="copyUri()" id="copyBtn">
+                                    data-action="copy-uri" id="copyBtn">
                                 <i class="bi bi-clipboard me-1"></i>复制
                             </button>
                         </div>
@@ -84,7 +84,7 @@
                                        placeholder="{% if blogger_client_secret_set %}已设置 (留空保留现值){% else %}GOCSPX-...{% endif %}"
                                        value="">
                                 <button type="button" class="btn btn-outline-secondary"
-                                        onclick="toggleSecret()">
+                                        data-action="toggle-secret">
                                     <i class="bi bi-eye" id="secretEye"></i>
                                 </button>
                             </div>
@@ -127,7 +127,7 @@
 
                         {% if blogger_token %}
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="document.getElementById('revokeForm').submit()">
+                                data-action="submit-revoke">
                             <i class="bi bi-trash me-1"></i>撤销现有授权
                         </button>
                         {% endif %}
@@ -163,7 +163,7 @@
                                        value="{{ domain }}" placeholder="https://your-site.com">
                                 <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
                                        value="{{ blog_id }}" placeholder="1234567890123456789">
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-action="remove-row">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
@@ -174,14 +174,14 @@
                                        placeholder="https://your-site.com">
                                 <input type="text" class="form-control form-control-sm token-box" name="blog_id[]"
                                        placeholder="1234567890123456789">
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeRow(this)">
+                                <button type="button" class="btn btn-outline-danger btn-sm" data-action="remove-row">
                                     <i class="bi bi-trash"></i>
                                 </button>
                             </div>
                             {% endif %}
                         </div>
                         <div class="d-flex gap-2 mt-3">
-                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addRow()">
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-action="add-row">
                                 <i class="bi bi-plus me-1"></i>新增一行
                             </button>
                             <button type="submit" class="btn btn-primary btn-sm">

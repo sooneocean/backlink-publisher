@@ -23,6 +23,7 @@ jobs:
   radar:
     name: scan
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out main
         uses: actions/checkout@v4

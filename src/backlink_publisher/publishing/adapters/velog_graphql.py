@@ -412,6 +412,138 @@ class _TransientHTTPError(Exception):
         super().__init__(f"HTTP {status_code}")
 
 
+def _apply_publish_jitter(article_id: str, last_publish_at: float) -> None:
+    """Sleep a random interval if the last publish was too recent.
+
+    Ensures the minimum inter-post gap (``_VELOG_JITTER_MIN_S`` .. ``_VELOG_JITTER_MAX_S``).
+    No-ops when *last_publish_at* is 0 (first publish on this machine).
+    """
+    if last_publish_at <= 0:
+        return
+    elapsed = time.time() - last_publish_at
+    jitter = random.uniform(_VELOG_JITTER_MIN_S, _VELOG_JITTER_MAX_S)
+    if elapsed < jitter:
+        wait = jitter - elapsed
+        log.info(_json_log(
+            adapter="velog-graphql", phase="jitter",
+            id=article_id, wait_s=round(wait, 1),
+        ))
+        time.sleep(wait)
+
+
+def _execute_write_post(
+    session: requests.Session,
+    gql_payload: dict,
+    *,
+    label: str = "",
+) -> requests.Response:
+    """POST *gql_payload* via *session*, retrying only on 429.
+
+    Non-idempotent: network errors are NOT retried — a stale duplicate would
+    result. Only a 429 pre-create rejection (``_TransientHTTPError``) is safe
+    to retry. Mirrors the ``medium_api`` / ``http_form_post`` create-once rule.
+
+    *label* is appended to error messages to distinguish the first attempt from
+    a silent-drop retry (e.g. ``label=" on retry"``).
+    """
+    def _once() -> requests.Response:
+        resp = session.post(
+            _VELOG_GRAPHQL_ENDPOINT,
+            json=gql_payload,
+            headers=_VELOG_REQUIRED_HEADERS,
+            verify=True,
+            timeout=_TIMEOUT,
+        )
+        if resp.status_code in RETRYABLE_HTTP_STATUSES:
+            raise _TransientHTTPError(resp.status_code)
+        return resp
+
+    try:
+        return retry_transient_call(
+            _once,
+            is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
+            adapter="velog-graphql",
+        )
+    except requests.RequestException:
+        raise ExternalServiceError(
+            f"velog GraphQL endpoint unreachable{label}"
+        ) from None
+    except _TransientHTTPError as exc:
+        raise ExternalServiceError(
+            f"velog writePost returned HTTP {exc.status_code} after retries{label}"
+        ) from None
+
+
+def _handle_null_write_post(
+    session: requests.Session,
+    gql_payload: dict,
+    article_id: str,
+    config: Config,
+) -> dict:
+    """Retry after a silent-drop and diagnose the outcome.
+
+    Called when the first ``writePost`` response contained ``{"data":
+    {"writePost": null}}``.  The access_token may have just been refreshed
+    via ``Set-Cookie`` on the first request; the session now carries the new
+    token, so a single retry is safe.
+
+    Returns the ``writePost`` dict on success.  Raises ``ContentRejectedError``
+    or ``AuthExpiredError`` when null persists after the retry.
+    """
+    resp2 = _execute_write_post(session, gql_payload, label=" on retry")
+
+    if not resp2.ok:
+        raise ExternalServiceError(
+            f"velog returned HTTP {resp2.status_code} on retry"
+        )
+
+    try:
+        resp_json2 = resp2.json()
+    except ValueError:
+        raise ExternalServiceError(
+            "velog retry response was not valid JSON"
+        ) from None
+
+    write_post = (resp_json2.get("data") or {}).get("writePost")
+    if write_post is not None:
+        return write_post
+
+    artifact_path = _save_null_artifact(
+        resp_json2, dict(resp2.headers), article_id, config
+    )
+    gql_errors = resp_json2.get("errors") or []
+    gql_errors_summary = (
+        f"{len(gql_errors)} error(s): "
+        + "; ".join(str(e.get("message", "")) for e in gql_errors[:3])
+        if gql_errors else "0"
+    )
+    alive, probe_reason = _probe_session_alive(session)
+    if alive:
+        log.error(_json_log(
+            adapter="velog-graphql", phase="null-after-retry",
+            verdict="content_rejected", id=article_id,
+            gql_errors_summary=gql_errors_summary,
+            probe=probe_reason, artifact=artifact_path,
+        ))
+        raise ContentRejectedError(
+            channel="velog",
+            reason=(
+                f"writePost null after retry; cookie alive ({probe_reason}); "
+                f"gql_errors={gql_errors_summary}"
+            ),
+        )
+    log.error(_json_log(
+        adapter="velog-graphql", phase="null-after-retry",
+        verdict="auth_expired", id=article_id,
+        gql_errors_summary=gql_errors_summary,
+        probe=probe_reason, artifact=artifact_path,
+    ))
+    raise AuthExpiredError(
+        channel="velog",
+        reason=f"writePost null after retry; cookie dead ({probe_reason})",
+    )
+
+
 class VelogGraphQLAdapter(Publisher):
     """Publishes to velog.io via internal GraphQL writePost mutation.
 
@@ -512,16 +644,7 @@ class VelogGraphQLAdapter(Publisher):
                 )
 
             # Jitter: ensure minimum gap between posts
-            if last_publish_at > 0:
-                elapsed = time.time() - last_publish_at
-                jitter = random.uniform(_VELOG_JITTER_MIN_S, _VELOG_JITTER_MAX_S)
-                if elapsed < jitter:
-                    wait = jitter - elapsed
-                    log.info(_json_log(
-                        adapter="velog-graphql", phase="jitter",
-                        id=article_id, wait_s=round(wait, 1),
-                    ))
-                    time.sleep(wait)
+            _apply_publish_jitter(article_id, last_publish_at)
 
             # 4. Build GraphQL variables (7-field minimal set, P0-1 confirmed)
             title = payload.get("title", "")
@@ -552,41 +675,7 @@ class VelogGraphQLAdapter(Publisher):
             session = requests.Session()
             session.cookies.update(cookies)
 
-            def _do_post() -> requests.Response:
-                resp = session.post(
-                    _VELOG_GRAPHQL_ENDPOINT,
-                    json=gql_payload,
-                    headers=_VELOG_REQUIRED_HEADERS,
-                    verify=True,
-                    timeout=_TIMEOUT,
-                )
-                if resp.status_code in RETRYABLE_HTTP_STATUSES:
-                    raise _TransientHTTPError(resp.status_code)
-                return resp
-
-            # The WritePost mutation is a NON-IDEMPOTENT create. A network error
-            # (Timeout/ConnectionError) after the request left the client is
-            # ambiguous — velog may have already created the post — so it is NOT
-            # retried (would duplicate). Only 429 (a pre-create rate-limit
-            # rejection, surfaced as _TransientHTTPError) is safe to retry.
-            # Mirrors medium_api / http_form_post "create exactly once".
-            try:
-                resp = retry_transient_call(
-                    _do_post,
-                    is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
-                    adapter="velog-graphql",
-                )
-            except requests.RequestException:
-                raise ExternalServiceError(
-                    "velog GraphQL endpoint unreachable"
-                ) from None
-            except _TransientHTTPError as exc:
-                # 429 retried to exhaustion. retry_transient_call re-raises the
-                # _TransientHTTPError (not a RequestException), so it would
-                # otherwise escape uncaught — mirror medium_api and convert it.
-                raise ExternalServiceError(
-                    f"velog writePost returned HTTP {exc.status_code} after retries"
-                ) from None
+            resp = _execute_write_post(session, gql_payload)
 
             if not resp.ok:
                 raise ExternalServiceError(
@@ -607,87 +696,9 @@ class VelogGraphQLAdapter(Publisher):
             #    Set-Cookie on the first request; Session now has the new token.
             if write_post is None:
                 log.info(_json_log(
-                    adapter="velog-graphql",
-                    phase="silent-drop-retry",
-                    id=article_id,
+                    adapter="velog-graphql", phase="silent-drop-retry", id=article_id,
                 ))
-                try:
-                    # Same non-idempotent-create rule as the first attempt: only
-                    # 429 is retryable; a network error is not (would duplicate).
-                    resp2 = retry_transient_call(
-                        _do_post,
-                        is_retryable=lambda exc: isinstance(exc, _TransientHTTPError),
-                        adapter="velog-graphql",
-                    )
-                except requests.RequestException:
-                    raise ExternalServiceError(
-                        "velog GraphQL endpoint unreachable on retry"
-                    ) from None
-                except _TransientHTTPError as exc:
-                    raise ExternalServiceError(
-                        f"velog writePost returned HTTP {exc.status_code} "
-                        "after retries (on retry)"
-                    ) from None
-
-                if not resp2.ok:
-                    raise ExternalServiceError(
-                        f"velog returned HTTP {resp2.status_code} on retry"
-                    )
-
-                try:
-                    resp_json2 = resp2.json()
-                except ValueError:
-                    raise ExternalServiceError(
-                        "velog retry response was not valid JSON"
-                    ) from None
-
-                write_post = (resp_json2.get("data") or {}).get("writePost")
-                if write_post is None:
-                    artifact_path = _save_null_artifact(
-                        resp_json2,
-                        dict(resp2.headers),
-                        article_id,
-                        config,
-                    )
-                    gql_errors = resp_json2.get("errors") or []
-                    gql_errors_summary = (
-                        f"{len(gql_errors)} error(s): "
-                        + "; ".join(str(e.get("message", "")) for e in gql_errors[:3])
-                        if gql_errors else "0"
-                    )
-                    alive, probe_reason = _probe_session_alive(session)
-                    if alive:
-                        log.error(_json_log(
-                            adapter="velog-graphql",
-                            phase="null-after-retry",
-                            verdict="content_rejected",
-                            id=article_id,
-                            gql_errors_summary=gql_errors_summary,
-                            probe=probe_reason,
-                            artifact=artifact_path,
-                        ))
-                        raise ContentRejectedError(
-                            channel="velog",
-                            reason=(
-                                f"writePost null after retry; cookie alive ({probe_reason}); "
-                                f"gql_errors={gql_errors_summary}"
-                            ),
-                        )
-                    log.error(_json_log(
-                        adapter="velog-graphql",
-                        phase="null-after-retry",
-                        verdict="auth_expired",
-                        id=article_id,
-                        gql_errors_summary=gql_errors_summary,
-                        probe=probe_reason,
-                        artifact=artifact_path,
-                    ))
-                    raise AuthExpiredError(
-                        channel="velog",
-                        reason=(
-                            f"writePost null after retry; cookie dead ({probe_reason})"
-                        ),
-                    )
+                write_post = _handle_null_write_post(session, gql_payload, article_id, config)
 
             url_slug_returned = (write_post or {}).get("url_slug", "")
             post_id = (write_post or {}).get("id", "")

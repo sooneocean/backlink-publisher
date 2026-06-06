@@ -15,7 +15,6 @@ from backlink_publisher._util.url import (
     normalize_url_for_fetch,
     safe_urlparse,
 )
-
 REQUEST_TIMEOUT = 10  # seconds
 MAX_CONCURRENT = 10
 ACCEPTABLE_CODES = {200, 301, 302}
@@ -24,12 +23,8 @@ RETRY_DELAY = 1  # seconds
 
 
 def _ssl_context() -> ssl.SSLContext:
-    return _SSL_CTX
-
-
-_SSL_CTX: ssl.SSLContext = ssl.create_default_context()
-_SSL_CTX.check_hostname = False
-_SSL_CTX.verify_mode = ssl.CERT_NONE
+    from backlink_publisher._util.ssl_ctx import get_ssl_context
+    return get_ssl_context()
 
 
 def _check_url_once(url: str) -> tuple[bool, str | None]:

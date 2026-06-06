@@ -142,7 +142,9 @@ def set_status(
     ):
         if value is not None:
             record[key] = value
-    record["updated_at"] = updated_at or datetime.now(timezone.utc).isoformat()
+    ts = updated_at or datetime.now(timezone.utc).isoformat()
+    record["updated_at"] = ts
+    record["last_touch"] = ts  # CRM funnel: when we last acted on this contact
 
     errors = schema.validate_review_status(record)
     if errors:
@@ -164,3 +166,20 @@ def load_status(target_id: str) -> Optional[dict[str, Any]]:
         if row.get("target_id") == target_id:
             return row
     return None
+
+
+#: Statuses that mean "stop outreach — this contact is closed".
+#: Excludes "rejected"/"removed" because those rows are physically deleted by _DELETE_STATUSES.
+_NO_CONTACT_STATUSES = {"won", "lost"}
+
+
+def is_do_not_contact(target_id: str) -> bool:
+    """Return ``True`` if *target_id* has a terminal CRM status (won/lost/rejected/removed).
+
+    Use before initiating any new outreach to avoid re-contacting closed contacts.
+    Returns ``False`` when no record exists (never-contacted is safe to reach out to).
+    """
+    record = load_status(target_id)
+    if record is None:
+        return False
+    return record.get("status") in _NO_CONTACT_STATUSES

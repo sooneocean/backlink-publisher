@@ -34,10 +34,6 @@
 ceiling = 50
 rationale = "Deterministic-planning payload assembly: branches across language/anchor/link-density/zh-short variants and validation gating to build one plan row. Grandfathered at current CC; decomposed lazily when a feature next touches it (Plan 2026-05-29-005 R7), not in this initiative's active scope."
 
-[functions."src/backlink_publisher/cli/publish_backlinks.py::main"]
-ceiling = 49
-rationale = "Publish CLI entrypoint: argparse, config load/echo, per-row publish loop with the canary health gate and cross-run idempotency enforce gate, plus exit-code dispatch. Single-function file near its SLOC ceiling too; grandfathered at current CC and decomposed lazily per Plan 2026-05-29-005 R7, not active scope."
-
 [functions."src/backlink_publisher/events/_project_reducers.py::_project_checkpoint"]
 ceiling = 39
 rationale = "Event-store checkpoint reducer: folds a run's checkpoint items into projected per-row state across many status/error-class branches (done/failed/pending, retro classes, policy-skip, verified flags). Grandfathered at current CC; not decomposed in this initiative (cutline is the worst outlier _run_resume only)."
@@ -48,7 +44,7 @@ rationale = "Anchor/link construction for a plan row: branches over anchor sourc
 
 [functions."src/backlink_publisher/config/writer.py::save_config"]
 ceiling = 36
-rationale = "Config TOML writer: emits [blogger]/[medium]/[targets.*] sections with conditional credential subsections while preserving unmanaged operator-added tables verbatim. Already SLOC-budget-monitored; grandfathered at current CC here, decomposed lazily if a feature next touches it (not active scope)."
+rationale = "Config TOML writer: emits [blogger]/[medium]/[targets.*] sections. Section emitters (ghpages/mastodon/image_gen) extracted to private helpers when Pro Mode image_gen was added; residual CC from blogger/targets loops and preserve-unknown-sections logic."
 
 # config/parsers/llm.py::_parse_llm_anchor_provider was seeded at CC 31, but SEC-6 (PR #308,
 # merged to main) centralized the loose-permission warning out of the parser, dropping it to

@@ -1,7 +1,8 @@
 ---
 title: "feat: Comment Outreach Queue (comment_outreach module)"
 type: feat
-status: active
+status: completed
+shipped: 2844f3d7 (#272)
 date: 2026-05-27
 origin: docs/brainstorms/2026-05-27-comment-outreach-queue-requirements.md
 claims: {}

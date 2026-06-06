@@ -31,7 +31,8 @@ def test_snapshot_scans_all_known_files_by_default(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
     seen = _spy_load_token(monkeypatch)
     snapshot_token_revs()
-    assert len(seen) == 10 and "blogger-token.json" in seen
+    # Derive from the source of truth so adding a token platform doesn't break this.
+    assert len(seen) == len(tokens_mod._TOKEN_FILES) and "blogger-token.json" in seen
 
 
 def test_snapshot_honors_platform_filter(tmp_path, monkeypatch):

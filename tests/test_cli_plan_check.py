@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import os
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -340,15 +341,28 @@ def _git(cwd: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
     return res
 
 
-@pytest.fixture
-def repo_with_origin(tmp_path: Path) -> Path:
-    """Build a tmp repo with:
+@pytest.fixture(scope="module")
+def _origin_repo_template(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the origin-wired repo ONCE per module.
+
+    The ~12 git subprocesses (init + 2 commits + bare clone + fetch) were
+    re-run for *every* consuming test under the old function-scoped fixture.
+    ``repo_with_origin`` now hands each test an isolated ``copytree`` of this
+    template, so per-test mutations (FETCH_HEAD backdating via ``os.utime``,
+    the real re-fetch in ``test_over_threshold_triggers_fetch``) land only on
+    the copy. The bare ``origin.git`` lives alongside and is only ever *read*
+    (fetch reads the remote, writes the local), so sharing it for the module's
+    lifetime is safe. Under xdist this fixture is per-worker; tests within a
+    module run sequentially on one worker, so the shared bare is never raced.
+
+    Layout:
       - one commit on ``main`` (introduces ``src/foo.py`` and ``src/foo/bar.py``)
       - one commit on a feature branch (``feat/x``) only
       - a bare clone as ``origin``, then ``fetch origin`` so ``origin/main`` resolves
-    Returns the working-tree path.
+    Returns the working-tree path (``.../main``).
     """
-    main = tmp_path / "main"
+    base = tmp_path_factory.mktemp("origin_repo")
+    main = base / "main"
     main.mkdir()
     _git(main, "init", "-q", "-b", "main")
     _git(main, "config", "user.email", "t@t")
@@ -366,11 +380,26 @@ def repo_with_origin(tmp_path: Path) -> Path:
     _git(main, "commit", "-q", "-m", "extra on feature branch only")
     _git(main, "checkout", "-q", "main")
     # Bare clone + remote wiring so origin/main resolves
-    bare = tmp_path / "origin.git"
+    bare = base / "origin.git"
     _git(main, "clone", "--bare", "-q", str(main), str(bare))
     _git(main, "remote", "add", "origin", str(bare))
     _git(main, "fetch", "-q", "origin")
     return main
+
+
+@pytest.fixture
+def repo_with_origin(_origin_repo_template: Path, tmp_path: Path) -> Path:
+    """Per-test isolated copy of the build-once origin repo.
+
+    ``copytree`` duplicates the working tree *and* ``.git`` verbatim, so the
+    copy keeps the template's absolute ``origin`` URL (the shared bare repo,
+    still alive for the module) — the real-fetch test resolves a remote — while
+    its FETCH_HEAD and refs are private to this test. ``copy2`` preserves
+    FETCH_HEAD's mtime; tests that care set it explicitly via ``os.utime``.
+    """
+    dest = tmp_path / "main"
+    shutil.copytree(_origin_repo_template, dest)
+    return dest
 
 
 def _head_sha(repo: Path, rev: str = "HEAD") -> str:

@@ -295,6 +295,123 @@ def test_recon_sessions_independent(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+def test_rollback_removes_own_slot_not_peers(monkeypatch):
+    """Regression: rollback must remove the caller's own timestamp via
+    ``remove(now)``, not the last-appended entry via ``pop()``.
+
+    Under concurrent same-session calls the window deque can be
+    [our_ts, peer_ts] if another thread appended AFTER our reservation but
+    BEFORE our rollback.  ``pop()`` (LIFO) would remove ``peer_ts``, leaking
+    ``our_ts``.  ``remove(now)`` removes exactly ``our_ts``.
+
+    Simulated by injecting a peer slot inside the semaphore-acquire hook so
+    the deque becomes [our_ts=1.0, peer_ts=2.0] before rollback fires.
+    """
+    sid = "shared-sess-ovl"
+    our_ts = 1.0
+    peer_ts = 2.0
+
+    monkeypatch.setattr(tht.time, "monotonic", lambda: our_ts)
+
+    class _InjectAndFail:
+        def acquire(self, blocking=True):
+            with tht._window_locks_guard:
+                w = tht._session_windows.get(sid)
+                if w is not None:
+                    w.append(peer_ts)
+            return False
+
+        def release(self):  # pragma: no cover
+            pass
+
+    original_sem = tht._concurrency_sem
+    tht._concurrency_sem = _InjectAndFail()
+    try:
+        result = tht.try_acquire(sid, "x.com")
+        w = tht._session_windows.get(sid)
+        window_after = list(w) if w else []
+    finally:
+        tht._concurrency_sem = original_sem
+
+    assert result == "upstream_overloaded"
+    assert window_after == [peer_ts], (
+        f"rollback must remove only our slot ({our_ts}), leaving peer's "
+        f"({peer_ts}). Got {window_after!r}. "
+        "Buggy pop() removes the LIFO entry (peer's slot); "
+        "fix uses remove(now) to target our own."
+    )
+
+
+def test_rollback_host_busy_removes_own_slot_not_peers(monkeypatch):
+    """Same rollback-correctness invariant for the host_busy path.
+
+    Deque becomes [our_ts=1.0, peer_ts=2.0] when a peer appends between our
+    window reservation and our host-busy rollback.  ``pop()`` removes
+    ``peer_ts``; ``remove(now)`` removes ``our_ts`` and leaves ``peer_ts``.
+    """
+    sid = "shared-sess-hb"
+    our_ts = 1.0
+    peer_ts = 2.0
+
+    monkeypatch.setattr(tht.time, "monotonic", lambda: our_ts)
+
+    class _HoldHostThenInject:
+        """Semaphore that succeeds; host lock then fails after injecting peer slot."""
+        _acquired = False
+
+        def acquire(self, blocking=True):
+            self._acquired = True
+            return True
+
+        def release(self):
+            pass
+
+    sem_fake = _HoldHostThenInject()
+    original_sem = tht._concurrency_sem
+    tht._concurrency_sem = sem_fake
+
+    # Pre-hold the host lock so host_busy fires.
+    tht.try_acquire("anchor-hb", "busy-hb.com")
+    # restore semaphore so next try_acquire can get it
+    tht._concurrency_sem = original_sem
+
+    # Patch host-lock acquisition to inject the peer slot first.
+    original_host_acquire = None
+
+    class _InjectingLock:
+        def __init__(self, real_lock):
+            self._real = real_lock
+
+        def acquire(self, blocking=True):
+            with tht._window_locks_guard:
+                w = tht._session_windows.get(sid)
+                if w is not None:
+                    w.append(peer_ts)
+            return False  # busy
+
+        def release(self):
+            self._real.release()
+
+    # Force host lock creation then swap it out.
+    with tht._window_locks_guard:
+        real_lock = tht._host_locks.setdefault("busy-hb.com", threading.Lock())
+        tht._host_locks["busy-hb.com"] = _InjectingLock(real_lock)
+
+    monkeypatch.setattr(tht.time, "monotonic", lambda: our_ts)
+    result = tht.try_acquire(sid, "busy-hb.com")
+    w = tht._session_windows.get(sid)
+    window_after = list(w) if w else []
+
+    tht.release("busy-hb.com")
+
+    assert result == "host_busy"
+    assert window_after == [peer_ts], (
+        f"rollback must remove only our slot ({our_ts}), leaving peer's "
+        f"({peer_ts}). Got {window_after!r}. "
+        "Buggy pop() removes the LIFO entry (peer's slot)."
+    )
+
+
 def test_reset_state_clears_everything():
     assert tht.try_acquire("s1", "a.com") is None
     tht.should_emit_recon("s1")

@@ -10,7 +10,7 @@
                             <i class="bi bi-bookmark me-1" style="color:var(--secondary);"></i>
                             <span style="font-size:13px;color:var(--secondary);">快速载入：</span>
                             <select class="form-select form-select-sm" style="width:200px;"
-                                    onchange="loadBatchProfile(this.value)">
+                                    data-action="load-batch-profile">
                                 <option value="">— 选择配置 —</option>
                                 {% for p in profiles %}
                                 <option value="{{ loop.index0 }}">{{ p.name }}</option>

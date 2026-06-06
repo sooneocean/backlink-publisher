@@ -169,6 +169,56 @@
     {% endif %}
   </div>
 
+  {# ── 3a. Per-channel value scorecard (Plan 2026-06-01-005 U8, Wave-0 MVP) ─ #}
+  {% set scorecard_rows = channel_scorecard | default([]) %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Per-channel value scorecard
+      <span class="text-muted small fw-normal">— declared ‖ measured (advisory; keep/prune)</span>
+    </div>
+    {% if scorecard_rows %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Channel</th>
+            <th>Declared</th>
+            <th>Referral</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">Live</th>
+            <th class="text-end">Live·df</th>
+            <th>Realized value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in scorecard_rows %}
+          <tr>
+            <td class="target-cell">
+              {{ c.channel }}
+              {% if c.small_sample %}<span class="badge text-bg-secondary" title="low sample is not zero value">insufficient data</span>{% endif %}
+              {% for d in c.divergence %}<span class="badge text-bg-warning" title="declared vs measured divergence">{{ d }}</span>{% endfor %}
+            </td>
+            <td>{{ c.declared_dofollow }}</td>
+            <td>{{ c.declared_referral_value if c.declared_referral_value is not none else '—' }}</td>
+            <td class="text-end">{{ c.total_links }}</td>
+            <td class="text-end">{{ c.live_links }}</td>
+            <td class="text-end">{{ c.live_dofollow }}</td>
+            <td><span class="text-muted small" title="GA4/GSC/AI axes deferred (Wave-0 DESCOPE)">referral / discovery / AI: inert (not landed)</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer bg-white text-muted small py-2">
+      Signal vector — no composite score. Realized-value axes (GA4 referral, GSC discovery, AI
+      retrievability) are deferred until owned-target placement volume grows. Advisory only; nothing
+      here gates publishing.
+    </div>
+    {% else %}
+    <div class="card-body text-muted text-center py-4">No channels to score yet.</div>
+    {% endif %}
+  </div>
+
   {# ── 3b. Canary health (Plan 2026-05-27-001 U4, read-side join) ───────── #}
   {% set canary_rows = canary | default([]) %}
   {% if canary_rows %}
@@ -257,6 +307,136 @@
   </div>
   {% endif %}
 
+  {# ── 3d. Zero-auth backlink health (Wave 4 zero-auth MVP) ─────────────── #}
+  {% set za_rows = zero_auth | default([]) %}
+  {% if za_rows %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Zero-auth backlinks
+      <span class="text-muted small fw-normal">— 免登入有效 backlink 候選；發布成功不等於 backlink 有效</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Platform</th>
+            <th>Declared</th>
+            <th>Latest outcome</th>
+            <th>Reason / TTL</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for z in za_rows %}
+          <tr>
+            <td class="target-cell">{{ z.platform }}</td>
+            <td>
+              <span class="badge text-bg-secondary">{{ z.dofollow }}</span>
+              {% if z.referral_value %}<span class="text-muted small">{{ z.referral_value }}</span>{% endif %}
+            </td>
+            <td>
+              {% if z.outcome == 'effective_backlink' %}
+              <span class="badge text-bg-success">有效 backlink</span>
+              {% elif z.outcome == 'published_but_ineffective' %}
+              <span class="badge text-bg-warning">無效 backlink</span>
+              {% elif z.outcome == 'needs_canary' %}
+              <span class="badge text-bg-info">需要 canary</span>
+              {% elif z.outcome == 'failed' %}
+              <span class="badge text-bg-danger">驗證失敗</span>
+              {% else %}
+              <span class="badge text-bg-secondary text-muted">尚無資料</span>
+              {% endif %}
+            </td>
+            <td class="text-muted small">
+              {% if z.reason %}<code>{{ z.reason }}</code>{% endif %}
+              {% if z.ttl_days %}<span class="ms-1">TTL {{ z.ttl_days }} days</span>{% endif %}
+              {% if z.expires_at %}<span class="ms-1">expires {{ z.expires_at }}</span>{% endif %}
+              {% if not z.reason and not z.ttl_days and not z.expires_at %}—{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── 4a. AI Citation Share — GEO panel (Plan 2026-05-29-006 U9) ────────── #}
+  {% set geo_targets = geo_panel.targets | default([]) if geo_panel else [] %}
+  {% if geo_targets %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      AI Citation Share (GEO)
+      <span class="text-muted small fw-normal">— advisory metric</span>
+    </div>
+    <div class="card-body pb-2">
+      <p class="text-muted small mb-3 advisory">
+        Advisory metric — correlation only, not causation.
+        Share = cited&nbsp;/&nbsp;(cited&nbsp;+&nbsp;absent); refusals excluded from denominator.
+        A change in share does not establish that any site action caused it.
+      </p>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Target</th>
+              <th>State</th>
+              <th class="text-end">Share</th>
+              <th class="text-end">n</th>
+              <th class="text-end">Refused rate</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in geo_targets %}
+            <tr>
+              <td class="target-cell">
+                {% if t.target_url and t.target_url.startswith('http') %}
+                  <a href="{{ t.target_url }}" rel="noopener noreferrer" target="_blank">{{ t.target_url }}</a>
+                {% else %}
+                  {{ t.target_url }}
+                {% endif %}
+              </td>
+              <td>
+                {% if t.state == 'measured' %}
+                  <span class="badge text-bg-success">measured</span>
+                  {% if t.low_confidence %}<span class="badge text-bg-warning" title="n below full-confidence threshold">low confidence</span>{% endif %}
+                {% elif t.state == 'warming_up' %}
+                  <span class="badge text-bg-secondary">Insufficient data ({{ t.total_n }} probe{{ '' if t.total_n == 1 else 's' }})</span>
+                {% elif t.state == 'never_probed' %}
+                  <span class="badge text-bg-secondary">Not yet probed</span>
+                {% elif t.state == 'excluded' %}
+                  <span class="badge text-bg-warning">Excluded from measurement</span>
+                {% else %}
+                  <span class="badge text-bg-secondary">{{ t.state }}</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.state == 'measured' and t.share is not none %}
+                  {{ t.share }}%
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.n %}{{ t.n }}{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-end">
+                {% if t.refused_rate %}{{ "%.1f"|format(t.refused_rate * 100) }}%{% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card-footer bg-white text-muted small py-2">
+      Advisory only — nothing here gates publishing.
+      Refusal spikes may indicate the topic is declined rather than uncited.
+      Run <code>geo-probe</code> to gather citation probes; see the
+      <a href="/docs/operations/geo-probe.md">geo-probe runbook</a> for interpretation guidance.
+    </div>
+  </div>
+  {% endif %}
+
   {# ── 4. Error distribution (R8) ───────────────────────────────────────── #}
   <div class="card shadow-sm mb-4">
     <div class="card-header bg-white fw-semibold">Failure breakdown</div>
@@ -275,5 +455,7 @@
   </div>
 
 </main>
+{# Pro Mode Copilot — side panel (Plan U4) #}
+{% include '_copilot_panel.html' %}
 </body>
 </html>

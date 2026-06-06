@@ -65,7 +65,6 @@ def test_auth_type_returns_none_for_unknown():
     "platform,expected",
     [
         ("telegraph", "anon"),
-        ("txtfyi", "anon"),
         ("rentry", "anon"),
         ("devto", "token"),
         ("notion", "token_fields"),

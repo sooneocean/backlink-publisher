@@ -22,6 +22,9 @@ from .channel_status import channel_status_store
 from .drafts import DraftsStore
 from .history import HistoryStore
 from .queue_store import QueueStore
+from .score_store import ScoreStore
+from .seen_urls_store import SeenUrlsStore
+from .wizard_config_store import WizardConfigStore
 
 
 def _store_path(filename: str) -> Path:
@@ -51,6 +54,15 @@ schedule_store = _LazyStore(
 queue_store = _LazyStore(
     lambda: QueueStore(_store_path("publish-queue.json"), default_factory=list)
 )
+score_store = _LazyStore(
+    lambda: ScoreStore(_store_path("score-store.json"))
+)
+seen_urls_store = _LazyStore(
+    lambda: SeenUrlsStore(_store_path("seen-urls.json"))
+)
+wizard_config_store = _LazyStore(
+    lambda: WizardConfigStore(_store_path("wizard-config.json"))
+)
 
 
 def _refresh_paths() -> None:
@@ -62,7 +74,8 @@ def _refresh_paths() -> None:
     have them re-resolve from the updated env var.
     """
     for store in (history_store, profiles_store, drafts_store,
-                  schedule_store, queue_store, channel_status_store):
+                  schedule_store, queue_store, channel_status_store,
+                  score_store, seen_urls_store, wizard_config_store):
         store.reset()
 
 
@@ -74,11 +87,17 @@ __all__ = [
     "DraftsStore",
     "HistoryStore",
     "QueueStore",
+    "ScoreStore",
+    "SeenUrlsStore",
+    "WizardConfigStore",
     "history_store",
     "profiles_store",
     "drafts_store",
     "schedule_store",
     "queue_store",
     "channel_status_store",
+    "score_store",
+    "seen_urls_store",
+    "wizard_config_store",
     "_refresh_paths",
 ]

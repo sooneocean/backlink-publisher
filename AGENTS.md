@@ -21,7 +21,7 @@ black --check src/
 flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
 
 # SLOC measurement (for monolith budget edits)
-python -m radon raw -s src/backlink_publisher/cli/plan_backlinks.py
+python -m radon raw -s src/backlink_publisher/cli/plan_backlinks/core.py  # plan_backlinks is a package; core.py is the monitored file
 
 # WebUI
 python webui.py                                    # start dev server on :8888
@@ -37,6 +37,29 @@ Flask app at `webui_app/` (20 route modules, `create_app()` factory). State pers
 
 App-level CSRF guard `_global_csrf_guard` (PR #143, `webui_app/__init__.py`) enforces a token on every POST/PUT/PATCH/DELETE. Tests opt out via `app.config['CSRF_ENABLED'] = False` (or the legacy `WTF_CSRF_ENABLED` flag — both honored). The `_check_csrf_or_abort` helper has a single production call site inside the global guard; PR #148 removed all inline per-route calls.
 
+### Frontend conventions — zero-build native ES modules (Plan 2026-06-01-007)
+
+No Node / bundler / framework. Browser-native ES modules + Jinja `base.html` + CSS custom-property tokens. Deployment stays "double-click → run".
+
+**Layer map**
+- `templates/base.html` owns the single `<head>`: Bootstrap/Icons CDN, `<meta name="csrf-token">`, the **classic non-`defer` Bootstrap bundle script**, `tokens.css`, and the blocks `title` / `head_extra` / `content` / `page_data` / `page_module`. Every page `{% extends 'base.html' %}` — never re-declare `<head>`.
+- `static/js/lib/` is the shared ESM layer: `api.js` (`fetchJson`, `readCsrf`, `postJson`/`postForm`), `dom.js` (`on`/`delegate`/`qs` + `esc` + `renderBadge`), `profiles.js` (config-form editor/profile fns). `static/js/package.json` `{type:module}` marks the dir as ESM (browsers ignore it; enables `node`-level unit checks).
+- `static/css/tokens.css` is the single `:root` token source; `index.css`/`settings.css` consume `var(--…)`, no local `:root`.
+
+**Add a page**: create `templates/<page>.html` → `{% extends 'base.html' %}`; put markup in `{% block content %}`; one `{% block page_module %}<script type="module" src="{{ url_for('static', filename='js/<page>.js', v=asset_version) }}"></script>`; server→client data via a read-once `{% block page_data %}<script>window.__<page>Bootstrap = {{ … | tojson }}</script>` (read once at module top, never for cross-module calls). The `<page>.js` module `import`s from `./lib/*.js`.
+
+**Add a channel card / binding form**: reuse the existing `{% include %}`-with-`{% with channel=… %}` partials (they inherit `csrf_token` via the context processor). **If you ever convert a binding partial to a Jinja `macro`, pass `csrf_token` as an explicit parameter** — macros do NOT inherit context-processor vars, and an empty `csrf_token` → 403 on every bind/save (render tests run `CSRF_ENABLED=False` and won't catch it).
+
+**Anti-rot rules (do not regress):**
+1. **No inline `on*` handlers, no inline `<script>` logic.** Use `data-action="…"` (+ `data-*` for args) and a delegated `addEventListener` in the page module. `return confirm(...)` guards become `data-confirm="…"` handled by `(e)=>{ if(!confirm(msg)) e.preventDefault(); }`.
+2. **No cross-script `window.*` globals as an API.** Modules `import` from `lib/`; cross-component signals use DOM `CustomEvent` (e.g. `channel-binding.js` → `velog:login` → `settings.js`), never a `typeof window.fn` probe (silently no-ops under module scope).
+3. **No untrusted `${…}` into `innerHTML`.** Build nodes with `createElement` + `textContent`/`el.dataset`, or `esc()` (the 5-char superset incl. single-quote). Untrusted = anything from a server/provider response (LLM model ids, error messages).
+4. **`readCsrf()` reads the `<meta>` per call** (never cache in a module const — a rotated token would 403 the fetch transport). Preserve the dual transport: form field `csrf_token` OR `X-CSRFToken` header.
+5. **Bootstrap stays a classic non-`defer`/non-`module` head script** — that ordering guarantees `window.bootstrap` before any deferred page module.
+6. **Bump `asset_version`** (auto, mtime-derived in `webui_app/__init__.py`) is stamped on every `url_for('static', …, v=asset_version)` ref so a long-lived operator session can't serve stale classic JS against new module HTML. Run any UI walkthrough after a hard refresh.
+
+JS interaction has no test framework yet (deferred). pytest covers server-rendered structure + CSRF; pure JS helpers (`esc`) have a `node` check at `tests/js/lib_dom_check.mjs`; behavior is verified by an adversarial manual walkthrough (silent-fail paths: velog bind, paste-to-derive, synthetic-click bind delegation).
+
 ### CLI entrypoints
 
 ```bash
@@ -47,7 +70,7 @@ cat seeds.jsonl | plan-backlinks | validate-backlinks | publish-backlinks --mode
 |---|---|---|
 | `plan-backlinks` | `cli/plan_backlinks/` | Generate articles from seed JSONL |
 | `validate-backlinks` | `cli/validate_backlinks.py` | Validate + enrich |
-| `publish-backlinks` | `cli/publish_backlinks.py` | Publish via platform adapters |
+| `publish-backlinks` | `cli/publish_backlinks/` (package) | Publish via platform adapters |
 | `report-anchors` | `cli/report_anchors.py` | Post-hoc anchor profile |
 | `equity-ledger` | `cli/equity_ledger.py` | Per-target backlink scorecard (read-only JSONL) |
 | `footprint` | `cli/footprint.py` | Link footprint analysis |
@@ -55,9 +78,16 @@ cat seeds.jsonl | plan-backlinks | validate-backlinks | publish-backlinks --mode
 | `audit-state` | `cli/audit_state.py` | Dual-state divergence auditor (read-only) |
 | `preflight-targets` | `cli/preflight_targets.py` | Destination-page health check before publish |
 | `cull-channels` | `cli/cull_channels.py` | Read-only channel-quality cull advisory (Blast-radius R9) |
+| `channel-scorecard` | `cli/channel_scorecard.py` (engine `scorecard/engine.py`) | Read-only per-channel keep/prune scorecard (JSONL): declared registry signals (dofollow / referral_value) beside measured liveness, as a signal vector (no composite). GA4/GSC/AI value axes are `inert:not-landed` (Wave-0 DESCOPE). Also surfaced as a `/ce:health` card. Advisory; exit 0. |
 | `canary-targets` | `cli/canary_targets.py` | Read-only adapter-contract canary: re-fetch dofollow-tier canary posts, assert target backlink still dofollow (advisory; config-driven; exit 0). Runbook: `docs/runbooks/2026-05-27-canary-targets-operations.md` |
 | `plan-gap` | `cli/plan_gap.py` (engine `gap/engine.py`) | Deficit-driven re-plan (read-only, pure): reads `equity-ledger` JSONL on stdin, emits `plan-backlinks` seed JSONL fanning each under-linked target across the active dofollow platforms it lacks a live-dofollow link on. Compose: `equity-ledger \| plan-gap --desired N --language LANG \| plan-backlinks`. Suppresses stale/unverified/failed by default (loud per-reason stderr counts); exit 0 advisory. |
 | `recheck-backlinks` | `cli/recheck_backlinks.py` | Post-publish survival re-probe: liveness / dofollow-drift / link-stripped over published backlinks → `link.rechecked` events + `/ce:health` decay banner. **Network gated behind `--probe` (default = zero-network dry preview).** Exit 0 by default (advisory); `--fail-on-dead` exits 6 only on deterministic dead (host_gone/link_stripped). `dofollow_lost` is advisory (cross-checked vs manifest dofollow truth, may be cloaked). Externally cron/remote-trigger driven; flock guards overlapping runs. Probe identity (preflight UA) is distinct from publish — keep recheck off the publish host's IP/cookies to avoid anti-bot reputation bleed. Runbook: `docs/operations/recheck-backlinks-runbook.md` |
+| `gate-probe` | `cli/gate_probe.py` (engines `gates/*`) | Phase-0 falsification gate (read-only premise probe): `--gate g2` (money-page silent-decay), `g3` (referer render-path audit + Tier-2 GA4 referral intake; static audit alone can KILL; credentials-unavailable → BLOCKED), `g5` (footprint-fingerprint survival re-fetch; anti-bot saturation → terminal INCONCLUSIVE). Emits one `GO`/`KILL`/`INCONCLUSIVE`/`BLOCKED` verdict JSONL on stdout for hand-curation into `docs/ideation/gate-verdicts.md`. First run per gate is a calibration pass (INCONCLUSIVE → set threshold → rerun). Exit 0 advisory. Plan 2026-06-01-005. |
+| `probe-citations` | `cli/probe_citations.py` (kernel `geo/run.py`) | GEO AI-citation closed-loop probe: selects stale (target, query) pairs from events.db (oldest-first, D5 cursor), queries an AI engine (Perplexity v1), classifies the answer tier (site_cited/article_cited/absent/refused), and appends `citation.observed` events. **Network gated behind `--probe` (default = zero-network dry preview).** Exit 0 by default (advisory); `--fail-on-low-share` exits 6 only for measured above-floor targets (warming_up/never_probed suppressed, D10). flock guards overlapping runs. No `--api-key` flag (S4 — key in config/env only). Plan 2026-05-29-006 Unit 7. |
+
+### Gate-first governance (R16, Plan 2026-06-01-005)
+
+A "build a Phase 1–N machine" brainstorm **may not enter `/ce:plan` until its cheap falsification gate returns `GO`** in `docs/ideation/gate-verdicts.md`. Pure-read detection / probes / refactors are exempt. A `KILL` permanently parks the downstream stage; `INCONCLUSIVE` must resample (never default to GO); `BLOCKED` (Tier-2 GA4/GSC credentials unavailable) parks the stage until credentials exist. Run the gate with `gate-probe --gate <id>`. Evidence rows carry aggregate / host-stripped values — **never raw operator money-page URLs** (the no-operator-domain rule applies to `docs/ideation/`, not only `docs/solutions/`).
 
 ### Publish-path forward-path drift (Plan 2026-05-27-006)
 
@@ -268,18 +298,26 @@ Shared safety in `scripts/_worktree_safety.sh`. Tests: `tests/scripts/test_prune
 
 ## Monolith Budget
 
-`monolith_budget.toml` tracks radon SLOC ceilings for **6** source files. Enforced by `tests/test_no_monolith_regrowth.py` (R4 hard-fail + R7 warning canary + radon version pinning).
+`monolith_budget.toml` tracks radon SLOC ceilings for **14** source files (authoritative list is in the TOML; the table below is a summary snapshot — when in doubt, trust the TOML). Enforced by `tests/test_no_monolith_regrowth.py` (R4 hard-fail + R7 warning canary + radon version pinning).
 
 | File | Ceiling |
 |---|---|
-| `cli/plan_backlinks.py` | 1270 |
-| `cli/publish_backlinks.py` | 730 |
-| `content/fetch.py` | 370 |
-| `config/writer.py` | 340 |
-| `_util/markdown.py` | 320 |
-| `events/projector.py` | 580 |
+| `cli/publish_backlinks/__init__.py` | 190 |
+| `cli/plan_backlinks/core.py` | 250 |
+| `cli/generate_backlink_text.py` | 390 |
+| `cli/_publish_helpers.py` | 480 |
+| `cli/phase0_seal.py` | 465 |
+| `cli/plan_check.py` | 260 |
+| `cli/validate_backlinks.py` | 150 |
+| `cli/report_anchors.py` | 120 |
+| `content/fetch.py` | 240 |
+| `config/writer.py` | 240 |
+| `_util/markdown.py` | 240 |
+| `events/_project_reducers.py` | 550 |
+| `events/projector.py` | 110 |
+| `publishing/adapters/__init__.py` | 270 |
 
-If a PR exceeds a ceiling, edit `monolith_budget.toml` in the same PR — raise it and add `rationale` (≥80 chars). `git blame` is the defense; no override label. Bumping `radon` (pinned `==6.0.1`) requires re-measuring all 6 ceilings + updating `SLOC_CANARY_EXPECTED` in `tests/fixtures/sloc_canary.py`.
+If a PR exceeds a ceiling, edit `monolith_budget.toml` in the same PR — raise it and add `rationale` (≥80 chars). `git blame` is the defense; no override label. Bumping `radon` (pinned `==6.0.1`) requires re-measuring all monitored ceilings + updating `SLOC_CANARY_EXPECTED` in `tests/fixtures/sloc_canary.py`.
 
 References: `docs/plans/2026-05-18-006-feat-monolith-sloc-ceiling-plan.md`, `docs/brainstorms/2026-05-18-monolith-loc-ceiling-requirements.md`.
 
@@ -387,7 +425,7 @@ register(
 If the platform name appears in `publishing.registry._REJECTED_PLATFORMS` (the negative-knowledge map seeded from PR #108→#109's `devto` / `mastodon` / `wordpresscom` reverts), `register()` raises `RegistryError` at import time. Un-rejection path: delete the entry from `_REJECTED_PLATFORMS` in the same PR as the new `register()` call — the deletion diff makes the un-rejection visible to reviewers; no `accept_rejection_override` kwarg exists.
 
 Do NOT edit:
-- `cli/publish_backlinks.py` (reads `registered_platforms()` dynamically)
+- `cli/publish_backlinks/__init__.py` (reads `registered_platforms()` dynamically)
 - `cli/plan_backlinks.py` `--default-platform` choices
 - `cli/validate_backlinks.py` unsupported-platform rejection
 - `schema.py` `supported_platforms()` or `reject_unsupported_platform()`

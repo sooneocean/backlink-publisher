@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import re
 
+from .types import DEFAULT_WORK_TEMPLATES, ThreeUrlConfig
+
 
 _SAVE_CONFIG_KNOWN_ROOTS: frozenset[str] = frozenset(
-    {"blogger", "medium", "targets", "ghpages", "mastodon", "image_gen"}
+    {"blogger", "medium", "targets", "ghpages", "gitlabpages", "mastodon", "image_gen"}
 )
 
 _TOML_HEADING_RE = re.compile(
@@ -101,3 +103,48 @@ def _toml_list(values: list[str]) -> str:
     if not values:
         return "[]"
     return "[" + ", ".join(_toml_str(v) for v in values) + "]"
+
+
+def _emit_target_section(
+    domain: str,
+    kws_by_domain: dict[str, list[str]],
+    probe_queries_by_domain: dict[str, list[str]],
+    brand_aliases_by_domain: dict[str, list[str]],
+    three_url_by_domain: dict[str, ThreeUrlConfig],
+) -> list[str]:
+    """Render the ``[targets.<domain>]`` block lines for one domain.
+
+    Extracted from ``save_config`` so the writer stays under its cyclomatic-
+    complexity ceiling — the per-domain conditional emission (anchor_keywords /
+    probe_queries / brand_aliases / three-URL fields) lives here.
+    """
+    lines = [f"[targets.{_toml_str(domain)}]"]
+    if domain in kws_by_domain:
+        lines.append(f"anchor_keywords = {_toml_list(kws_by_domain[domain])}")
+    if domain in probe_queries_by_domain:
+        lines.append(
+            f"probe_queries = {_toml_list(probe_queries_by_domain[domain])}"
+        )
+    if domain in brand_aliases_by_domain:
+        lines.append(
+            f"brand_aliases = {_toml_list(brand_aliases_by_domain[domain])}"
+        )
+    if domain in three_url_by_domain:
+        tu = three_url_by_domain[domain]
+        lines.append(f"main_url = {_toml_str(tu.main_url)}")
+        lines.append(f"list_url = {_toml_str(tu.list_url)}")
+        lines.append(f"work_urls = {_toml_list(tu.work_urls)}")
+        lines.append(f"branded_pool = {_toml_list(tu.branded_pool)}")
+        lines.append(f"partial_pool = {_toml_list(tu.partial_pool)}")
+        lines.append(f"exact_pool = {_toml_list(tu.exact_pool)}")
+        if tu.work_anchor_templates != list(DEFAULT_WORK_TEMPLATES):
+            lines.append(
+                f"work_anchor_templates = {_toml_list(tu.work_anchor_templates)}"
+            )
+        if tu.list_path_blocklist is not None:
+            lines.append(
+                f"list_path_blocklist = {_toml_list(tu.list_path_blocklist)}"
+            )
+        if tu.insecure_tls:
+            lines.append("insecure_tls = true")
+    return lines

@@ -123,12 +123,10 @@
 
   function _triggerChannelBind(channel, btn, card) {
     if (channel === 'velog') {
-      // Velog uses its own login flow defined in _settings_channel_velog.html.
-      if (typeof runVelogLogin === 'function') {
-        runVelogLogin({ preventDefault: function () {} });
-      } else {
-        renderResult(card, { _error: 'runVelogLogin not available' });
-      }
+      // Velog login lives in settings.js (Plan 007 U3). Bridge to it via a DOM
+      // CustomEvent instead of probing a window global — under ES-module scope a
+      // `typeof runVelogLogin` probe is always false and would silently no-op.
+      document.dispatchEvent(new CustomEvent('velog:login'));
       return;
     }
     // medium / blogger — open the channel collapse section, then click bind btn.
