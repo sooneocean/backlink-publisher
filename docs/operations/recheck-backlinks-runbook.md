@@ -60,6 +60,28 @@ unaddressed decay.
 
 See [Remediation Queue](#remediation-queue) below for CLI and WebUI workflows.
 
+### Automation feedback loop
+
+For the full automation service, `recheck-backlinks` is the monitoring input,
+not the publisher. Keep the loop explicit:
+
+```bash
+# Zero-network preview of candidates.
+recheck-backlinks
+
+# Operator-approved live probe.
+recheck-backlinks --probe
+
+# Deterministic dead-link replan seeds from events.db.
+replan-dead --days 30 --min-gap 3 > replan-seeds.jsonl
+
+# Safe preview of the follow-up publish plan.
+auto-publish < replan-seeds.jsonl > auto-preview.jsonl
+```
+
+Only `host_gone` and `link_stripped` drive `replan-dead`. `dofollow_lost` stays
+advisory and needs human confirmation before republishing.
+
 ## Baseline metric (is the loop yielding?)
 
 Commit a falsifiable bar **before** trusting the loop, then validate it on the

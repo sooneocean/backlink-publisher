@@ -420,13 +420,13 @@ def _get_degraded_platforms() -> set[str]:
 
 
 def _get_hard_skip_platforms(cfg: Any) -> set[str]:
-    """Return platforms explicitly configured for hard-skip."""
+    """Return quarantined platforms explicitly configured for hard-skip."""
     from backlink_publisher.canary.store import read_canary_config
 
     hard_skip = set()
     for platform in _identify_platforms(_loaded_seeds or []):
         canary_cfg = read_canary_config(platform)
-        if canary_cfg and canary_cfg.get("hard_skip"):
+        if canary_cfg and canary_cfg.get("hard_skip") and is_quarantined(platform):
             hard_skip.add(platform)
     return hard_skip
 

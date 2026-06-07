@@ -7,17 +7,15 @@ thresholds are crossed. Implements debouncing to prevent false positives.
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from backlink_publisher.canary.store import (
     QUARANTINE_AFTER_N,
     REARM_AFTER_M,
     list_all,
-    read_canary_config,
 )
+from backlink_publisher._util.logger import get_logger
 
 from .signals import (
     HealthSignal,
@@ -26,7 +24,7 @@ from .signals import (
     SIGNAL_CHANNEL_EXPIRED,
 )
 
-_log = logging.getLogger("watchdog")
+_log = get_logger("watchdog")
 
 
 # Alert cooldown to prevent flooding

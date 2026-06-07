@@ -13,6 +13,11 @@
 
 <main class="container py-4">
 
+    <div class="alert alert-info border-0 shadow-sm" role="status">
+        <strong>Claim boundary:</strong>
+        Draft, dry-run, and unverified HTTP 200 are not live dofollow success.
+    </div>
+
     {# Pipeline Throughput Panel #}
     <div class="card shadow-sm mb-4">
         <div class="card-header bg-white fw-semibold">Pipeline Throughput</div>
@@ -160,7 +165,7 @@
                     at {{ alert.ts_utc }}
                 </div>
                 <div class="small text-muted">
-                    {{ alert.reason }} | Action: {{ alert.action_taken }}
+                    {{ alert.reason }}{% if alert.draft_label %} | Draft: {{ alert.draft_label }}{% endif %} | Action: {{ alert.action_taken }}
                 </div>
             </div>
             {% endfor %}

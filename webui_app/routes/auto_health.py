@@ -6,8 +6,8 @@ Exits never 500 (R5 fail-open contract).
 
 from __future__ import annotations
 
+import json
 import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from flask import Blueprint
@@ -154,18 +154,29 @@ def _recent_alerts() -> list[dict[str, Any]]:
     """Read recent automation alerts."""
     try:
         from backlink_publisher.events import EventStore
+        from backlink_publisher.events.kinds import PUBLISH_QUALITY_BLOCKED
 
         store = EventStore()
         rows = store.query(
-            "SELECT raw_payload_json FROM events WHERE kind = 'auto_publish_hard_skip_advisory' "
-            "ORDER BY ts DESC LIMIT 20"
+            "SELECT ts_utc, target_url, host, payload_json FROM events "
+            "WHERE kind = ? ORDER BY ts_utc DESC LIMIT 20",
+            (PUBLISH_QUALITY_BLOCKED,),
         )
         alerts = []
         for row in rows:
             try:
-                alerts.append(json.loads(row[0] or "{}"))
+                payload = json.loads(row["payload_json"] or "{}")
             except (TypeError, ValueError):
                 continue
+            alerts.append({
+                "alert_type": "quality blocked",
+                "platform": row["host"] or payload.get("platform") or "unknown",
+                "ts_utc": row["ts_utc"],
+                "reason": payload.get("quality_check") or "unknown_quality_check",
+                "action_taken": "review draft before publish",
+                "draft_label": payload.get("draft_label") or "unknown_draft",
+                "target_url": row["target_url"],
+            })
         return alerts
     except Exception as exc:
         _log.warning("auto_health: recent alerts read failed: %s", exc)
