@@ -1338,6 +1338,16 @@ class TestCopilotRoutes:
         assert resp.is_json
 
 
+class TestAutoHealthRoutes:
+    """/auto-health — automation metrics dashboard (Plan 2026-06-07 R5).
+    GET-only, fail-open contract: always returns 200.
+    """
+
+    def test_get_auto_health_returns_200(self, client):
+        resp = client.get("/auto-health")
+        assert resp.status_code == 200
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".
