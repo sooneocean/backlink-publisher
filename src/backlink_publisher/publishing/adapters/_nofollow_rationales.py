@@ -71,6 +71,17 @@ NOFOLLOW_RATIONALES: dict[str, str] = {
         "backlink value. referral_value=\"low\"; visibility=\"hidden\" "
         "prevents operator confusion."
     ),
+    "notesio": (
+        "Notes.io renders user-posted content as plain text — backlinks "
+        "in the post body appear only as raw URL text, not clickable "
+        "<a> HTML elements (Playwright probe 2026-06-08 confirmed "
+        "Markdown [text](url) and bare URLs are displayed verbatim in "
+        "a plain-text <div>, never converted to anchor tags). Dofollow "
+        "\"uncertain\" per plan 2026-06-02-002; page-level dofollow "
+        "counts (12/0 discovery) came from navigation/footer links, "
+        "not user content. referral_value=\"low\"; visibility=\"hidden\" "
+        "prevents operator confusion."
+    ),
     # --- Phase 1 channel-expansion dofollow truth audit (2026-05-26) ---
     # The 16 Phase-1 adapters shipped with bare ``dofollow=True`` and no
     # evidence. This audit downgrades every one: hard server-side

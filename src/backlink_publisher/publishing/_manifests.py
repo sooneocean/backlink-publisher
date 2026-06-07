@@ -676,6 +676,16 @@ NONOGRAPH_MANIFEST: dict[str, Any] = dict(
     ),
 )
 
+# Notes.io — anonymous plain-text pastebin, form POST (Wave 3).
+NOTESIO_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Notes.io",
+        domain="notes.io",
+        category="anonymous-paste",
+        icon="bi-sticky",
+    ),
+)
+
 # Pubmark — free instant Markdown publishing, REST API (this wave).
 PUBMARK_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(
