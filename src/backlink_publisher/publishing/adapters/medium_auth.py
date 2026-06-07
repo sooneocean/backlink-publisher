@@ -34,9 +34,9 @@ try:
     from playwright.sync_api import sync_playwright, TimeoutError as _PWTimeout
     from playwright.sync_api import Error as _PWError
 except ImportError:
-    sync_playwright = None          # type: ignore[assignment]
-    _PWTimeout = Exception          # type: ignore[misc]
-    _PWError = Exception            # type: ignore[misc]
+    sync_playwright = None          # type: ignore[assignment]  # reason: fallback when playwright not installed; guarded by DependencyError
+    _PWTimeout = Exception          # type: ignore[misc]  # reason: fallback type alias for optional dependency
+    _PWError = Exception            # type: ignore[misc]  # reason: fallback type alias for optional dependency
 
 _LOCK_FILENAME = "medium-browser.lock"
 _UI_LOCK_TIMEOUT = 10      # seconds the UI waits before fail-fast

@@ -309,7 +309,7 @@ def generate_link_text(
 
     # Extract content from the OpenAI chat-completions envelope.
     try:
-        content = body["choices"][0]["message"]["content"]  # type: ignore[index]
+        content = body["choices"][0]["message"]["content"]  # type: ignore[index]  # reason: typed dict lacks recursive index; guarded by try/except
     except (KeyError, IndexError, TypeError) as exc:
         raise ExternalServiceError(
             f"LLM response missing choices[0].message.content: "

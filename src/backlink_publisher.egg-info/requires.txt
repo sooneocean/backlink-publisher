@@ -3,6 +3,7 @@ google-api-python-client>=2.196
 google-auth-oauthlib>=1.4
 google-auth-httplib2>=0.2
 playwright>=1.55
+openai>=2.0
 requests>=2.32.4
 websocket-client>=1.9
 beautifulsoup4>=4.13

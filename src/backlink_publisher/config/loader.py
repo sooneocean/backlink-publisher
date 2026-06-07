@@ -26,7 +26,7 @@ from .types import (
 if sys.version_info >= (3, 11):
     import tomllib
 else:
-    import tomli as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[no-redef]  # reason: conditional import for Python <3.11 compat; tomllib name reused intentionally
 
 from .parsers.alarm import _parse_anchor_alarm
 from .parsers.anchor import _parse_anchor_proportions
@@ -328,7 +328,7 @@ def _resolve_medium_integration_token(toml_value: str | None) -> str | None:
     if token_data:
         token = token_data.get("integration_token", "").strip()
         if token:
-            return token  # type: ignore[no-any-return]
+            return token  # type: ignore[no-any-return]  # reason: token is str from .get() but mypy can't narrow
     return toml_value
 
 

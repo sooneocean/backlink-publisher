@@ -117,7 +117,7 @@ def load_frw_token() -> str:
             f"frw-token.json missing or empty 'api_key' field at {path}\n"
             "Run `frw-login` to rewrite it."
         )
-    return key  # type: ignore[no-any-return]
+    return key  # type: ignore[no-any-return]  # reason: key is str from dict access but mypy can't narrow the type
 
 
 # ── 3 + 4 + 5 + 6. Write under flock with μs-precise orphan archive ─────────

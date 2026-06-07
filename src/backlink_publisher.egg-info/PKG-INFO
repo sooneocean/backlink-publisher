@@ -8,6 +8,7 @@ Requires-Dist: google-api-python-client>=2.196
 Requires-Dist: google-auth-oauthlib>=1.4
 Requires-Dist: google-auth-httplib2>=0.2
 Requires-Dist: playwright>=1.55
+Requires-Dist: openai>=2.0
 Requires-Dist: requests>=2.32.4
 Requires-Dist: websocket-client>=1.9
 Requires-Dist: beautifulsoup4>=4.13

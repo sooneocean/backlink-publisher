@@ -1136,6 +1136,19 @@ class TestQueueDashboardRoutes:
         data = resp.get_json()
         assert data["status"] == "success"
 
+    def test_ce_health_remediation_missing_fields_returns_400(self, client):
+        """Plan 2026-06-07-001 Phase A Unit 4 — POST /ce:health/remediation
+        with missing action/live_url returns 400 before hitting EventStore."""
+        resp = client.post("/ce:health/remediation", json={})
+        assert resp.status_code == 400
+        assert resp.is_json
+        assert resp.get_json()["ok"] is False
+
+    def test_ce_health_remediation_missing_csrf_returns_403(self, csrf_client):
+        """Same route under CSRF guard returns 403 when token is missing."""
+        resp = csrf_client.post("/ce:health/remediation", json={})
+        assert resp.status_code == 403
+
 
 class TestBindRoutes:
     """Plan 2026-05-19-001 Unit 4 + Plan 003 Unit 4 — POST + GET smoke for

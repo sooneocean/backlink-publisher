@@ -109,3 +109,22 @@ class WebUIStores:
         if self._wizard_config is None:
             self._wizard_config = WizardConfigStore(_config_dir() / "wizard-config.json")
         return self._wizard_config
+
+    # ── Lifecycle ─────────────────────────────────────────────────────────
+
+    def unload_all(self) -> None:
+        """Discard all cached store instances.
+
+        The next property access will re-create the store from its factory
+        (lazy initialisation).  Call this periodically from a background
+        scheduler job to keep the memory footprint of a long-running WebUI
+        session predictable.
+        """
+        self._history = None
+        self._profiles = None
+        self._drafts = None
+        self._schedule = None
+        self._queue = None
+        self._score = None
+        self._seen_urls = None
+        self._wizard_config = None

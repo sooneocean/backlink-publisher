@@ -107,8 +107,12 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
 
     # Plan 2026-05-22 P7 C1: register app-context stores so WebUI routes
     # can access them via ``current_app.extensions['webui_stores']``.
+    # Keep a module-level reference for lifecycle management (periodic
+    # unload of cached store instances — see Unit 1.3 of the 2026-06-07
+    # optimization audit).
     from webui_store.registry import WebUIStores
-    WebUIStores().init_app(app)
+    _webui_stores = WebUIStores()
+    _webui_stores.init_app(app)
 
     # Share the publish-path markdown→HTML renderer with Jinja so preview
     # visual matches the published article (Plan 2026-05-19-007 Unit 2).
@@ -310,5 +314,18 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
                 _log.info("chrome_session.reap_orphan_publish_chrome: %s", outcome)
         except Exception as exc:  # noqa: BLE001 — startup must not crash
             _log.warning("chrome_session.reap_orphan_publish_chrome failed: %s", exc)
+
+        # Plan 2026-06-07 Unit 1.3 — periodic store lifecycle cleanup.
+        # Discards cached store instances every 30 minutes so a long-running
+        # WebUI session doesn't accumulate stale references.  Each store reads
+        # its backing JSON file from disk on every ``load()``, so dropping the
+        # instance costs nothing — the next property access re-creates it.
+        _scheduler.add_job(
+            _webui_stores.unload_all,
+            trigger="interval",
+            minutes=30,
+            id="store_lifecycle_cleanup",
+            replace_existing=True,
+        )
 
     return app

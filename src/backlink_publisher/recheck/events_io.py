@@ -80,31 +80,54 @@ def emit_recheck(store: "EventStore", results: list[dict]) -> int:
     return written
 
 
-def derive_decay_counts(store: "EventStore") -> dict[str, int]:
+def derive_decay_counts(
+    store: "EventStore",
+    *,
+    exclude_resolved: bool = False,
+) -> dict[str, int]:
     """Count links by their latest ``link.rechecked`` verdict (current state).
 
     Returns a count for every verdict in :data:`verdicts.VERDICTS` (0 when
     absent). The dashboard banner (U6) keys off ``host_gone`` / ``link_stripped``
     / ``dofollow_lost``; ``alive`` / ``probe_error`` are returned for context.
+
+    When ``exclude_resolved=True``, links whose latest ``remediation.event``
+    action is ``resolve`` are excluded from the counts — only **unresolved**
+    decay is reported. This is used by the ``/ce:health`` banner to show an
+    operator what still needs attention.
     """
+    resolved: set[str] = set()
+    if exclude_resolved:
+        # Read resolved live_urls from remediation events.
+        from backlink_publisher.remediation.events_io import resolved_live_urls
+        resolved = resolved_live_urls(store)
+
     counts = {v: 0 for v in verdicts.VERDICTS}
-    latest: dict[int, tuple[datetime | None, str]] = {}  # article_id -> (ts, verdict)
+    # Key by live_url (payload field) because article_id may be NULL on
+    # stdin-sourced rechecks. Fallback to article_id when payload lacks live_url.
+    latest: dict[str, tuple[datetime | None, str]] = {}
     sql = (
         "SELECT article_id, payload_json, ts_utc FROM events "
         "WHERE kind = ? AND article_id IS NOT NULL"
     )
     for row in store.query(sql, (LINK_RECHECKED,)):
         try:
-            verdict = json.loads(row["payload_json"] or "{}").get("verdict")
+            payload = json.loads(row["payload_json"] or "{}")
+            verdict = payload.get("verdict")
         except (ValueError, TypeError):
             continue
         if verdict not in verdicts.VERDICTS:
             continue
         ts = _parse_ts(row["ts_utc"])
-        aid = row["article_id"]
-        prev = latest.get(aid)
+        # Key by live_url, fallback to article_id for backwards compatibility.
+        live_url = payload.get("live_url")
+        key: str = live_url if isinstance(live_url, str) and live_url else str(row["article_id"])
+        prev = latest.get(key)
         if prev is None or (ts is not None and (prev[0] is None or ts > prev[0])):
-            latest[aid] = (ts, verdict)
-    for _ts, verdict in latest.values():
+            latest[key] = (ts, verdict)
+    for key, (_ts, verdict) in latest.items():
+        # Skip resolved links when exclude_resolved is True.
+        if exclude_resolved and key in resolved:
+            continue
         counts[verdict] += 1
     return counts

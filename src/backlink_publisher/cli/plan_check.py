@@ -81,8 +81,8 @@ def _emit_error_and_exit(
     json_status: str,
     json_flag: bool,
     fetch_outcome: object = None,
-    paths_missing: list = (),  # type: ignore[assignment]
-    shas_unreachable: list = (),  # type: ignore[assignment]
+    paths_missing: list = (),  # type: ignore[assignment]  # reason: tuple default for mutable param is intentional — never mutated in this path
+    shas_unreachable: list = (),  # type: ignore[assignment]  # reason: same pattern as paths_missing — tuple default, never mutated
 ) -> None:
     """Print *stderr_msg*, optionally emit JSON, then call ``emit_envelope_and_exit``.
 
@@ -117,12 +117,12 @@ def _resolve_claims(claims: object) -> tuple[list[str], list[str]]:
     operator's perspective.
     """
     paths_missing: list[str] = []
-    for p in claims.paths:  # type: ignore[attr-defined]
+    for p in claims.paths:  # type: ignore[attr-defined]  # reason: claims is object (untyped param); accessed via hasattr guard upstream
         ok, _ = _path_exists_on_main(p)
         if not ok:
             paths_missing.append(p)
     shas_unreachable: list[str] = []
-    for s in claims.shas:  # type: ignore[attr-defined]
+    for s in claims.shas:  # type: ignore[attr-defined]  # reason: same as claims.paths — untyped object param
         ok, _ = _sha_reachable_from_main(s)
         if not ok:
             shas_unreachable.append(s)

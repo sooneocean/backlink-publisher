@@ -84,6 +84,68 @@
   </div>
   {% endif %}
 
+  {# ── Remediation Queue card (Plan 2026-06-07-001 Phase A Unit 4) ─────── #}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span><i class="bi bi-tools me-2"></i>Remediation Queue</span>
+      {% if remediation_rows %}
+        <span class="badge bg-warning text-dark">{{ remediation_rows|length }} unresolved</span>
+      {% else %}
+        <span class="badge bg-success">0 unresolved</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if remediation_rows %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Live URL</th>
+                <th>Latest Verdict</th>
+                <th>Action</th>
+                <th>Note</th>
+                <th style="width:180px">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in remediation_rows %}
+              <tr>
+                <td class="target-cell" title="{{ row.live_url }}">{{ row.live_url[:60] }}{% if row.live_url|length > 60 %}…{% endif %}</td>
+                <td>
+                  <span class="badge {% if row.latest_action == 'ack' %}bg-info{% elif row.latest_action == 'snooze' %}bg-secondary{% else %}bg-warning{% endif %}">
+                    {{ row.latest_action or 'unseen' }}
+                  </span>
+                </td>
+                <td>{{ row.snoozed_until or '—' }}</td>
+                <td>{{ row.note or '' }}</td>
+                <td>
+                  <button class="btn btn-sm btn-outline-primary remediate-btn"
+                          data-action="ack" data-live-url="{{ row.live_url }}"
+                          title="Acknowledge (seen, not yet fixed)">Ack</button>
+                  <button class="btn btn-sm btn-outline-success remediate-btn"
+                          data-action="resolve" data-live-url="{{ row.live_url }}"
+                          title="Mark as resolved">Resolve</button>
+                  <button class="btn btn-sm btn-outline-secondary remediate-btn"
+                          data-action="snooze" data-live-url="{{ row.live_url }}"
+                          title="Snooze 7 days">Snooze 7d</button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="small text-muted mt-2">
+          Use <code>remediation-queue --ack <url></code> or <code>--resolve</code> from CLI.
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">
+          <i class="bi bi-check-circle text-success me-1"></i>
+          No unresolved backlink decay — all clear.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+
   {# ── 1. Hero success rate (R6, R10) ───────────────────────────────────── #}
   <div class="card shadow-sm mb-4">
     <div class="card-body text-center">
@@ -457,5 +519,55 @@
 </main>
 {# Pro Mode Copilot — side panel (Plan U4) #}
 {% include '_copilot_panel.html' %}
+
+<script>
+(function() {
+  // Remediation Queue — ack/resolve/snooze button handlers
+  // Uses data-action + data-live-url from the remediation card buttons.
+  // Reads csrf-token from <meta> per-call (never cached, per anti-rot rule 4).
+  function readCsrf() {
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    return meta ? meta.getAttribute('content') : '';
+  }
+
+  document.querySelectorAll('.remediate-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var action = btn.getAttribute('data-action');
+      var liveUrl = btn.getAttribute('data-live-url');
+      if (!action || !liveUrl) return;
+
+      // Disable button during request
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      var body = JSON.stringify({action: action, live_url: liveUrl});
+      fetch('/ce:health/remediation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': readCsrf()
+        },
+        body: body
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          // Reload the page so the remediation card reflects the new state
+          window.location.reload();
+        } else {
+          alert('Remediation action failed: ' + (data.error || 'unknown error'));
+          btn.disabled = false;
+          btn.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+        }
+      })
+      .catch(function(err) {
+        alert('Remediation request failed: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+      });
+    });
+  });
+})();
+</script>
 </body>
 </html>

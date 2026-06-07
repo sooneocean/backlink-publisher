@@ -83,6 +83,11 @@ jobs:
           python -m mypy src/backlink_publisher --config-file mypy.ini || true
         continue-on-error: true
 
+      - name: Check formatting with Black (non-blocking)
+        run: |
+          black --check --diff src/ || true
+        continue-on-error: true
+
       # NOTE: The 4-step `python -m` smoke pipeline (Generate / Validate / Dry-run
       # publish / Show) that used to live here was deleted in 2026-05-20.
       # Until commit 4a3ecf0 restored the `python -m backlink_publisher.cli.plan_backlinks`

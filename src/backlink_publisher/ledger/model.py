@@ -36,7 +36,7 @@ def worst_liveness(statuses: list[str]) -> LivenessStatus:
     for status in statuses:
         if _LIVENESS_RANK.get(status, 0) > _LIVENESS_RANK[worst]:
             worst = status
-    return worst  # type: ignore[return-value]
+    return worst  # type: ignore[return-value]  # reason: worst is str from dict lookup; _LIVENESS_RANK keys are Literal but mypy can't narrow
 
 
 @dataclass

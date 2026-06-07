@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Final
 
-# --- Seam A: the event-kind vocabulary (15 kinds; do NOT rename) ---------
+# --- Seam A: the event-kind vocabulary (do NOT rename) -------------------
 
 PUBLISH_INTENT: Final = "publish.intent"
 PUBLISH_CONFIRMED: Final = "publish.confirmed"
@@ -55,6 +55,12 @@ CITATION_OBSERVED: Final = "citation.observed"
 #: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
 #: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
 LINK_RECHECKED: Final = "link.rechecked"
+#: Operator action on a backlink decay event — ack / resolve / snooze (Plan
+#: 2026-06-07-001 Phase A). Written directly by the ``remediation-queue`` CLI
+#: or the WebUI remediation panel via ``EventStore.append`` — not through the
+#: projector. Carries the action type in ``payload["action"]`` and the target
+#: link URL in ``payload["live_url"]`` (both in the REQUIRED_FIELDS floor).
+REMEDIATION_EVENT: Final = "remediation.event"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -76,6 +82,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_DISABLED_AUTO,
         CITATION_OBSERVED,
         LINK_RECHECKED,
+        REMEDIATION_EVENT,
     }
 )
 
@@ -130,6 +137,9 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # cursor) needs; target identity travels in the events.db first-class
     # columns (target_url/host/article_id), not the floor.
     LINK_RECHECKED: frozenset({"verdict"}),
+    # The action + live_url are the load-bearing fields: every remediation
+    # event must declare what action was taken and on which backlink.
+    REMEDIATION_EVENT: frozenset({"action", "live_url"}),
 }
 
 

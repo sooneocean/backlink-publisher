@@ -73,6 +73,7 @@ src/backlink_publisher/cli/_resume.py
 src/backlink_publisher/cli/_seal_init.py
 src/backlink_publisher/cli/_validate_payload.py
 src/backlink_publisher/cli/audit_state.py
+src/backlink_publisher/cli/auto_retire.py
 src/backlink_publisher/cli/bind_channel.py
 src/backlink_publisher/cli/canary_targets.py
 src/backlink_publisher/cli/canonical_expand.py
@@ -84,6 +85,7 @@ src/backlink_publisher/cli/footprint.py
 src/backlink_publisher/cli/frw_login.py
 src/backlink_publisher/cli/gate_probe.py
 src/backlink_publisher/cli/generate_backlink_text.py
+src/backlink_publisher/cli/loop_backlinks.py
 src/backlink_publisher/cli/medium_login.py
 src/backlink_publisher/cli/phase0_seal.py
 src/backlink_publisher/cli/plan_check.py
@@ -94,6 +96,7 @@ src/backlink_publisher/cli/preview_manifest.py
 src/backlink_publisher/cli/probe_citations.py
 src/backlink_publisher/cli/recheck_backlinks.py
 src/backlink_publisher/cli/recheck_overlay.py
+src/backlink_publisher/cli/remediation_queue.py
 src/backlink_publisher/cli/report_anchors.py
 src/backlink_publisher/cli/validate_backlinks.py
 src/backlink_publisher/cli/velog_login.py
@@ -158,9 +161,12 @@ src/backlink_publisher/content/fetch.py
 src/backlink_publisher/content/scraper.py
 src/backlink_publisher/content/themed_gen.py
 src/backlink_publisher/content_generation/__init__.py
+src/backlink_publisher/content_generation/openai_sdk.py
 src/backlink_publisher/content_generation/service.py
 src/backlink_publisher/content_generation/types.py
 src/backlink_publisher/content_generation/validator.py
+src/backlink_publisher/credentials/__init__.py
+src/backlink_publisher/credentials/health.py
 src/backlink_publisher/events/__init__.py
 src/backlink_publisher/events/_project_helpers.py
 src/backlink_publisher/events/_project_reducers.py
@@ -271,6 +277,7 @@ src/backlink_publisher/publishing/adapters/zenn_github.py
 src/backlink_publisher/publishing/adapters/image_gen/__init__.py
 src/backlink_publisher/publishing/adapters/image_gen/adapter.py
 src/backlink_publisher/publishing/adapters/image_gen/caps.py
+src/backlink_publisher/publishing/adapters/image_gen/openai_sdk.py
 src/backlink_publisher/publishing/adapters/image_gen/storage.py
 src/backlink_publisher/publishing/adapters/image_gen/types.py
 src/backlink_publisher/publishing/browser_publish/__init__.py
@@ -295,6 +302,9 @@ src/backlink_publisher/recheck/overlay.py
 src/backlink_publisher/recheck/probe.py
 src/backlink_publisher/recheck/selection.py
 src/backlink_publisher/recheck/verdicts.py
+src/backlink_publisher/remediation/__init__.py
+src/backlink_publisher/remediation/actions.py
+src/backlink_publisher/remediation/events_io.py
 src/backlink_publisher/schedule/__init__.py
 src/backlink_publisher/schedule/engine.py
 src/backlink_publisher/scorecard/__init__.py
@@ -406,6 +416,7 @@ tests/test_config_echo.py
 tests/test_config_example_pool.py
 tests/test_config_geo_provider.py
 tests/test_config_geo_targets.py
+tests/test_config_image_gen_provider.py
 tests/test_config_llm_sidecar.py
 tests/test_config_managed_root_subsection_roundtrip.py
 tests/test_config_public_api_resolvable.py
@@ -544,6 +555,8 @@ tests/test_no_orphaned_guard_scripts.py
 tests/test_no_raw_home_path_primitives.py
 tests/test_notion_adapter.py
 tests/test_offline_bound_registry_dispatch.py
+tests/test_openai_sdk_content_provider.py
+tests/test_openai_sdk_image_adapter.py
 tests/test_overview_auth_type_rendering.py
 tests/test_performance_profiling.py
 tests/test_phase0_allowlist.py
@@ -563,6 +576,7 @@ tests/test_plan_backlinks.py
 tests/test_plan_backlinks_ai_generation.py
 tests/test_plan_backlinks_banner.py
 tests/test_plan_backlinks_dofollow_tier.py
+tests/test_plan_backlinks_image2_runtime.py
 tests/test_plan_backlinks_work_themed.py
 tests/test_plan_backlinks_zh_scheduler.py
 tests/test_plan_check_helpers.py
