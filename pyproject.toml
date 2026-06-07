@@ -57,10 +57,13 @@ plan-gap = "backlink_publisher.cli.plan_gap:main"
 recheck-backlinks = "backlink_publisher.cli.recheck_backlinks:main"
 gate-probe = "backlink_publisher.cli.gate_probe:main"
 recheck-overlay = "backlink_publisher.cli.recheck_overlay:main"
+auto-publish = "backlink_publisher.automation.orchestrator:main"
 canonical-expand = "backlink_publisher.cli.canonical_expand:main"
 pr-opportunities = "backlink_publisher.cli.pr_opportunities:main"
 probe-citations = "backlink_publisher.cli.probe_citations:main"
 remediation-queue = "backlink_publisher.cli.remediation_queue:main"
+replan-dead = "backlink_publisher.cli.replan_dead:main"
+quality-gate = "backlink_publisher.cli.quality_gate:main"
 bp-mcp = "backlink_publisher.mcp.server:main"
 
 [tool.setuptools.packages.find]

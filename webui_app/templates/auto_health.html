@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% block title %}Automation Health{% endblock %}
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/index.css', v=asset_version) }}">
+{% endblock %}
+{% block content %}
+<nav class="navbar" style="display:flex;justify-content:space-between;align-items:center;">
+    <h1><i class="bi bi-robot me-2"></i>Automation Health</h1>
+    <a href="/" class="btn btn-sm" style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.5);">
+        <i class="bi bi-house"></i> Home
+    </a>
+</nav>
+
+<main class="container py-4">
+
+    {# Pipeline Throughput Panel #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Pipeline Throughput</div>
+        {% if throughput and throughput.total %}
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="text-muted small">Total Publishes</div>
+                    <div class="fs-4">{{ throughput.total }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Success Rate</div>
+                    <div class="fs-4 {% if throughput.success_rate >= 90 %}text-success{% elif throughput.success_rate >= 70 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ throughput.success_rate }}%
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Successful</div>
+                    <div class="fs-4">{{ throughput.successful }}</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Failed</div>
+                    <div class="fs-4">{{ throughput.failed }}</div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="card-body text-muted text-center py-4">No publish activity recorded yet.</div>
+        {% endif %}
+    </div>
+
+    {# Recovery Queue Panel #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Recovery Queue</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="text-muted small">Pending Rebinds</div>
+                    <div class="fs-5">{{ recovery.pending_rebinds or 0 }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Pending Republishes</div>
+                    <div class="fs-5">{{ recovery.pending_republishes or 0 }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Completed</div>
+                    <div class="fs-5">{{ recovery.completed or 0 }}</div>
+                </div>
+            </div>
+            {% if recovery.rebind_tasks %}
+            <hr>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Platform</th>
+                            <th>Status</th>
+                            <th>Task ID</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in recovery.rebind_tasks %}
+                        <tr>
+                            <td>{{ task.platform }}</td>
+                            <td><span class="badge text-bg-warning">{{ task.status }}</span></td>
+                            <td class="text-muted small">{{ task.id }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Canary Health Panel #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Canary Health Status</div>
+        {% if canary %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Platform</th>
+                        <th>Status</th>
+                        <th class="text-end">Drift Streak</th>
+                        <th class="text-end">OK Streak</th>
+                        <th>Quarantined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in canary %}
+                    <tr class="{% if c.status == 'drift-confirmed' or c.quarantined %}row-worst{% endif %}">
+                        <td>{{ c.platform }}</td>
+                        <td>
+                            {% if c.status == 'link-alive' %}<span class="badge text-bg-success">link-alive</span>
+                            {% elif c.status == 'drift-confirmed' %}<span class="badge text-bg-danger">drift-confirmed</span>
+                            {% elif c.status == 'advisory' %}<span class="badge text-bg-warning">advisory</span>
+                            {% else %}<span class="badge text-bg-secondary">{{ c.status or 'not-configured' }}</span>{% endif %}
+                        </td>
+                        <td class="text-end">{{ c.consecutive_failures or 0 }}</td>
+                        <td class="text-end">{{ c.consecutive_oks or 0 }}</td>
+                        <td>{% if c.quarantined %}<span class="badge text-bg-danger">quarantined</span>{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body text-muted text-center py-4">No canary data yet.</div>
+        {% endif %}
+    </div>
+
+    {# Resource Budget Panel #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Resource Budget</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="text-muted small">Throttle Min (s)</div>
+                    <div class="fs-5">{{ resources.throttle_min or 60 }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Throttle Max (s)</div>
+                    <div class="fs-5">{{ resources.throttle_max or 300 }}</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-muted small">Per-Run Cap</div>
+                    <div class="fs-5">{{ resources.per_run_cap or 50 }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Recent Alerts Panel #}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white fw-semibold">Recent Alerts</div>
+        {% if alerts %}
+        <div class="card-body">
+            {% for alert in alerts %}
+            <div class="alert alert-warning py-2 mb-2">
+                <div class="small">
+                    <strong>{{ alert.alert_type }}</strong>
+                    — {{ alert.platform }}
+                    at {{ alert.ts_utc }}
+                </div>
+                <div class="small text-muted">
+                    {{ alert.reason }} | Action: {{ alert.action_taken }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="card-body text-muted text-center py-4">No recent alerts.</div>
+        {% endif %}
+    </div>
+
+</main>
+{% endblock %}
+
+{% block page_module %}
+    {# No page module needed — static template #}
+{% endblock %}

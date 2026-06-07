@@ -36,25 +36,29 @@ only closed by a human, so name the owner and cadence:
   publish pipeline). 
 - **Cadence:** review the `/ce:health` decay banner once per working day (and on
   any `--fail-on-dead` cron alert).
-- **Per-verdict remediation:**
+- **Per-verdict remediation (close the loop):**
   - `host_gone` / `link_stripped` → the page or backlink is gone. Re-publish the
-    backlink elsewhere or remove the dead target from active tracking.
+    backlink elsewhere or remove the dead target from active tracking. After
+    acting, resolve via `remediation-queue --resolve <live_url>` or the
+    `/ce:health` remediation panel Resolve button.
   - `dofollow_lost` → **advisory, confirm before acting.** The verifier UA may be
     cloaked (the platform can serve dofollow to real visitors and nofollow to the
     canary). Manually open the live page; if genuinely nofollow, decide whether
-    to accept it or escalate to the platform.
+    to accept it or escalate to the platform. Escalate the operator decision
+    with `remediation-queue --ack <live_url> --note "confirmed nofollow"`.
   - `probe_error` → transient/anti-bot/unreachable. No action; it stays selectable
-    and will be re-probed. (A persistent cluster signals a host or anti-bot issue
-    worth investigating manually.)
+    and will be re-probed. Optionally snooze noisy links:
+    `remediation-queue --snooze <live_url> --days 7`.
 
-### Open-loop honesty
+### Closed-loop with remediation queue
 
-Until the R6 fast-follow lands there is **no remediation-status store**: after you
-fix a dead link, events.db has nowhere to record "handled," so the `/ce:health`
-banner keeps showing the same decay count until the next probe re-verifies the
-link. Do **not** read a steady banner count as "nobody acted." A lightweight
-ack/snooze is intentionally out of scope this release (the origin made a
-remediation queue a non-goal).
+Phase A (Plan 2026-06-07-001) delivered the **remediation queue**: events.db now
+records `remediation.event` rows carrying an `action` field (`ack` / `resolve` /
+`snooze`) per `live_url`. The `/ce:health` decay banner shows **unresolved decay
+count** — resolved links are excluded — so a steady banner count now *does* mean
+unaddressed decay.
+
+See [Remediation Queue](#remediation-queue) below for CLI and WebUI workflows.
 
 ## Baseline metric (is the loop yielding?)
 
@@ -115,6 +119,79 @@ on a single authoritative store via plan-007).
   cannot stall the cron run indefinitely — remaining candidates defer to the next
   run (logged on stderr).
 - **Concurrency:** a flock in the config dir skips a run if another holds it.
+
+## Remediation Queue
+
+Plan: `docs/plans/2026-06-07-001-feat-backlink-remediation-queue-plan.md`
+
+`remediation-queue` is the operator interface for tracking decay remediation
+status. It reads/writes `remediation.event` rows in events.db — the same store
+that backs `link.rechecked` — so there is no separate persistence layer.
+
+### Concept
+
+Each `live_url` with decay has a **remediation record** tracking the latest
+operator action:
+
+| Action | Meaning | Dashboard effect |
+|--------|---------|------------------|
+| `ack` | Operator knows about it but hasn't fixed it yet | Counted as unresolved |
+| `resolve` | Operator fixed it (re-published / removed target) | Excluded from decay banner |
+| `snooze` | Temporary ack for N days | Unresolved until `snooze_until_utc` expires |
+
+A link with no remediation record is implicitly **unresolved** (same as
+un-actioned decay).
+
+### CLI invocation
+
+```bash
+remediation-queue --list                              # human table (default)
+remediation-queue --list --json                       # JSONL for pipe
+remediation-queue --ack <live_url>                    # acknowledge
+remediation-queue --ack <live_url> --note "checking"  # ack with optional note
+remediation-queue --resolve <live_url>                # mark fixed
+remediation-queue --resolve <live_url> --note "republished"
+remediation-queue --snooze <live_url> --days 7        # snooze 7 days
+remediation-queue --snooze <live_url> --days 14 --note "waiting on platform"
+remediation-queue --list --fail-on-unresolved         # exit 6 if any unresolved
+```
+
+- **Exit 0** default (advisory). `--fail-on-unresolved` exits **6**.
+- URL scheme validation: `UsageError` on malformed URLs.
+- All commands emit RECON-style logs to stderr; `--list --json` emits
+  unresolved-links JSONL on stdout.
+
+### WebUI remediation panel
+
+`/ce:health` shows a **Remediation** card below the decay banner:
+
+1. **Card header badge** — unresolved count (may differ from total decay count).
+2. **Unresolved table** — columns: Live URL, Latest Action, Note (if any).
+3. **Per-row action buttons:**
+   - **Ack** — `POST /ce:health/remediation` with `{"action":"ack","live_url":"..."}`
+   - **Resolve** — same endpoint, `action: "resolve"`
+   - **Snooze (7d)** — same endpoint, `action: "snooze", "days": 7`
+4. **Empty state** — "No unresolved backlink decay" when all clear.
+5. **Page reload** on success; `alert()` on error.
+
+All operations are CSRF-protected (global guard). Fail-open: if events.db is
+unreachable, the panel shows the empty state (non-blocking).
+
+### Unresolved decay count
+
+The `/ce:health` decay banner now displays **unresolved decay count**, which
+excludes links whose latest remediation event is `resolve`. The total (including
+resolved) is available via a "show all" toggle or `remediation-queue --list --json`.
+
+### Design invariants
+
+- **Latest action wins.** For each `live_url`, only the most recent
+  `remediation.event` determines state. Ack does not override a previous resolve.
+- **Snooze expiry is advisory.** The dashboard checks `snooze_until_utc` at render
+  time; expired snoozes revert to unresolved. There is no scheduled timer.
+- **Never-raises.** All remediation IO is fail-open: read failure falls back to
+  raw decay counts (`--list` shows empty); write failure logs a warning
+  and continues. The dashboard never crashes due to remediation store issues.
 
 ## Fast-follows (deferred, with triggers)
 

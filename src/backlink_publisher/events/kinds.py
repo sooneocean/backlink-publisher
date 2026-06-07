@@ -55,6 +55,11 @@ CITATION_OBSERVED: Final = "citation.observed"
 #: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
 #: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
 LINK_RECHECKED: Final = "link.rechecked"
+#: A pre-publish quality gate blocked this row (Plan 2026-06-07-003 Phase C).
+#: Written directly by the ``quality-gate`` CLI via ``EventStore.append`` — not
+#: through the projector. Carries the failing quality check name in
+#: ``payload["quality_check"]`` and the article identifier in ``payload["draft_label"]``.
+PUBLISH_QUALITY_BLOCKED: Final = "publish.quality_blocked"
 #: Operator action on a backlink decay event — ack / resolve / snooze (Plan
 #: 2026-06-07-001 Phase A). Written directly by the ``remediation-queue`` CLI
 #: or the WebUI remediation panel via ``EventStore.append`` — not through the
@@ -83,6 +88,7 @@ KINDS: Final[frozenset[str]] = frozenset(
         CITATION_OBSERVED,
         LINK_RECHECKED,
         REMEDIATION_EVENT,
+        PUBLISH_QUALITY_BLOCKED,
     }
 )
 
@@ -137,6 +143,9 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # cursor) needs; target identity travels in the events.db first-class
     # columns (target_url/host/article_id), not the floor.
     LINK_RECHECKED: frozenset({"verdict"}),
+    # quality_check names the failing gate (anchor_density_high / duplicate_content /
+    # llm_rejected); draft_label identifies the blocked seed row.
+    PUBLISH_QUALITY_BLOCKED: frozenset({"quality_check", "draft_label"}),
     # The action + live_url are the load-bearing fields: every remediation
     # event must declare what action was taken and on which backlink.
     REMEDIATION_EVENT: frozenset({"action", "live_url"}),

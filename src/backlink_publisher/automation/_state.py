@@ -38,6 +38,10 @@ class AutomationPipelineState:
     rechecked_count: int = 0
     recovery_actions: list[dict[str, Any]] = field(default_factory=list)
 
+    # Health tracking for this run
+    degraded_platforms: list[str] = field(default_factory=list)
+    quarantined_platforms: list[str] = field(default_factory=list)
+
     def mark_stage_completed(self, stage: str) -> None:
         """Record a successfully completed stage."""
         if stage not in self.stages_completed:
