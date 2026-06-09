@@ -29,5 +29,8 @@ mypy>=1.8
 [dev-webwright]
 webwright==0.0.7
 
+[fast-io]
+orjson>=3.10
+
 [mcp-server]
 mcp>=1.0.0

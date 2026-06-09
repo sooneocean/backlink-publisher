@@ -1,3 +1,6 @@
+# Dependabot configuration (Plan 2026-06-08 optimization sprint)
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+
 version: 2
 updates:
   - package-ecosystem: "pip"
@@ -5,33 +8,39 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
+      time: "09:00"
+      timezone: "Asia/Taipei"
+    open-pull-requests-limit: 10
     labels:
       - "dependencies"
-    open-pull-requests-limit: 10
-    # Group patch-level updates into single PRs to reduce noise
+      - "automated"
+    # Group patch-level updates together to reduce noise
     groups:
-      test-deps:
+      test-packages:
         patterns:
           - "pytest*"
+          - "hypothesis"
         update-types:
           - "patch"
-      dev-deps:
+          - "minor"
+      flask-ecosystem:
         patterns:
-          - "black"
-          - "flake8"
-          - "radon"
+          - "flask*"
+          - "apscheduler"
         update-types:
           - "patch"
+          - "minor"
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  # JavaScript (if Vitest / Playwright are added via npm)
+  - package-ecosystem: "npm"
+    directory: "/webui_app/static/js"
     schedule:
-      interval: "monthly"
-    commit-message:
-      prefix: "ci"
-      include: "scope"
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Taipei"
+    open-pull-requests-limit: 5
     labels:
-      - "ci"
+      - "dependencies"
+      - "automated"
+    versioning-strategy: increase-if-necessary

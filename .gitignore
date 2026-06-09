@@ -168,3 +168,8 @@ start-local.sh
 *.njsproj
 *.sln
 *.sw*
+
+# JS / Node
+node_modules/
+webui_app/static/js/node_modules/
+webui_app/static/js/vitest.config.mjs.bak

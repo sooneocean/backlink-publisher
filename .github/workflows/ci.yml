@@ -45,6 +45,24 @@ jobs:
       - name: Print radon version
         run: python -m radon --version
 
+      - name: Install Node.js (for JS tests)
+        if: hashFiles('webui_app/static/js/package-lock.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: webui_app/static/js/package-lock.json
+
+      - name: Install JS deps (Vitest)
+        if: hashFiles('webui_app/static/js/package-lock.json') != ''
+        working-directory: webui_app/static/js
+        run: npm ci
+
+      - name: Run JS unit tests (Vitest)
+        if: hashFiles('webui_app/static/js/package-lock.json') != ''
+        working-directory: webui_app/static/js
+        run: npm test
+
       - name: Run tests
         # -n auto (pytest-xdist) parallelises across the runner's cores. The suite
         # is determinism-verified under workers: PYTHONHASHSEED=0 is set per worker
@@ -60,9 +78,11 @@ jobs:
         run: |
           python -m pytest tests/ -v --tb=short --timeout=30 -n auto --strict-markers --strict-config
 
-      - name: Check code style
+      - name: Check code style (compile + AST)
         run: |
+          # py_compile every source file — catches syntax errors at module level
           python -m py_compile src/backlink_publisher/**/*.py
+          # ast.parse every source file — catches syntax errors at function/class level
           python -c "
           import ast, sys, pathlib
           for f in pathlib.Path('src').rglob('*.py'):
@@ -73,20 +93,32 @@ jobs:
                   sys.exit(1)
           "
 
-      - name: Verify fixtures exist
+      - name: Check formatting with Black (blocking — only changed files)
         run: |
-          python generate_fixtures.py
-          test -f fixtures/seed.jsonl
+          # If on a PR, check only the changed files; fall back to full src/ if not
+          if [ -n "${{ github.event.pull_request.number }}" ]; then
+            git fetch origin ${{ github.base_ref }} --depth=1 2>/dev/null || true
+            CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.py' | grep -E '\.py$' || true)
+          else
+            CHANGED=$(git diff --name-only HEAD~1 -- '*.py' | grep -E '\.py$' || true)
+          fi
+          if [ -z "$CHANGED" ]; then
+            echo "No Python files changed — skipping Black check."
+          else
+            echo "Checking:"
+            echo "$CHANGED"
+            black --check --diff $CHANGED
+          fi
 
       - name: Type check (non-blocking)
         run: |
           python -m mypy src/backlink_publisher --config-file mypy.ini || true
         continue-on-error: true
 
-      - name: Check formatting with Black (non-blocking)
+      - name: Verify fixtures exist
         run: |
-          black --check --diff src/ || true
-        continue-on-error: true
+          python generate_fixtures.py
+          test -f fixtures/seed.jsonl
 
       # NOTE: The 4-step `python -m` smoke pipeline (Generate / Validate / Dry-run
       # publish / Show) that used to live here was deleted in 2026-05-20.

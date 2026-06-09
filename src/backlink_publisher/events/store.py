@@ -35,6 +35,7 @@ from . import schema as _schema
 from ._store_sqlite import (
     _BASE_BACKOFF_S,  # noqa: F401 — re-exported for test assertions
     _default_db_path,
+    _get_read_connection,  # Stage 2.1: reader connection reuse
     _is_select_statement,
     _now_iso_utc,
     _pid_alive,
@@ -328,11 +329,20 @@ class EventStore:
         cannot DROP / ATTACH / INSERT through this entry point. For
         admin-style mutations, use ``connect()`` directly and own the
         risk explicitly.
+
+        Stage 2.1: Uses cached reader connection when BACKLINK_EVENTSTORE_REUSE_CONN=1.
         """
         if not _is_select_statement(sql):
             raise ValueError(
                 "EventStore.query() is SELECT-only; use connect() for DML."
             )
+
+        cached_conn = _get_read_connection()  # type: ignore[name-defined]
+        if cached_conn is not None:
+            try:
+                return list(cached_conn.execute(sql, params))
+            except Exception:  # noqa: BLE001
+                pass  # Fall through to fresh connection on error
 
         def _op() -> list[sqlite3.Row]:
             with self.connect() as conn:

@@ -31,3 +31,5 @@ Provides-Extra: dev-webwright
 Requires-Dist: webwright==0.0.7; extra == "dev-webwright"
 Provides-Extra: mcp-server
 Requires-Dist: mcp>=1.0.0; extra == "mcp-server"
+Provides-Extra: fast-io
+Requires-Dist: orjson>=3.10; extra == "fast-io"

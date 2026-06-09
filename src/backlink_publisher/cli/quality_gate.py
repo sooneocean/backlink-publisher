@@ -10,26 +10,24 @@ Designed to compose in a shell pipeline:
     ... | plan-backlinks | quality-gate | publish-backlinks --publish
 
 Exit 0 advisory; blocked rows never interrupt the batch.
+
+Stage 2.2/2.3/3.1 optimization: Bulk-fetch + SHA reflex + async LLM.
 """
 
 from __future__ import annotations
 
 import hashlib
-import json
-import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from .._util.errors import emit_error
-from .._util.jsonl import read_jsonl, write_jsonl
+from .._util.jsonl import json_loads, read_jsonl, write_jsonl
 from backlink_publisher._util.logger import get_logger
 from backlink_publisher.events.store import EventStore
-from backlink_publisher.events.kinds import PUBLISH_QUALITY_BLOCKED
+from backlink_publisher.events.kinds import PUBLISH_CONFIRMED, PUBLISH_QUALITY_BLOCKED
 
 _log = get_logger("quality_gate")
-
-# Regex to count markdown links: [text](url)
-_MD_LINK_RE = re.compile(r"\[.*?\]\(.*?\)")
 
 
 def _count_words(text: str) -> int:

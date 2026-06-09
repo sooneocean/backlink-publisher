@@ -45,6 +45,12 @@ src/backlink_publisher/anchor/scheduler.py
 src/backlink_publisher/audit/__init__.py
 src/backlink_publisher/audit/diff.py
 src/backlink_publisher/audit/readers.py
+src/backlink_publisher/automation/__init__.py
+src/backlink_publisher/automation/_state.py
+src/backlink_publisher/automation/orchestrator.py
+src/backlink_publisher/automation/recovery.py
+src/backlink_publisher/automation/signals.py
+src/backlink_publisher/automation/watchdog.py
 src/backlink_publisher/canary/__init__.py
 src/backlink_publisher/canary/store.py
 src/backlink_publisher/channel_discovery/__init__.py
@@ -54,6 +60,7 @@ src/backlink_publisher/cli/_candidates.py
 src/backlink_publisher/cli/_dedup_gate.py
 src/backlink_publisher/cli/_dedup_ops.py
 src/backlink_publisher/cli/_footprint_baseline.py
+src/backlink_publisher/cli/_helpers.py
 src/backlink_publisher/cli/_plan_check_format.py
 src/backlink_publisher/cli/_plan_check_git.py
 src/backlink_publisher/cli/_plan_check_schema.py
@@ -94,9 +101,11 @@ src/backlink_publisher/cli/pr_opportunities.py
 src/backlink_publisher/cli/preflight_targets.py
 src/backlink_publisher/cli/preview_manifest.py
 src/backlink_publisher/cli/probe_citations.py
+src/backlink_publisher/cli/quality_gate.py
 src/backlink_publisher/cli/recheck_backlinks.py
 src/backlink_publisher/cli/recheck_overlay.py
 src/backlink_publisher/cli/remediation_queue.py
+src/backlink_publisher/cli/replan_dead.py
 src/backlink_publisher/cli/report_anchors.py
 src/backlink_publisher/cli/validate_backlinks.py
 src/backlink_publisher/cli/velog_login.py
@@ -197,7 +206,10 @@ src/backlink_publisher/geo/verdict.py
 src/backlink_publisher/idempotency/__init__.py
 src/backlink_publisher/idempotency/audit_log.py
 src/backlink_publisher/idempotency/backfill.py
+src/backlink_publisher/idempotency/db_driver.py
+src/backlink_publisher/idempotency/exceptions.py
 src/backlink_publisher/idempotency/reconcile.py
+src/backlink_publisher/idempotency/state_machine.py
 src/backlink_publisher/idempotency/store.py
 src/backlink_publisher/ledger/__init__.py
 src/backlink_publisher/ledger/aggregate.py
@@ -258,6 +270,7 @@ src/backlink_publisher/publishing/adapters/medium_brave.py
 src/backlink_publisher/publishing/adapters/medium_browser.py
 src/backlink_publisher/publishing/adapters/medium_liveness.py
 src/backlink_publisher/publishing/adapters/nonograph_api.py
+src/backlink_publisher/publishing/adapters/notesio_api.py
 src/backlink_publisher/publishing/adapters/notion_api.py
 src/backlink_publisher/publishing/adapters/posteasy_api.py
 src/backlink_publisher/publishing/adapters/pubmark_api.py
@@ -324,6 +337,7 @@ tests/test_adapter_http_form_post.py
 tests/test_adapter_livejournal_api.py
 tests/test_adapter_medium_api.py
 tests/test_adapter_medium_browser.py
+tests/test_adapter_notesio.py
 tests/test_adapter_pubmark_api.py
 tests/test_adapter_qiita.py
 tests/test_adapter_retry.py
@@ -346,6 +360,10 @@ tests/test_audit_readers.py
 tests/test_audit_state_duplicate_detection.py
 tests/test_auth_expired_error.py
 tests/test_auth_type_classification.py
+tests/test_auto_health_dashboard.py
+tests/test_auto_publish_orchestrator.py
+tests/test_automation_watchdog.py
+tests/test_automation_worker_state.py
 tests/test_banner_dispatcher.py
 tests/test_bind_channel_chrome_backend.py
 tests/test_bind_channel_cli.py
@@ -395,8 +413,10 @@ tests/test_cli_plan_gap.py
 tests/test_cli_preflight_targets.py
 tests/test_cli_probe_citations.py
 tests/test_cli_python_m_entrypoints.py
+tests/test_cli_quality_gate.py
 tests/test_cli_recheck_backlinks.py
 tests/test_cli_recheck_overlay.py
+tests/test_cli_replan_dead.py
 tests/test_cli_timing_regression.py
 tests/test_cli_typed_error_emission.py
 tests/test_comment_outreach_brief.py
@@ -678,6 +698,7 @@ tests/test_webui_bind_security.py
 tests/test_webui_checkpoint.py
 tests/test_webui_cover_image_wiring.py
 tests/test_webui_csrf_ordering.py
+tests/test_webui_e2e.py
 tests/test_webui_equity_ledger_recheck.py
 tests/test_webui_equity_ledger_route.py
 tests/test_webui_error_fidelity.py

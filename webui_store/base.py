@@ -12,7 +12,9 @@ the real store (with resolved path) is created lazily when first accessed.
 from __future__ import annotations
 
 import json
+import os
 import threading
+import time
 from pathlib import Path
 from typing import Any, Callable, Protocol, runtime_checkable
 
@@ -70,12 +72,41 @@ class JsonStore:
     but ``isinstance(JsonStore(...), Store)`` returns True at runtime.
     """
 
-    __slots__ = ("_path", "_default_factory", "_lock")
+    __slots__ = (
+        "_path",
+        "_default_factory",
+        "_lock",
+        "_last_accessed_at",
+        "_warm",
+    )
 
     def __init__(self, path: Path, *, default_factory: Callable[[], Any]) -> None:
         self._path = path
         self._default_factory = default_factory
         self._lock = threading.Lock()
+        # Store lifecycle: last access time for warm/cold state management
+        self._last_accessed_at: float = time.time()
+        self._warm: bool = True
+
+    # ── Lifecycle management (warm/cold state) ─────────────────────────
+
+    @property
+    def is_warm(self) -> bool:
+        """Whether this store holds cached/loaded data in memory.
+
+        ``JsonStore`` is always warm (it re-reads from disk on every
+        ``load()``). Subclasses that maintain in-memory caches can
+        override this.
+        """
+        return self._warm
+
+    @property
+    def last_accessed_at(self) -> float:
+        return self._last_accessed_at
+
+    def _touch(self) -> None:
+        """Record an access. Called by load/save/update."""
+        self._last_accessed_at = time.time()
 
     # ── Read-only accessors (test-friendly) ────────────────────────────
 
@@ -91,6 +122,7 @@ class JsonStore:
     # ── Core API (satisfies Store protocol) ────────────────────────────
 
     def load(self) -> Any:
+        self._touch()
         if not self._path.exists():
             return self._default_factory()
         try:
@@ -102,6 +134,7 @@ class JsonStore:
             return self._default_factory()
 
     def save(self, value: Any) -> None:
+        self._touch()
         from backlink_publisher.persistence.safe_write import atomic_write
         text = json.dumps(value, ensure_ascii=False, indent=2)
         atomic_write(self._path, text)

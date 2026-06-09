@@ -1,0 +1,111 @@
+// Vitest tests for webui_app/static/js/lib/api.js
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { readCsrf, fetchJson, postJson, postForm } from '../../webui_app/static/js/lib/api.js';
+
+describe('lib/api.readCsrf', () => {
+  beforeEach(() => {
+    document.head.innerHTML = '';
+  });
+
+  it('returns content of <meta name="csrf-token">', () => {
+    const meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    meta.content = 'abc123';
+    document.head.appendChild(meta);
+    expect(readCsrf()).toBe('abc123');
+  });
+
+  it('returns "" when meta absent', () => {
+    expect(readCsrf()).toBe('');
+  });
+
+  it('reads fresh on every call (not cached)', () => {
+    const meta1 = document.createElement('meta');
+    meta1.name = 'csrf-token';
+    meta1.content = 'first';
+    document.head.appendChild(meta1);
+    expect(readCsrf()).toBe('first');
+    meta1.content = 'rotated';
+    expect(readCsrf()).toBe('rotated');
+  });
+});
+
+describe('lib/api.fetchJson', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('returns parsed JSON on application/json', async () => {
+    const body = { ok: true, n: 7 };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: (k) => (k === 'content-type' ? 'application/json' : '') },
+      json: async () => body,
+    }));
+    const out = await fetchJson('/api/x');
+    expect(out).toEqual(body);
+  });
+
+  it('throws on non-JSON content type', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 500,
+      headers: { get: (k) => (k === 'content-type' ? 'text/html' : '') },
+      json: async () => ({}),
+    }));
+    await expect(fetchJson('/api/x')).rejects.toThrow(/non JSON/i);
+  });
+});
+
+describe('lib/api.postJson', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends POST with JSON body and X-CSRFToken header', async () => {
+    const meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    meta.content = 'tok';
+    document.head.appendChild(meta);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: (k) => (k === 'content-type' ? 'application/json' : '') },
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await postJson('/api/x', { hello: 'world' });
+    const [url, opts] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/x');
+    expect(opts.method).toBe('POST');
+    expect(opts.headers['Content-Type']).toBe('application/json');
+    expect(opts.headers['X-CSRFToken']).toBe('tok');
+    expect(JSON.parse(opts.body)).toEqual({ hello: 'world' });
+  });
+});
+
+describe('lib/api.postForm', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('sends FormData with csrf_token + extra fields', async () => {
+    const meta = document.createElement('meta');
+    meta.name = 'csrf-token';
+    meta.content = 'tok';
+    document.head.appendChild(meta);
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: (k) => (k === 'content-type' ? 'application/json' : '') },
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await postForm('/api/x', { foo: 'bar', baz: 'qux' });
+    const [, opts] = fetchMock.mock.calls[0];
+    const fd = opts.body;
+    expect(fd).toBeInstanceOf(FormData);
+    expect(fd.get('csrf_token')).toBe('tok');
+    expect(fd.get('foo')).toBe('bar');
+    expect(fd.get('baz')).toBe('qux');
+  });
+});
+</content>
+</invoke>
