@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block title %}Official URL Intake{% endblock %}
+
+{% block content %}
+<main class="container py-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between gap-3 align-items-md-end mb-4">
+        <div>
+            <h1 class="h3 mb-1">Official URL Intake</h1>
+            <p class="text-secondary mb-0">Draft-first queue from one official website URL.</p>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="/ce:health">
+            <i class="bi bi-activity"></i> Health
+        </a>
+    </div>
+
+    <section class="mb-4">
+        <form method="post" action="{{ url_for('official_url.official_url_page') }}" class="row g-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="col-12 col-lg-8">
+                <label class="form-label" for="official_url">Official website URL</label>
+                <input class="form-control" id="official_url" name="official_url" type="url"
+                       value="{{ official_url }}" placeholder="https://example.com" required>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2">
+                <button class="btn btn-primary" type="submit" name="action" value="preview">
+                    <i class="bi bi-search"></i> Preview
+                </button>
+                {% if profile and profile.ok %}
+                <button class="btn btn-success" type="submit" name="action" value="enqueue">
+                    <i class="bi bi-plus-circle"></i> Enqueue
+                </button>
+                {% endif %}
+            </div>
+
+            {% if profile and profile.ok %}
+            {% for channel in eligibility if channel.eligible %}
+            <input type="hidden" name="channels" value="{{ channel.slug }}">
+            {% endfor %}
+            {% endif %}
+        </form>
+    </section>
+
+    <section class="border rounded p-3 mb-4">
+        <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-shield-check text-success"></i>
+            <h2 class="h5 mb-0">Draft-first queue</h2>
+        </div>
+        <p class="mb-0 text-secondary">
+            Not live dofollow proof. A queued draft, dry-run result, or HTTP 200 only proves local workflow progress.
+            Live backlink truth still comes from publish verification, recheck, canary, ledger, and gap signals.
+        </p>
+    </section>
+
+    {% if error %}
+    <div class="alert alert-warning" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if queue_ids %}
+    <div class="alert alert-success" role="status">
+        <strong>Queued draft tasks</strong>
+        <span class="ms-2">{{ queue_ids | join(', ') }}</span>
+    </div>
+    {% endif %}
+
+    {% if profile and profile.ok %}
+    <section class="mb-4">
+        <h2 class="h5">Target profile</h2>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <tbody>
+                    <tr><th scope="row">Title</th><td>{{ profile.title }}</td></tr>
+                    <tr><th scope="row">Target URL</th><td>{{ profile.target_url }}</td></tr>
+                    <tr><th scope="row">Main URL</th><td>{{ profile.main_url }}</td></tr>
+                    <tr><th scope="row">Category URL</th><td>{{ profile.category_url or '-' }}</td></tr>
+                    <tr><th scope="row">Work URL</th><td>{{ profile.work_url or '-' }}</td></tr>
+                    <tr><th scope="row">Language</th><td>{{ profile.language }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="mb-4">
+        <h2 class="h5">Eligible channels</h2>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Dofollow</th>
+                        <th>Auth</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for channel in eligibility if channel.eligible %}
+                    <tr>
+                        <td>{{ channel.display_name }}</td>
+                        <td>{{ channel.dofollow }}</td>
+                        <td>{{ channel.auth_type or '-' }}</td>
+                        <td><span class="badge text-bg-success">{{ channel.reason }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-secondary">No eligible channels.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section>
+        <h2 class="h5">Blocked channels</h2>
+        <div class="table-responsive">
+            <table class="table table-sm align-middle">
+                <thead>
+                    <tr>
+                        <th>Channel</th>
+                        <th>Dofollow</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for channel in eligibility if not channel.eligible %}
+                    <tr>
+                        <td>{{ channel.display_name }}</td>
+                        <td>{{ channel.dofollow }}</td>
+                        <td><span class="badge text-bg-secondary">{{ channel.reason }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-secondary">No blocked active channels.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+</main>
+{% endblock %}

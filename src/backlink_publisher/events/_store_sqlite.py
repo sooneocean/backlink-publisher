@@ -254,3 +254,8 @@ def reset_reader_cache() -> None:
                 except Exception:  # noqa: BLE001
                     pass
         _reader_cache.clear()
+
+
+# Backward-compatible private name used by EventStore after the Stage 2.1
+# extraction. Keep the alias until store.py is cleaned up in a focused pass.
+_get_read_connection = get_read_connection
