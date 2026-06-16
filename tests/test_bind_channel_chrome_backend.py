@@ -72,8 +72,21 @@ class TestRealChromeBrowserRunnerAvailable:
 
 
 class TestRealChromeBrowserRunner:
-    def test_launch_and_connect_starts_chrome(self):
-        """When no existing CDP is found, Chrome is launched."""
+    def test_launch_and_connect_starts_chrome(self, monkeypatch):
+        """When no existing CDP is found, Chrome is launched.
+
+        The constructor injects fake popen/requests; the real stall was
+        ``_wait_for_version`` polling the (never-arriving) CDP for the full
+        ``_CONNECT_TIMEOUT_S=10s``. Collapse the connect deadline to 0 so the
+        loop exits immediately — the asserted verdict (launch happened, then
+        ``chrome_cdp_unavailable``) is unchanged, the 10s real sleep is gone.
+        """
+        monkeypatch.setattr(
+            "backlink_publisher.cli._bind.chrome_backend._CONNECT_TIMEOUT_S", 0.0
+        )
+        monkeypatch.setattr(
+            "backlink_publisher.cli._bind.chrome_backend._POLL_INTERVAL_S", 0.0
+        )
         fake_popen = MagicMock()
         fake_popen.return_value = MagicMock()
         fake_requests = MagicMock()

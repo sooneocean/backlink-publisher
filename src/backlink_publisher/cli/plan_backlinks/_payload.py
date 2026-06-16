@@ -10,7 +10,10 @@ from typing import Any
 from urllib.parse import urlparse
 
 from backlink_publisher.config import Config, get_anchor_keywords
+from backlink_publisher.content_generation.service import generate_draft
+from backlink_publisher.content_generation.types import GenerationRequest
 from backlink_publisher._util.errors import InputValidationError
+from backlink_publisher.llm.client import _redact_for_log
 from backlink_publisher._util.logger import plan_logger
 from backlink_publisher._util.markdown import (
     links_to_markdown,
@@ -24,6 +27,7 @@ from ._links import _build_link_density_paragraph, _build_links
 from ._templates import _TEMPLATES, _TDK_TITLE_TMPL, _domain_label_of
 
 ARTICLE_LENGTH_WORDS = (100, 200)
+_SDK_ARTICLE_PROVIDERS = {"openai", "codex"}
 
 
 def dofollow_tier_metadata(platform: str) -> dict[str, Any]:
@@ -141,29 +145,20 @@ def _generate_payload(
 
     body_tmpl = tmpl["body_paragraphs"].get(url_mode, tmpl["body_paragraphs"]["A"])
 
-    if config and config.llm_anchor_provider and config.llm_anchor_provider.use_article_gen:
-        try:
-            llm_p = OpenAICompatibleProvider(
-                base_url=config.llm_anchor_provider.base_url,
-                api_key=config.llm_anchor_provider.api_key,
-                model=config.llm_anchor_provider.model,
-                temperature=config.llm_anchor_provider.temperature,
-                system_prompt=config.llm_anchor_provider.system_prompt,
-                article_system_prompt=config.llm_anchor_provider.article_system_prompt,
-            )
-            body = llm_p.generate_article_body(
-                domain_label=domain_label,
-                main_domain=main_domain,
-                anchors=anchors,
-                topic=topic_val,
-                language=target_language,
-            )
-            plan_logger.info(f"LLM article body generated for {main_domain}")
-        except Exception as e:
-            plan_logger.warn(f"LLM article generation failed, falling back to template: {e}")
-            body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
-    else:
-        body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
+    fallback_body = body_tmpl(domain=domain_label, main_domain=main_domain, anchors=anchors)
+    body, ai_generation, cover_prompt = _generate_ai_draft_if_enabled(
+        config,
+        fallback_body=fallback_body,
+        target_url=target_url,
+        main_domain=main_domain,
+        platform=platform,
+        target_language=target_language,
+        anchors=anchors,
+        topic_val=topic_val,
+        title=title,
+        domain_label=domain_label,
+        url_mode=url_mode,
+    )
 
     if tdk_title or tdk_description:
         tdk_section = f"\n\n---\n**关于 {domain_label}**\n"
@@ -253,13 +248,18 @@ def _generate_payload(
     content_parts.append(links_to_markdown(links))
     content_markdown = "\n".join(content_parts)
 
+    from ._citability import apply_long_form_levers
+    content_markdown, _citability_levers = apply_long_form_levers(
+        content_markdown, domain_label, row, language=target_language
+    )
+
     seo_title = tmpl.get("seo_title", "{title}").format(title=title)
     seo_desc = tmpl.get("seo_desc", "").format(main_domain=main_domain)
 
     seed_str = f"{target_url}:{main_domain}:{url_mode}:{platform}"
     article_id = hashlib.sha256(seed_str.encode()).hexdigest()[:16]
 
-    return {
+    payload = {
         "id": article_id,
         "platform": platform,
         "language": target_language,
@@ -273,6 +273,7 @@ def _generate_payload(
         "excerpt": excerpt,
         "tags": tags,
         "content_markdown": content_markdown,
+        "_citability_levers": _citability_levers,
         "links": links,
         "cover_image_url": cover_image_url,
         "cover_image_warning": cover_image_warning,
@@ -282,3 +283,91 @@ def _generate_payload(
             "canonical_url": target_url,
         },
     }
+    if ai_generation is not None:
+        payload["ai_generation"] = ai_generation
+    if cover_prompt:
+        payload["cover_prompt"] = cover_prompt
+    return payload
+
+
+def _build_article_provider(config: Config) -> Any:
+    llm = config.llm_anchor_provider
+    if llm is None:
+        return None
+    if llm.provider in _SDK_ARTICLE_PROVIDERS:
+        from backlink_publisher.content_generation.openai_sdk import (
+            OpenAISDKArticleProvider,
+        )
+
+        return OpenAISDKArticleProvider(
+            base_url=llm.base_url,
+            api_key=llm.api_key,
+            model=llm.model,
+            timeout_s=llm.timeout_s,
+            temperature=llm.temperature,
+            system_prompt=llm.system_prompt,
+            article_system_prompt=llm.article_system_prompt,
+        )
+    return OpenAICompatibleProvider(
+        base_url=llm.base_url,
+        api_key=llm.api_key,
+        model=llm.model,
+        timeout_s=llm.timeout_s,
+        temperature=llm.temperature,
+        system_prompt=llm.system_prompt,
+        article_system_prompt=llm.article_system_prompt,
+    )
+
+
+def _generate_ai_draft_if_enabled(
+    config: Config | None,
+    *,
+    fallback_body: str,
+    target_url: str,
+    main_domain: str,
+    platform: str,
+    target_language: str,
+    anchors: list[str],
+    topic_val: str,
+    title: str,
+    domain_label: str,
+    url_mode: str,
+) -> tuple[str, dict[str, Any] | None, str | None]:
+    if not (config and config.llm_anchor_provider and config.llm_anchor_provider.use_article_gen):
+        return fallback_body, None, None
+
+    generation = generate_draft(
+        GenerationRequest(
+            target_url=target_url,
+            main_domain=main_domain,
+            platform=platform,
+            language=target_language,
+            anchors=tuple(anchors),
+            topic=topic_val,
+            title=title,
+            context={"domain_label": domain_label, "url_mode": url_mode},
+        ),
+        provider=_build_article_provider(config),
+        fallback_body=fallback_body,
+    )
+    if generation.status == "reviewable":
+        plan_logger.info(f"LLM article body generated for {main_domain}")
+    elif generation.status == "fallback_used":
+        plan_logger.warn("LLM article generation unavailable, falling back to template")
+    return (
+        generation.body_markdown,
+        {
+            "status": generation.status,
+            "provider": generation.provider,
+            "validation_accepted": generation.validation.accepted,
+            "issues": [
+                {
+                    "code": issue.code,
+                    "severity": issue.severity,
+                    "message": _redact_for_log(issue.message),
+                }
+                for issue in generation.validation.issues
+            ],
+        },
+        generation.cover_prompt,
+    )

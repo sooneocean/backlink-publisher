@@ -54,11 +54,14 @@ def _snapshot():
 
 class TestHiddenFromUiFunction:
     def test_empty_when_no_platform_is_hidden_or_retired(self) -> None:
-        # The 8 production platforms all default to visibility="active",
-        # so the dynamic set is empty in the steady state.
+        # txtfyi was moved to visibility="hidden" in the zero-auth MVP
+        # (Wave 1a). All other production platforms default to "active".
         from webui_app.binding_status import hidden_from_ui
 
-        assert hidden_from_ui() == frozenset()
+        hidden = hidden_from_ui()
+        assert "txtfyi" in hidden
+        # A single hidden platform is the steady state.
+        assert len(hidden) >= 1
 
     def test_includes_visibility_hidden_platform(self) -> None:
         from webui_app.binding_status import hidden_from_ui

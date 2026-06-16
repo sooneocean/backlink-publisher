@@ -82,7 +82,7 @@ def settings_body(client):
     ("livejournal", "userpass"),
     ("wordpresscom", "token_fields"),
     ("substack", "paste_blob"),
-    ("txtfyi", "anon"),
+    ("rentry", "anon"),
     ("writeas", "token"),
 ])
 def test_cardless_channel_inline_form_rendered(settings_body, channel, auth_type):
@@ -97,7 +97,7 @@ def test_anon_channel_no_save_form(settings_body):
     assert "免绑定 · 就绪" in settings_body
     # anon bind section should not contain a form POST to save-channel-credential
     # (other auth types do, but anon section itself has no <form> element)
-    assert 'id="bind-section-txtfyi"' in settings_body
+    assert 'id="bind-section-telegraph"' in settings_body
 
 
 # ---------------------------------------------------------------------------

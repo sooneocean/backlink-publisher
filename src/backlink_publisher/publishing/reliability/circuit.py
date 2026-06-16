@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from backlink_publisher._util.errors import AuthExpiredError, ExternalServiceError
+from backlink_publisher._util.io import atomic_write_json
 from backlink_publisher._util.logger import opencli_logger as _log
 
 if TYPE_CHECKING:
@@ -109,9 +110,13 @@ def _read_state_unsafe(state_path: Path) -> dict[str, Any]:
 
 
 def _write_state_unsafe(state_path: Path, state: dict[str, Any]) -> None:
-    """Write state file without flock — caller must hold the lock."""
-    state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-    os.chmod(state_path, 0o600)
+    """Write state atomically (tmp + ``os.replace``) without flock — caller holds the lock.
+
+    Atomic replace guarantees the lockless :func:`is_tripped` reader never sees a
+    torn write, and a crash mid-write cannot leave a corrupt state file — which
+    would otherwise fail-CLOSED and block *every* channel until operator reset.
+    """
+    atomic_write_json(state_path, state)
 
 
 def _now_iso() -> str:

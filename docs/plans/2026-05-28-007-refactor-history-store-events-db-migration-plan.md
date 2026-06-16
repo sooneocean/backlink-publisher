@@ -1,7 +1,8 @@
 ---
 title: "refactor: Migrate history_store to events.db as single authoritative store"
 type: refactor
-status: active
+status: parked
+decision: "2026-06-01 PARK (convergence audit 2026-06-01-009). Zero units landed; large surface area; current dual-write state is already protected by circuit.py flock-across-RMW, so the migration is not urgent. Trigger to resume: a cross-process state-divergence incident, or history_store becomes a demonstrated bottleneck. Resumes here; revisit Unit 1 (schema v4 + publish.verified/verify_failed kinds) first."
 date: 2026-05-28
 origin: docs/brainstorms/2026-05-28-history-store-events-db-migration-requirements.md
 claims: {}

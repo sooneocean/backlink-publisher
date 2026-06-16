@@ -109,7 +109,7 @@ if [ "$PHASE_STARTED" = "1" ]; then
     # Post-G1: seal enforcement. Pipe ALL stdin lines (not just Telegraph ones)
     # so verify-hook's structured stderr output covers every line uniformly.
     printf '%s\n' "$STDIN_BUFFER" \
-        | python -m backlink_publisher.cli.phase0_seal verify-hook --stdin-lines
+        | "${PYTHON:-python3}" -m backlink_publisher.cli.phase0_seal verify-hook --stdin-lines
     exit $?
 fi
 

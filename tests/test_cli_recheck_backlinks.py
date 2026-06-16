@@ -194,6 +194,136 @@ def test_batch_budget_exhaustion_defers_remaining(isolated, monkeypatch, capsys)
     assert _link_rechecked_rows() == []  # all candidates deferred to next run
 
 
+# ── indexability surfacing (Unit 3: R6 / R6b / R3e) ──────────────────────────
+
+from backlink_publisher.content._preflight_fetch import PreflightFacts  # noqa: E402
+
+
+def _facts(noindex=False, head_complete=True, status=200, reason=None, x_robots_tag=None):
+    return PreflightFacts(status=status, reason=reason, noindex=noindex,
+                          head_complete=head_complete, x_robots_tag=x_robots_tag)
+
+
+def _run_probe(monkeypatch, candidates, fetch_map, *, extra_args=(), **inspect_overrides):
+    """Drive --probe with exact stdin candidates, patching both the liveness
+    inspect (all readable/alive by default) and the indexability fetch_target."""
+    blob = "\n".join(json.dumps(c) for c in candidates) + "\n"
+    monkeypatch.setattr("sys.stdin", io.StringIO(blob))
+
+    def _fetch(url, *, timeout=None):
+        return fetch_map(url)
+
+    with patch("backlink_publisher.recheck.probe.fetch_target", _fetch), patch(
+        "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+        _inspect(**inspect_overrides),
+    ):
+        return cli.main(["--probe", *extra_args])
+
+
+def _cands(n, platform="medium"):
+    return [{"live_url": f"https://{platform}.com/{i}", "target_url": "https://t/",
+             "platform": platform} for i in range(n)]
+
+
+def test_indexability_reports_alive_blocked_distinct_from_healthy(isolated, monkeypatch, capsys):
+    cands = _cands(4)
+    blocked = {cands[0]["live_url"], cands[1]["live_url"]}
+    _run_probe(monkeypatch, cands,
+               lambda url: _facts(noindex=True) if url in blocked else _facts())
+    err = capsys.readouterr().err
+    assert "alive·blocked 2" in err  # 2 live dofollow links on noindex pages
+    assert "necessary-not-sufficient" in err  # R3e caveat present
+
+
+def test_indexability_per_channel_unknown_rate_flag(isolated, monkeypatch, capsys):
+    cands = _cands(5)
+    ok_url = cands[0]["live_url"]
+    _run_probe(monkeypatch, cands,
+               lambda url: _facts() if url == ok_url else _facts(reason="network_error"))
+    err = capsys.readouterr().err
+    assert "unverifiable" in err.lower()
+    assert "4/5" in err and "80%" in err
+
+
+def test_indexability_no_false_alarm_when_all_ok(isolated, monkeypatch, capsys):
+    _run_probe(monkeypatch, _cands(3), lambda url: _facts())
+    err = capsys.readouterr().err
+    assert "alive·blocked 0" in err
+    assert "unverifiable" not in err.lower()
+    assert "necessary-not-sufficient" not in err  # no caveat noise on a clean run
+
+
+def test_indexability_summary_goes_to_stderr_stdout_stays_jsonl(isolated, monkeypatch, capsys):
+    cands = _cands(2)
+    _run_probe(monkeypatch, cands, lambda url: _facts(noindex=True))
+    captured = capsys.readouterr()
+    # stdout: pure JSONL data, each line parses, carries the indexability field.
+    rows = [json.loads(line) for line in captured.out.splitlines() if line.strip()]
+    assert len(rows) == 2 and all(r["indexability"] == "blocked" for r in rows)
+    assert "alive·blocked" not in captured.out  # the human summary is stderr-only
+    assert "alive·blocked" in captured.err
+
+
+# ── --fail-on-unindexable gate (Unit 4: R9) ──────────────────────────────────
+
+def test_fail_on_unindexable_exits_6_on_confirmed_blocked(isolated, monkeypatch):
+    with pytest.raises(SystemExit) as exc:
+        _run_probe(monkeypatch, _cands(1), lambda url: _facts(noindex=True),
+                   extra_args=["--fail-on-unindexable"])
+    assert exc.value.code == cli.FAIL_ON_DEAD_EXIT_CODE  # reuses the domain-alarm code
+
+
+def test_fail_on_unindexable_exit_zero_when_only_ok(isolated, monkeypatch):
+    assert _run_probe(monkeypatch, _cands(2), lambda url: _facts(),
+                      extra_args=["--fail-on-unindexable"]) is None
+
+
+def test_fail_on_unindexable_unknown_never_trips(isolated, monkeypatch):
+    # An indeterminate (unknown) page must NEVER trip the gate — only a
+    # *confirmed* blocked page does (fail-open, the feature's core invariant).
+    assert _run_probe(monkeypatch, _cands(3), lambda url: _facts(reason="network_error"),
+                      extra_args=["--fail-on-unindexable"]) is None
+
+
+def test_fail_on_unindexable_ignores_stripped_link_on_noindex_page(isolated, monkeypatch):
+    # A link_stripped page carries NO surviving backlink, so a noindex barrier
+    # there wastes no equity — it must not trip the gate (consistent with the
+    # alive·blocked summary headline, which gates on verdict == alive).
+    assert _run_probe(monkeypatch, _cands(1), lambda url: _facts(noindex=True),
+                      target_anchor_found=False,  # → link_stripped
+                      extra_args=["--fail-on-unindexable"]) is None
+
+
+def test_default_off_blocked_present_is_exit_zero(isolated, monkeypatch):
+    # Without the opt-in flag, a blocked page is advisory only — byte-identical
+    # exit-0 to today's behaviour.
+    assert _run_probe(monkeypatch, _cands(2), lambda url: _facts(noindex=True)) is None
+
+
+def test_fail_on_dead_takes_precedence_when_both_trip(isolated, monkeypatch):
+    # A page that is both dead (host_gone) and... can't be both; use one dead +
+    # one blocked link with both flags. Dead is more severe → its message wins,
+    # exit code is the shared 6 either way.
+    cands = _cands(2)
+    dead_url = cands[0]["live_url"]
+
+    def _inspect_mixed(url, target, **kw):
+        if url == dead_url:
+            return _inspect(page_readable=False, reason="http_404")(url, target)
+        return _inspect()(url, target)
+
+    blob = "\n".join(json.dumps(c) for c in cands) + "\n"
+    monkeypatch.setattr("sys.stdin", io.StringIO(blob))
+    with patch("backlink_publisher.recheck.probe.fetch_target",
+               lambda url, *, timeout=None: _facts(noindex=True)), patch(
+        "backlink_publisher.publishing.adapters.link_attr_verifier.inspect_target_anchor",
+        side_effect=_inspect_mixed,
+    ):
+        with pytest.raises(SystemExit) as exc:
+            cli.main(["--probe", "--fail-on-dead", "--fail-on-unindexable"])
+    assert exc.value.code == cli.FAIL_ON_DEAD_EXIT_CODE
+
+
 # ── usage validation (UsageError exit 1, not argparse exit 2) ────────────────
 
 def test_limit_must_be_positive(isolated):

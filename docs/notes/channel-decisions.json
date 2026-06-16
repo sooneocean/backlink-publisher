@@ -1,0 +1,166 @@
+{
+  "version": 1,
+  "description": "Decided-store for channel discovery dedup (brainstorm 2026-06-01 R8). Covers non-registry platforms only — registered platforms are always 'decided' via publishing.registry.registered_platforms(). Next run must dedup against this + the registry before probing.",
+  "entries": [
+    {
+      "platform": "bloglovin",
+      "verdict": "no-go",
+      "reason": "Service shut down Dec 2021; homepage returns CF 403 to all UAs; no publish API ever existed.",
+      "date": "2026-05-25",
+      "reopen": "Live homepage 200 + documented publish API + successful pipeline canary.",
+      "source": "docs/notes/retired-platforms/bloglovin.md"
+    },
+    {
+      "platform": "gitbook",
+      "verdict": "no-go",
+      "reason": "Public publishing is paid-tier only; free accounts cannot create publicly accessible pages.",
+      "date": "2026-06-01",
+      "reopen": "A free public-output tier returns.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "bearblog",
+      "verdict": "no-go",
+      "reason": "Free accounts quarantined: noindex + nofollow by default; founder-documented anti-SEO-spam stance; mass de-index 2025.",
+      "date": "2026-06-01",
+      "reopen": "Non-quarantined free path yields dofollow+indexed (unlikely by design).",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "svbtle",
+      "verdict": "no-go",
+      "reason": "Paid only ($7/mo) AND injects rel=nofollow on author outbound links (verified 2/23).",
+      "date": "2026-06-01",
+      "reopen": "Free tier + dofollow — neither plausible.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "scrapbox",
+      "verdict": "no-go",
+      "reason": "JS-SPA; outbound rel not server-rendered (unverifiable); partial indexation; cookie-session writes = heavy adapter.",
+      "date": "2026-06-01",
+      "reopen": "Canary proves dofollow + reliable indexation via headless render.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "paste.ee",
+      "verdict": "no-go",
+      "reason": "Client-rendered SPA (302 to pastee.dev, 0 bytes server HTML); weak/noindex; redundant with rentry/txtfyi/telegraph.",
+      "date": "2026-06-01",
+      "reopen": "Server-rendered indexed output appears.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "weebly",
+      "verdict": "no-go",
+      "reason": "Free *.weebly.com: low DA, forced footer, deindexation-prone (2025 thin-content wave); heavy browser+account adapter; unverified dofollow.",
+      "date": "2026-06-01",
+      "reopen": "N/A — classic Web2.0 PBN layer, no ROI.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "googlesites",
+      "verdict": "no-go",
+      "reason": "Per-/view/ content weakly indexed; outbound links redirect-wrapped (dofollow unconfirmable); heavy browser+account adapter.",
+      "date": "2026-06-01",
+      "reopen": "New Google Sites stops wrapping links AND per-site indexation proven.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "gitlabsnippets",
+      "verdict": "no-go",
+      "reason": "GitLab Snippets barely indexed by Google (issues #4650/#24289); near-zero SEO value. (GitLab Pages is a separate GO.)",
+      "date": "2026-06-01",
+      "reopen": "Google indexation of snippets materially improves.",
+      "source": "docs/notes/retired-platforms/2026-06-01-discovery-batch.md"
+    },
+    {
+      "platform": "jianshu",
+      "verdict": "removed",
+      "reason": "CN platform removed from codebase (operator has no account; nofollow link-interstitial; zero equity).",
+      "date": "2026-05-27",
+      "reopen": "Not planned.",
+      "source": "docs/plans/2026-05-27-001-refactor-remove-jianshu-channel-plan.md"
+    },
+    {
+      "platform": "csdn",
+      "verdict": "removed",
+      "reason": "CN platform removed from codebase (operator has no account; nofollow link-interstitial; zero equity).",
+      "date": "2026-05-28",
+      "reopen": "Not planned.",
+      "source": "docs/plans/2026-05-28-009-refactor-remove-csdn-juejin-note-channels-plan.md"
+    },
+    {
+      "platform": "juejin",
+      "verdict": "removed",
+      "reason": "CN platform removed from codebase (operator has no account; nofollow link-interstitial; zero equity).",
+      "date": "2026-05-28",
+      "reopen": "Not planned.",
+      "source": "docs/plans/2026-05-28-009-refactor-remove-csdn-juejin-note-channels-plan.md"
+    },
+    {
+      "platform": "note",
+      "verdict": "removed",
+      "reason": "CN platform removed from codebase (operator has no account; nofollow link-interstitial; zero equity).",
+      "date": "2026-05-28",
+      "reopen": "Not planned.",
+      "source": "docs/plans/2026-05-28-009-refactor-remove-csdn-juejin-note-channels-plan.md"
+    },
+    {
+      "platform": "jkforum",
+      "verdict": "hold",
+      "reason": "Reputation risk: adult-adjacent bad-neighborhood; dofollow confirmed but bad-neighborhood penalty may outweigh equity gain.",
+      "date": "2026-05-25",
+      "reopen": "Operator decides after reviewing bad-neighborhood classification risk vs. referral value.",
+      "source": "docs/plans/2026-05-25-003-feat-dofollow-canary-closeout-plan.md"
+    },
+    {
+      "platform": "justpaste.it",
+      "verdict": "conditional-deferred",
+      "reason": "JS-SPA: dofollow status unverifiable via static fetch; requires headless-render canary to confirm link rel.",
+      "date": "2026-05-25",
+      "reopen": "Headless-render canary confirms dofollow on a real published link.",
+      "source": "docs/plans/2026-05-25-003-feat-dofollow-canary-closeout-plan.md"
+    },
+    {
+      "platform": "teletype.in",
+      "verdict": "conditional-deferred",
+      "reason": "JS-SPA: dofollow status unverifiable via static fetch; requires headless-render canary to confirm link rel.",
+      "date": "2026-05-25",
+      "reopen": "Headless-render canary confirms dofollow on a real published link.",
+      "source": "docs/plans/2026-05-25-003-feat-dofollow-canary-closeout-plan.md"
+    },
+    {
+      "platform": "qiita",
+      "verdict": "needs-canary",
+      "reason": "Confirmed nofollow noopener (12/86) on outbound links — zero PageRank transfer. High JP referral value. Registered dofollow=False.",
+      "date": "2026-06-01",
+      "reopen": "N/A — already handled as dofollow=False registration if/when adapter is built.",
+      "source": "docs/discovery/2026-06-01-run.md"
+    },
+    {
+      "platform": "zenn",
+      "verdict": "needs-canary",
+      "reason": "Confirmed nofollow noopener noreferrer (36/137) — zero PageRank transfer. High JP referral value. Would register dofollow=False.",
+      "date": "2026-06-01",
+      "reopen": "N/A — already handled as dofollow=False registration if/when adapter is built.",
+      "source": "docs/discovery/2026-06-01-run.md"
+    },
+    {
+      "platform": "readthedocs",
+      "verdict": "deferred",
+      "reason": "Wave-3 deferred: requires real Sphinx docs (medium adapter cost); operator has no docs project ready.",
+      "date": "2026-06-01",
+      "reopen": "Operator has a real docs project to publish + Sphinx build is wired.",
+      "source": "docs/discovery/2026-06-01-run.md"
+    },
+    {
+      "platform": "notesio",
+      "verdict": "deferred",
+      "reason": "Wave-3 deferred: diversification-only (low referral value); form POST spec unverified without network probe.",
+      "date": "2026-06-02",
+      "reopen": "Form POST endpoint and field names verified via direct inspection.",
+      "source": "docs/plans/2026-06-02-002-feat-channel-probe-ssrf-hardening-and-notesio-adapter-plan.md"
+    }
+  ]
+}

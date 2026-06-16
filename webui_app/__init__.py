@@ -16,6 +16,46 @@ from pathlib import Path
 from flask import Flask
 
 
+def _get_version_file() -> Path:
+    """Resolve the asset-version stamp path lazily from environment."""
+    from backlink_publisher.config.loader import _config_dir
+    return _config_dir() / "asset-version.stamp"
+
+
+def _compute_asset_version(static_folder: str | None) -> str:
+    """Per-deploy cache-busting stamp for ``url_for('static', ..., v=…)``.
+
+    Derived once from the newest mtime of any bundled static asset, so an
+    operator's long-lived console session cannot serve a stale classic JS
+    against freshly-deployed module HTML (no build step / no bundler hash).
+    """
+    version_file = _get_version_file()
+
+    # Check cache first regardless of static_folder - allows reading cached value
+    try:
+        if version_file.exists():
+            return version_file.read_text().strip() or "0"
+    except OSError:
+        pass
+
+    if not static_folder:
+        return "0"
+    try:
+        latest = 0
+        for root, _dirs, files in os.walk(static_folder):
+            for name in files:
+                try:
+                    latest = max(latest, os.stat(os.path.join(root, name)).st_mtime_ns)
+                except OSError:
+                    continue
+        ver = format(latest, "x") or "0"
+        version_file.parent.mkdir(parents=True, exist_ok=True)
+        version_file.write_text(ver)
+        return ver
+    except OSError:
+        return "0"
+
+
 def create_app(*, start_scheduler: bool | None = None) -> Flask:
     """Build the Flask app.
 
@@ -162,6 +202,37 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
             return {"csrf_token": _ensure_csrf_token()}
         except RuntimeError:
             return {"csrf_token": ""}
+
+    # Cache-busting: stamp a per-deploy version onto every base.html
+    # url_for('static', ..., v=asset_version) reference. Computed once and
+    # cached on app.config so the static-tree walk happens at most once.
+    @app.context_processor
+    def inject_asset_version():
+        version = app.config.get("ASSET_VERSION")
+        if version is None:
+            version = _compute_asset_version(app.static_folder)
+            app.config["ASSET_VERSION"] = version
+        return {"asset_version": version}
+
+    # Plan U6: tell the copilot panel whether the LLM is configured so it can
+    # show the Q&A form unlocked. This is a cheap file-existence check, not a
+    # health probe — a missing api_key or endpoint is caught at POST time with a
+    # 400 json response.
+    @app.context_processor
+    def inject_llm_configured():
+        try:
+            from .helpers.contexts import _llm_settings_file
+            import json
+            path = _llm_settings_file()
+            if path.exists():
+                raw = json.loads(path.read_text(encoding="utf-8"))
+                llm_ok = bool(raw.get("endpoint", "").strip()
+                              and raw.get("api_key", "").strip())
+            else:
+                llm_ok = False
+        except Exception:
+            llm_ok = False
+        return {"llm_configured": llm_ok}
 
     # Global CSRF enforcement. SameSite=Lax + loopback already block most
     # cross-site POST, but operators who flip BACKLINK_PUBLISHER_ALLOW_NETWORK

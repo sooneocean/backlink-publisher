@@ -778,7 +778,8 @@ class TestSSRFDefense:
         "172.16.5.10",
         "172.31.0.1",
         "192.168.1.1",
-        "169.254.169.254",  # cloud metadata
+        "169.254.169.254",  # cloud metadata / AWS IMDS / GCP IMDS / Azure IMDS
+        "168.63.129.16",    # Azure wireserver (DHCP, key mgmt) — not link-local, not RFC-1918
         "100.64.1.2",       # CGNAT
         "0.0.0.0",
     ])

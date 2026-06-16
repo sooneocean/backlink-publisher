@@ -1,4 +1,5 @@
 """TOML loader + parser dispatcher."""
+
 from __future__ import annotations
 
 import logging
@@ -8,14 +9,17 @@ import sys
 from pathlib import Path
 
 from backlink_publisher._util.errors import DependencyError
+
 from .tokens import load_medium_integration_token
 from .types import (
     BloggerOAuthConfig,
     Config,
+    GhpagesConfig,
+    GitlabPagesConfig,
+    MastodonConfig,
+    ZennConfig,
     MediumOAuthConfig,
     ThreeUrlConfig,
-    GhpagesConfig,
-    MastodonConfig,
     VelogConfig,
 )
 
@@ -27,11 +31,13 @@ else:
 from .parsers.alarm import _parse_anchor_alarm
 from .parsers.anchor import _parse_anchor_proportions
 from .parsers.cells import _parse_cell_assignments
+from .parsers.geo import _parse_geo_probe_provider
 from .parsers.image_gen import _parse_image_gen
 from .parsers.llm import _llm_provider_from_sidecar, _parse_llm_anchor_provider
 from .parsers.target import (
     _parse_target_anchor_keywords,
     _parse_target_anchor_pools_v2,
+    _parse_target_string_list_field,
 )
 from .parsers.three_url import (
     _normalize_domain_key,
@@ -40,12 +46,13 @@ from .parsers.three_url import (
 )
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     """Indirect lookup so test monkeypatch on
     ``backlink_publisher.config._config_dir`` intercepts even when called
     from inside loader.py (where the local ``_config_dir`` would otherwise
     be a module-internal globals lookup, missed by the package-level patch)."""
     from backlink_publisher import config as _cfg
+
     return _cfg._config_dir()
 
 
@@ -161,7 +168,9 @@ def load_config(path: Path | None = None) -> Config:
 
     medium_oauth_section = medium_section.get("oauth", {})
     medium_oauth: MediumOAuthConfig | None = None
-    if medium_oauth_section.get("client_id") and medium_oauth_section.get("client_secret"):
+    if medium_oauth_section.get("client_id") and medium_oauth_section.get(
+        "client_secret"
+    ):
         medium_oauth = MediumOAuthConfig(
             client_id=medium_oauth_section["client_id"],
             client_secret=medium_oauth_section["client_secret"],
@@ -174,11 +183,19 @@ def load_config(path: Path | None = None) -> Config:
         user_data_dir = _resolve_config_dir() / "chrome-profile-default"
 
     # blogger_section now contains only main_domain → blog_id mappings
-    blog_ids = {k: str(v) for k, v in blogger_section.items() if isinstance(v, (str, int))}
+    blog_ids = {
+        k: str(v) for k, v in blogger_section.items() if isinstance(v, (str, int))
+    }
 
     targets_section = data.get("targets", {})
     target_anchor_keywords = _parse_target_anchor_keywords(targets_section)
     target_three_url = _parse_target_three_url(targets_section)
+    target_probe_queries = _parse_target_string_list_field(
+        targets_section, "probe_queries"
+    )
+    target_brand_aliases = _parse_target_string_list_field(
+        targets_section, "brand_aliases"
+    )
 
     sites_section = data.get("sites", {})
     site_url_categories = _parse_site_url_categories(sites_section)
@@ -192,7 +209,8 @@ def load_config(path: Path | None = None) -> Config:
             _log.info(
                 "[sites.%r] is in maintenance mode; consider migrating to "
                 "[targets.%r] three-URL form",
-                domain_key, domain_key,
+                domain_key,
+                domain_key,
             )
 
     anchor_proportions = _parse_anchor_proportions(data.get("anchor", {}))
@@ -208,6 +226,11 @@ def load_config(path: Path | None = None) -> Config:
     # consumed env/TOML, so reaching here means both were empty).
     if llm_anchor_provider is None:
         llm_anchor_provider = _llm_provider_from_sidecar(config_path.parent)
+
+    geo_probe_provider = _parse_geo_probe_provider(
+        data.get("geo", {}).get("probe_provider", {}),
+        config_path=config_path,
+    )
 
     anchor_alarm = _parse_anchor_alarm(data.get("anchor_alarm"))
 
@@ -233,11 +256,33 @@ def load_config(path: Path | None = None) -> Config:
             ),
         )
 
+    gitlabpages_section = data.get("gitlabpages")
+    gitlabpages: GitlabPagesConfig | None = None
+    if gitlabpages_section is not None:
+        # PAT lives in gitlabpages-token.json (SEC-3) — only routing fields here.
+        gitlabpages = GitlabPagesConfig(
+            project=str(gitlabpages_section.get("project", "")),
+            branch=str(gitlabpages_section.get("branch", "main")),
+            path_template=str(
+                gitlabpages_section.get("path_template", "public/{slug}/index.html")
+            ),
+            pages_base_url=str(gitlabpages_section.get("pages_base_url", "")),
+        )
+
     mastodon_section = data.get("mastodon")
     mastodon: MastodonConfig | None = None
     if mastodon_section is not None:
         mastodon = MastodonConfig(
             instance_url=str(mastodon_section.get("instance_url", "")),
+        )
+
+    zenn_section = data.get("zenn")
+    zenn: ZennConfig | None = None
+    if zenn_section is not None:
+        zenn = ZennConfig(
+            github_repo=str(zenn_section.get("github_repo", "")),
+            username=str(zenn_section.get("username", "")),
+            branch=str(zenn_section.get("branch", "main")),
         )
 
     image_gen = _parse_image_gen(data.get("image_gen"))
@@ -258,10 +303,15 @@ def load_config(path: Path | None = None) -> Config:
         anchor_proportions=anchor_proportions,
         llm_anchor_provider=llm_anchor_provider,
         target_three_url=target_three_url,
+        geo_probe_provider=geo_probe_provider,
+        target_probe_queries=target_probe_queries,
+        target_brand_aliases=target_brand_aliases,
         anchor_alarm=anchor_alarm,
         velog=velog,
         ghpages=ghpages,
+        gitlabpages=gitlabpages,
         mastodon=mastodon,
+        zenn=zenn,
         image_gen=image_gen,
         cell_assignments=cell_assignments,
     )
@@ -278,15 +328,18 @@ def _resolve_medium_integration_token(toml_value: str | None) -> str | None:
     if token_data:
         token = token_data.get("integration_token", "").strip()
         if token:
-            return token
+            return token  # type: ignore[no-any-return]
     return toml_value
 
 
-def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None = None) -> None:
+def _warn_if_loose_config_permissions(
+    config_path: Path, raw_data: dict | None = None
+) -> None:
     """Emit a warning if config.toml contains credentials but isn't 0600.
 
     Checks all credential-bearing sections: ``[llm].anchor_provider.api_key``,
-    ``[blogger.oauth]``, ``[medium.oauth]``, and ``[medium].integration_token``.
+    ``[geo.probe_provider].api_key``, ``[blogger.oauth]``, ``[medium.oauth]``,
+    and ``[medium].integration_token``.
     No-op on Windows where POSIX permission bits aren't meaningful.
     """
     if os.name == "nt":
@@ -298,6 +351,8 @@ def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None =
         _llm = raw_data.get("llm", {})
         if _llm.get("anchor_provider", {}).get("api_key"):
             sections.append("[llm].api_key")
+        if raw_data.get("geo", {}).get("probe_provider", {}).get("api_key"):
+            sections.append("[geo.probe_provider].api_key")
         if raw_data.get("blogger", {}).get("oauth", {}).get("client_id"):
             sections.append("[blogger.oauth]")
         if raw_data.get("medium", {}).get("oauth", {}).get("client_id"):
@@ -316,13 +371,13 @@ def _warn_if_loose_config_permissions(config_path: Path, raw_data: dict | None =
         _log.warning(
             "config file %s has mode %s and contains credential sections %s; "
             "set permissions to 0600 (chmod 600) to prevent credential leakage",
-            config_path, oct(mode), sections,
+            config_path,
+            oct(mode),
+            sections,
         )
 
 
-def get_three_url_config(
-    config: Config, main_domain: str
-) -> ThreeUrlConfig | None:
+def get_three_url_config(config: Config, main_domain: str) -> ThreeUrlConfig | None:
     """Return the work-themed ``ThreeUrlConfig`` for ``main_domain`` if any.
 
     Tolerates trailing-slash variants in the lookup key — matches

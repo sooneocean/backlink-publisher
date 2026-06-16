@@ -130,6 +130,32 @@ class TestHealthDashboardRoute:
 class TestReconciliationGapsHelper:
     """Test _reconciliation_gaps() helper directly (fail-open contract)."""
 
+    def test_counts_reconcile_gap_from_quarantine_payload_json(self, app):
+        import webui_app.routes.health as health_mod
+        from backlink_publisher.events.store import EventStore
+
+        store = EventStore()
+        store.quarantine(
+            reason="reconciler gap",
+            failure_type="reconcile_gap",
+            source="reconciler",
+            run_id="run-1",
+            record_identity="gap-1",
+        )
+        store.quarantine(
+            reason="other quarantine",
+            failure_type="missing_field",
+            source="projector",
+            run_id="run-1",
+            record_identity="other-1",
+        )
+
+        with patch("backlink_publisher.checkpoint.list_failed_items", return_value=[]):
+            assert health_mod._reconciliation_gaps() == {
+                "pending_checkpoints": 0,
+                "quarantine_gaps": 1,
+            }
+
     def test_raises_return_empty_dict(self):
         """Any exception in the helper must return {} — never raise (R7)."""
         import webui_app.routes.health as health_mod

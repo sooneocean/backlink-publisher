@@ -29,9 +29,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from backlink_publisher.content._preflight_fetch import fetch_target
 from backlink_publisher.publishing.adapters import link_attr_verifier
 from backlink_publisher.publishing.registry import dofollow_status
-from backlink_publisher.recheck import verdicts
+from backlink_publisher.recheck import indexability, verdicts
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +41,28 @@ log = logging.getLogger(__name__)
 #: as indeterminate (``probe_error``) so a transient blip never false-positives
 #: a dead link (anti-bot windowed-budget caution, medium-liveness-probe spike).
 _DETERMINISTIC_DEAD_REASONS = frozenset({"http_404", "http_410"})
+
+
+def _probe_indexability(
+    live_url: str,
+    timeout: float,
+    fetch_fn: Callable[..., Any],
+) -> tuple[str, str | None]:
+    """Second-fetch ``live_url`` and classify its source-page indexability.
+
+    Reads the SAME ``PreflightFacts.noindex`` fact that
+    :func:`cli.canary_targets._classify` consumes (via ``fetch_target``) — recheck
+    and canary are a single source by construction, no parallel detector to drift.
+    Never raises; any fetch failure ⇒ ``unknown`` (fail-open). The tri-state map
+    itself lives in :func:`recheck.indexability.classify_indexability`.
+    """
+    fetch = fetch_fn or fetch_target
+    try:
+        facts = fetch(live_url, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 — never-raise; indeterminate => unknown
+        log.warning("indexability probe error url=%s: %s", live_url, exc)
+        return indexability.UNKNOWN, None
+    return indexability.classify_indexability(facts)
 
 
 def _norm(text: str) -> str:
@@ -55,6 +78,7 @@ def probe_liveness(
     baseline_anchor: str | None = None,
     timeout: float = 10.0,
     inspect_fn: Callable[..., dict[str, Any]] | None = None,
+    fetch_fn: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Re-verify a single backlink. Returns a verdict dict; never raises.
 
@@ -67,7 +91,13 @@ def probe_liveness(
             "expected_nofollow": bool,       # nofollow that is the channel's norm
             "anchor_baseline_missing": bool, # no baseline to compare anchor text
             "anchor_drift": bool,            # anchor text changed vs baseline
+            "indexability": str,             # ok / blocked / unknown (orthogonal)
+            "indexability_reason": str|None, # closed vocab when blocked
         }
+
+    ``indexability`` is orthogonal contract-drift metadata (like ``anchor_drift``)
+    read via a second ``fetch_target`` call for any page we successfully read; it
+    NEVER changes the liveness verdict. ``fetch_fn`` is injectable for tests.
     """
     inspect = inspect_fn or link_attr_verifier.inspect_target_anchor
     out: dict[str, Any] = {
@@ -77,6 +107,8 @@ def probe_liveness(
         "expected_nofollow": False,
         "anchor_baseline_missing": False,
         "anchor_drift": False,
+        "indexability": indexability.UNKNOWN,
+        "indexability_reason": None,
     }
     target = (target_url or "").strip()
 
@@ -96,12 +128,21 @@ def probe_liveness(
     reason = res.get("reason")
 
     if not res.get("page_readable"):
+        # Unreadable/dead page: skip the second fetch entirely; indexability of a
+        # page we never read stays the default ``unknown``.
         if reason in _DETERMINISTIC_DEAD_REASONS:
             out["verdict"] = verdicts.HOST_GONE
         else:
             out["verdict"] = verdicts.PROBE_ERROR
         out["reason"] = reason
         return out
+
+    # Page was successfully read — compute the orthogonal indexability axis once,
+    # before any verdict-specific early return, so every readable-page outcome
+    # (alive / link_stripped / dofollow_lost) carries it. Never changes verdict.
+    out["indexability"], out["indexability_reason"] = _probe_indexability(
+        live_url, timeout, fetch_fn
+    )
 
     if not target:
         # No backlink target to inspect — can only confirm the page is live.
@@ -140,6 +181,20 @@ def probe_liveness(
         out["expected_nofollow"] = True
 
     out["verdict"] = verdicts.ALIVE
+
+    # Wave 4 zero-auth MVP: best-effort rendered-link outcome orthogonal to the
+    # liveness verdict. Runs only when both URLs are available (no-op for
+    # unreachable pages / missing targets). Never changes the verdict.
+    if live_url and target and res.get("page_readable"):
+        try:
+            from backlink_publisher.publishing._verify_html import verify_rendered_link
+            vr = verify_rendered_link(published_url=live_url, target_url=target)
+            if vr.effective:
+                out["backlink_outcome"] = "effective_backlink"
+            else:
+                out["backlink_outcome"] = "published_but_ineffective"
+        except Exception:  # noqa: BLE001 — best-effort; never fails the recheck
+            out["backlink_outcome"] = "failed"
     return out
 
 
@@ -149,6 +204,7 @@ def recheck_link(
     probe: bool,
     timeout: float = 10.0,
     inspect_fn: Callable[..., dict[str, Any]] | None = None,
+    fetch_fn: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """Produce a recheck result for one candidate ``record``.
 
@@ -179,5 +235,6 @@ def recheck_link(
         baseline_anchor=record.get("baseline_anchor"),
         timeout=timeout,
         inspect_fn=inspect_fn,
+        fetch_fn=fetch_fn,
     )
     return {**base, **verdict}

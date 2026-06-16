@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import stat
 from pathlib import Path
 from unittest.mock import patch
@@ -65,7 +66,7 @@ def test_atomic_write_uses_temp_then_replace(tmp_path):
         atomic_write_json(target, {"v": 1})
 
     assert tmp_path_seen, "expected atomic_write_json to write to a .tmp sibling first"
-    assert tmp_path_seen[0].name == "out.json.tmp"
+    assert tmp_path_seen[0].name == f"out.json.{os.getpid()}.tmp"
     assert not tmp_path_seen[0].exists(), "temp file should have been renamed away"
 
 

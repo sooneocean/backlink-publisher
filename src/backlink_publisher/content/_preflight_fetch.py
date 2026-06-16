@@ -69,6 +69,13 @@ _META_NAME_RE = re.compile(rb"""name\s*=\s*["']?([a-zA-Z-]+)""", re.IGNORECASE)
 _META_CONTENT_RE = re.compile(rb"""content\s*=\s*["']?([^"'>]*)""", re.IGNORECASE)
 _H1_RE = re.compile(rb"<h1\b[^>]*>(.*?)</h1>", re.IGNORECASE | re.DOTALL)
 _H1_SENTINEL = b"</h1>"
+#: Streaming stops at ``</h1>`` (in ``<body>``), which normally lies past
+#: ``</head>`` — so the robots ``<meta>`` is captured in the common case. If
+#: ``</head>`` is NOT in the captured prefix (e.g. a stray pre-head ``<h1>`` cut
+#: the stream early, or the head is pathologically large), a late ``noindex``
+#: meta could have been missed — consumers must treat ``noindex=False`` as
+#: indeterminate, not a clean "indexable". ``head_complete`` surfaces that.
+_HEAD_SENTINEL = b"</head>"
 #: Split robots directives on commas / whitespace / colons (the last covers
 #: ``X-Robots-Tag: googlebot: noindex``) so ``noindex`` matches as a token, not
 #: a substring (guards against ``noindexing`` false positives).
@@ -94,6 +101,10 @@ class PreflightFacts:
     tls_unverified: bool = False
     reason: Optional[str] = None
     x_robots_tag: Optional[str] = None
+    #: ``</head>`` was present in the captured body prefix, so the robots
+    #: ``<meta>`` scan saw the whole head. ``False`` means the head may have
+    #: been truncated — ``noindex=False`` is then indeterminate, not clean.
+    head_complete: bool = False
 
 
 def _is_http_url(url: str) -> bool:
@@ -189,6 +200,73 @@ def _ssrf_reason_to_taxonomy(blocked: str) -> str:
     return "ssrf_blocked"
 
 
+def _classify_url_error(exc: URLError) -> "PreflightFacts":
+    """Translate a :class:`URLError` into a :class:`PreflightFacts` reason."""
+    reason_obj = getattr(exc, "reason", None)
+    if isinstance(reason_obj, str) and reason_obj.startswith("ssrf_"):
+        return PreflightFacts(reason="ssrf_blocked")
+    if isinstance(reason_obj, ssl.SSLError):
+        return PreflightFacts(tls_unverified=True, reason="tls_unverified")
+    if isinstance(reason_obj, socket.timeout):
+        return PreflightFacts(reason="timeout")
+    return PreflightFacts(reason="network_error")
+
+
+def _build_facts_from_response(resp: Any, normalized: str) -> "PreflightFacts":
+    """Read *resp* metadata + body and return :class:`PreflightFacts`. Never raises."""
+    try:
+        status = resp.getcode()
+        final_url = resp.geturl() or normalized
+        headers = resp.info()
+        try:
+            body = _read_body_prefix(resp, PREFLIGHT_BODY_BYTES)
+        finally:
+            try:
+                resp.close()
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001
+        return PreflightFacts(reason="network_error")
+
+    # Post-redirect SSRF re-check of the final URL (narrows the DNS-rebinding
+    # window; IP-range re-check only — a malformed final host is left to the
+    # opener's per-hop guard, which already raised if it mattered).
+    if final_url and final_url != normalized:
+        final_blocked = _safe_ssrf_check(final_url)
+        if final_blocked is not None and final_blocked.startswith("blocked_ip"):
+            return PreflightFacts(status=status, final_url=final_url, reason="ssrf_blocked")
+
+    redirected = bool(final_url) and final_url != normalized
+    host_diff = redirected and safe_hostname(final_url) != safe_hostname(normalized)
+
+    if status != 200:
+        reason = "http_5xx" if 500 <= status < 600 else f"http_{status}"
+        return PreflightFacts(
+            status=status, final_url=final_url, redirected=redirected,
+            host_diff=host_diff, reason=reason,
+        )
+
+    title = extract_title(body) or ""
+    x_robots = _x_robots_value(headers)
+    noindex = _meta_noindex(body) or bool(x_robots and _has_noindex_directive(x_robots))
+
+    return PreflightFacts(
+        status=status,
+        final_url=final_url,
+        redirected=redirected,
+        host_diff=host_diff,
+        redirect_capped=False,
+        noindex=noindex,
+        soft404=is_soft_404_title(title),
+        has_title=bool(title),
+        has_h1=_has_h1(body),
+        tls_unverified=False,
+        reason=None,
+        x_robots_tag=x_robots,
+        head_complete=_HEAD_SENTINEL in body.lower(),
+    )
+
+
 def _safe_ssrf_check(url: str) -> Optional[str]:
     """``_check_url_for_ssrf`` wrapper that never raises.
 
@@ -234,67 +312,8 @@ def fetch_target(url: str, *, timeout: Optional[float] = None) -> PreflightFacts
     except socket.timeout:
         return PreflightFacts(reason="timeout")
     except URLError as exc:
-        reason_obj = getattr(exc, "reason", None)
-        if isinstance(reason_obj, str) and reason_obj.startswith("ssrf_"):
-            return PreflightFacts(reason="ssrf_blocked")
-        if isinstance(reason_obj, ssl.SSLError):
-            return PreflightFacts(tls_unverified=True, reason="tls_unverified")
-        if isinstance(reason_obj, socket.timeout):
-            return PreflightFacts(reason="timeout")
-        return PreflightFacts(reason="network_error")
+        return _classify_url_error(exc)
     except Exception:  # noqa: BLE001 — routine must never raise out
         return PreflightFacts(reason="network_error")
 
-    try:
-        status = resp.getcode()
-        final_url = resp.geturl() or normalized
-        headers = resp.info()
-        try:
-            body = _read_body_prefix(resp, PREFLIGHT_BODY_BYTES)
-        finally:
-            try:
-                resp.close()
-            except Exception:  # noqa: BLE001
-                pass
-    except Exception:  # noqa: BLE001
-        return PreflightFacts(reason="network_error")
-
-    # Post-redirect SSRF re-check of the final URL (narrows the DNS-rebinding
-    # window; IP-range re-check only — a malformed final host is left to the
-    # opener's per-hop guard, which already raised if it mattered).
-    if final_url and final_url != normalized:
-        final_blocked = _safe_ssrf_check(final_url)
-        if final_blocked is not None and final_blocked.startswith("blocked_ip"):
-            return PreflightFacts(status=status, final_url=final_url, reason="ssrf_blocked")
-
-    redirected = bool(final_url) and final_url != normalized
-    host_diff = redirected and safe_hostname(final_url) != safe_hostname(normalized)
-
-    if status != 200:
-        if 500 <= status < 600:
-            reason = "http_5xx"
-        else:
-            reason = f"http_{status}"
-        return PreflightFacts(
-            status=status, final_url=final_url, redirected=redirected,
-            host_diff=host_diff, reason=reason,
-        )
-
-    title = extract_title(body) or ""
-    x_robots = _x_robots_value(headers)
-    noindex = _meta_noindex(body) or bool(x_robots and _has_noindex_directive(x_robots))
-
-    return PreflightFacts(
-        status=status,
-        final_url=final_url,
-        redirected=redirected,
-        host_diff=host_diff,
-        redirect_capped=False,
-        noindex=noindex,
-        soft404=is_soft_404_title(title),
-        has_title=bool(title),
-        has_h1=_has_h1(body),
-        tls_unverified=False,
-        reason=None,
-        x_robots_tag=x_robots,
-    )
+    return _build_facts_from_response(resp, normalized)

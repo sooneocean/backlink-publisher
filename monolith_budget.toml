@@ -17,17 +17,17 @@
 ceiling = 250
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): pure generation kernel (_cell_gate_drop, _dispatch_row, _emit_link_count_recon, _scheduler_enabled_for, PlanOutcome, plan_rows) extracted to plan_backlinks/_engine.py so the in-process PipelineAPI.plan path shares it. core.py dropped from 392 to 208 SLOC — now argparse + set_log_level + row parsing + load_config + config_echo banner + reset_stats (H2) + plan_rows call + error-print + write_jsonl + preflight/canary nudge shell only. Ceiling 250 = round_up_to_10(208+30) per policy."
 
-[files."src/backlink_publisher/cli/publish_backlinks.py"]
-ceiling = 370
-rationale = "Two independent per-row loop gates now coexist here: the canary health gate (Plan 2026-05-27-001 U4 — advisory WARN + opt-in hard-skip) and the cross-run idempotency enforce gate (Plan 2026-05-27-005 U7 — skip-duplicate row, held-uncertain branch, counters, reconciliation precondition + force-manifest load). Both are intrinsic per-row publish-loop wiring; the gate decisions and audit live in cli/_dedup_gate.py (gate_with_force) + idempotency/store.py.gate_and_claim + canary/store.py. At 335 SLOC; ceiling 370 = round_up_to_10(335+30), 35 headroom."
+[files."src/backlink_publisher/cli/publish_backlinks/__init__.py"]
+ceiling = 190
+rationale = "refactor 2026-06-02: Unit 3b loop extraction — per-row loop body moved to _engine.py::_publish_one_row + run_publish_loop; __init__ keeps only setup orchestration + epilogue guard. SLOC 361->159. Ceiling 190 = round_up_to_10(159+30)."
 
 [files."src/backlink_publisher/content/fetch.py"]
-ceiling = 250
-rationale = "Soft-404 title detection extracted to content/_soft404.py, HTML head-window reading + title extraction to content/_html_utils.py (2026-05-26). SLOC dropped 281→216. Ceiling 250 = round_up_to_10(216+30) per policy."
+ceiling = 240
+rationale = "Stats counters (content/_stats.py) and stateless predicates _cache_key/_is_valid_http_url/_is_transient (content/_fetch_helpers.py) extracted 2026-06-01; gate hot-path (_check_once, verify_url_has_content, verify_urls_batch) and all test-patched module globals stay here. SLOC dropped 250→204. Ceiling 240 = round_up_to_10(204+30) per policy. Earlier: soft-404 → _soft404.py, head-window/title → _html_utils.py (2026-05-26)."
 
 [files."src/backlink_publisher/config/writer.py"]
-ceiling = 200
-rationale = "Unit 2 monolith split (2026-05-20): TOML heading utilities extracted to _toml_utils.py (~80 SLOC), file I/O helpers to _config_io.py (~20 SLOC), merge_site_url_categories to _merge_categories.py (~80 SLOC). writer.py dropped from ~618 to ~169 SLOC, now holds only save_config(). Ceiling 200 = round_up_to_10(169+30) per policy."
+ceiling = 240
+rationale = "Wave 1 dofollow channels (Plan 2026-06-01-007): the GitLab Pages [gitlabpages] config section added _emit_gitlabpages_section (4 routing fields), a gitlabpages_config= save_config param, and its round-trip resolution — mirroring the [ghpages] wiring. SLOC rose 169→208. Ceiling 240 = round_up_to_10(208+30) per policy. Prior: Unit 2 monolith split (2026-05-20) extracted TOML/IO/merge helpers leaving only save_config()."
 
 [files."src/backlink_publisher/_util/markdown.py"]
 ceiling = 240
@@ -37,9 +37,13 @@ rationale = "Post-split: body templates (9 functions, ~130 SLOC) extracted to _b
 ceiling = 110
 rationale = "3 reducers (_project_checkpoint, _project_history, _project_drafts) extracted to events/_project_reducers.py (2026-05-27). projector.py dropped from 542 to 75 SLOC — holds only flush_for dispatch, record_projection_health, project_run_safe, and health constants. Ceiling 110 = round_up_to_10(75+30) per policy."
 
+[files."src/backlink_publisher/events/_project_reducers.py"]
+ceiling = 550
+rationale = "Holds the 3 extracted reducers (_project_checkpoint, _project_history, _project_drafts) plus the confirmed-emit helpers _emit_confirmed_history_row (#350) and _emit_drafts_confirmed (#340, extracted 2026-06-01 to bring _project_drafts CC under the CC-30 backstop). At 520 SLOC; ceiling 550 = round_up_to_10(520+30) per policy."
+
 [files."src/backlink_publisher/publishing/adapters/__init__.py"]
-ceiling = 600
-rationale = "Removed 3 additional channels (2026-05-28): operator has no accounts on csdn/juejin/note and does not intend to use them, so their register() blocks plus manifest/adapter imports were deleted. SLOC dropped 601 → 562. Ceiling re-tightened 640 → 600 = round_up_to_10(562+30) per policy."
+ceiling = 330
+rationale = "Zero-auth MVP Wave 1 (2026-06-05): added brewpage/posteasy/nonograph/htmldrop 4 new platform imports + register() calls + manifest splats. SLOC 270->297. Ceiling 330 = round_up_to_10(297+30) per ratchet-down policy."
 
 [files."src/backlink_publisher/cli/phase0_seal.py"]
 ceiling = 465
@@ -58,9 +62,42 @@ ceiling = 120
 rationale = "thin-WebUI Phase 2 Unit 7 (2026-05-28): main() split into two engine calls (report_from_profile + report_from_rows) extracted to _report_engine.py so the in-process PipelineAPI.report_anchors path shares it. report_anchors.py stayed at 89 SLOC — holds argparse + load_config + config_echo banner + engine call + stdout print + stderr breach lines + emit_envelope_and_exit shell only. Ceiling 120 = round_up_to_10(89+30) per policy."
 
 [files."src/backlink_publisher/cli/_publish_helpers.py"]
-ceiling = 660
-rationale = "Plan 2026-05-28-004 reconciled hub integration added _run_reconciler / _write_reconciler_report (~50 SLOC), --reconcile / --reconcile-all argparse args, and _recon_reconcile_checkpoints. At 622 SLOC; ceiling 660 = round_up_to_10(622+30) per policy; lease/throttle cluster remains the extraction candidate."
+ceiling = 100
+rationale = "refactor 2026-06-06 P0 split: extracted 7 specialized modules (_verify, _canary, _throttle, _checkpoint, _banner, _reconciler, _epilogue, _lease) reducing this file to a thin re-export module (73 SLOC). Test patches on check_url/verify_published/_do_sleep/_canary_gate still fire via re-exports. Ceiling 100 = round_up_to_10(73+30)."
 
 [files."src/backlink_publisher/cli/generate_backlink_text.py"]
-ceiling = 560
-rationale = "New opt-in content-drafting CLI (Plan 2026-05-27-006): _read_candidates, _validate_candidate, _make_rejected, _validate_generated_text (refusal/unsafe/link/anchor/wordcount/language), _count_words (CJK-aware), _make_correction_hint, _run_dry_run, _resolve_client (endpoint/key/model resolution + SSRF/allowlist guard + userinfo rejection), _run_generate (corrective re-prompt loop). 541 SLOC measured 2026-05-27. Ceiling 560 = round_up_to_10(541+10) — minimal headroom; extraction candidate if it grows."
+ceiling = 390
+rationale = "refactor 2026-06-01: extracted the input-parsing + deterministic-validation cluster (9 funcs + their constants) to cli/_candidates.py; this module now holds CLI/argparse + LLM orchestration (main/_resolve_client/_run_dry_run/_run_generate) and re-exports the moved names for the tests that import them. SLOC 541->357. Ceiling 390 = round_up_to_10(357+30)."
+
+# New modules from P0 split of _publish_helpers.py (2026-06-06)
+[files."src/backlink_publisher/cli/_publish_verify.py"]
+ceiling = 100
+rationale = "P0 split from _publish_helpers.py: verification helpers (_do_verify, _check_row_reachability). Test patches on check_url/verify_published still fire via re-exports from _publish_helpers. SLOC 59, ceiling 100 = round_up_to_10(59+30)."
+
+[files."src/backlink_publisher/cli/_publish_canary.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: canary gate (_canary_gate). Test patches still fire via re-exports from _publish_helpers. SLOC 41, ceiling 80 = round_up_to_10(41+40) to allow for interface expansion."
+
+[files."src/backlink_publisher/cli/_publish_throttle.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: throttle helpers (_load_throttle_config, _do_sleep, _sleep_with_throttle, _medium_throttle_sleep). Test patches on _do_sleep still fire via re-exports from _publish_helpers. SLOC 32, ceiling 80 = round_up_to_10(32+50)."
+
+[files."src/backlink_publisher/cli/_publish_checkpoint.py"]
+ceiling = 100
+rationale = "P0 split from _publish_helpers.py: checkpoint recording helpers (_try_update_ckpt_failed, _build_failure_row, _build_skip_row). SLOC 56, ceiling 100 = round_up_to_10(56+30)."
+
+[files."src/backlink_publisher/cli/_publish_banner.py"]
+ceiling = 110
+rationale = "P0 split from _publish_helpers.py: banner emission and publish-path drift recording (_make_banner_emit, _error_class, _record_publish_failure, _record_publish_path). SLOC 85, ceiling 110 = round_up_to_10(85+30)."
+
+[files."src/backlink_publisher/cli/_publish_reconciler.py"]
+ceiling = 80
+rationale = "P0 split from _publish_helpers.py: reconciler helpers (_run_reconciler, _write_reconciler_report). SLOC 34, ceiling 80 = round_up_to_10(34+50)."
+
+[files."src/backlink_publisher/cli/_publish_epilogue.py"]
+ceiling = 140
+rationale = "P0 split from _publish_helpers.py: publish epilogue (_publish_epilogue). SLOC 100, ceiling 140 = round_up_to_10(100+40)."
+
+[files."src/backlink_publisher/cli/_publish_lease.py"]
+ceiling = 110
+rationale = "P0 split from _publish_helpers.py: lease management and gate banner helpers (_gate_banner_sentinel, _release_acquired_leases, _acquire_publish_leases, _maybe_emit_gate_banner, _check_token_drift). SLOC 62, ceiling 110 = round_up_to_10(62+30)."

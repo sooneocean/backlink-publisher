@@ -112,6 +112,21 @@ class TestLiveModeContract:
         assert result.ok is False
         assert "no adapter" in " ".join(result.blockers).lower()
 
+    def test_live_mode_precheck_failure_propagates_offline_message(self):
+        """Live mode runs an offline precheck before any HTTP. After the
+        _setup_checks/_verify_live split that precheck is `_verify_offline_setup`
+        (formerly a re-entrant `verify_adapter_setup(mode="offline")` call). A
+        registered-but-unconfigured platform must short-circuit to
+        last_verify_result='never' with the offline DependencyError message as
+        the blocker — pins the one intentional logic change of the split.
+        """
+        from backlink_publisher.publishing.adapters import verify_adapter_setup
+
+        result = verify_adapter_setup("ghpages", _empty_config(), mode="live")
+        assert result.ok is False
+        assert result.last_verify_result == "never"
+        assert "GitHub Pages config missing" in " ".join(result.blockers)
+
 
 # ── Dry-run mode contract ─────────────────────────────────────────────────────
 
@@ -158,12 +173,12 @@ class TestDryRunIntercept:
 
     def test_intercept_raises_on_real_session_send(self):
         """Inside the context manager, any requests call must raise."""
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError, match="dry-run intercept"):
                 requests.get("https://example.com/")
 
     def test_intercept_intercepts_post_too(self):
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError):
                 requests.post("https://example.com/", json={"x": 1})
 
@@ -185,7 +200,7 @@ class TestDryRunIntercept:
         assert before is after, "Session.send not restored after exception"
 
     def test_intercept_error_message_includes_method_and_url(self):
-        with dry_run_intercept():
+        with dry_run_intercept(), patch("requests.utils.should_bypass_proxies", return_value=True):
             with pytest.raises(DryRunInterceptError) as exc_info:
                 requests.put("https://api.telegra.ph/createPage", json={"a": 1})
         msg = str(exc_info.value)

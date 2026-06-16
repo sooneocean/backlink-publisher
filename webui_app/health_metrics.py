@@ -230,6 +230,82 @@ def broken_channels() -> list[BrokenChannel]:
     return out
 
 
+def geo_citation_share(store: EventStore, *, window_days: int = DEFAULT_WINDOW_DAYS) -> list[dict]:
+    """Return per-target citation share data from ``citation.observed`` events.
+
+    Groups ``citation.observed`` events by ``target_url``, computing the
+    share metrics that mirror the :class:`~backlink_publisher.geo.share.TargetShare`
+    states (never_probed / warming_up / measured / excluded).  Uses
+    ``json_extract`` to pull ``verdict`` from ``payload_json``.
+
+    Rolling window: last ``window_days`` days. Read-only; never raises.
+    """
+    from datetime import timedelta
+
+    from backlink_publisher.events.kinds import CITATION_OBSERVED
+    from backlink_publisher.geo.share import (
+        DEFAULT_LOW_CONFIDENCE_THRESHOLD,
+        DEFAULT_MIN_SAMPLE,
+        DEFAULT_WINDOW,
+    )
+
+    since = _window_start(datetime.now(timezone.utc), window_days)
+
+    # Fetch per-target verdict counts and total n in the rolling window.
+    rows = store.query(
+        """
+        SELECT
+            target_url,
+            COUNT(*) AS total_n,
+            SUM(CASE WHEN json_extract(payload_json, '$.verdict') IN ('site_cited','article_cited')
+                     THEN 1 ELSE 0 END) AS cited,
+            SUM(CASE WHEN json_extract(payload_json, '$.verdict') = 'absent'
+                     THEN 1 ELSE 0 END) AS absent,
+            SUM(CASE WHEN json_extract(payload_json, '$.verdict') = 'refused'
+                     THEN 1 ELSE 0 END) AS refused
+        FROM events
+        WHERE kind = ?
+          AND ts_utc >= ?
+          AND target_url IS NOT NULL
+        GROUP BY target_url
+        ORDER BY target_url
+        """,
+        (CITATION_OBSERVED, since),
+    )
+
+    out: list[dict] = []
+    for r in rows:
+        target_url = r["target_url"]
+        total_n = int(r["total_n"] or 0)
+        cited = int(r["cited"] or 0)
+        absent = int(r["absent"] or 0)
+        refused = int(r["refused"] or 0)
+        denominator = cited + absent  # refused excluded per D3
+
+        refused_rate = round(refused / total_n, 4) if total_n else 0.0
+
+        if denominator < DEFAULT_MIN_SAMPLE:
+            state = "warming_up"
+            share = None
+            low_confidence = False
+        else:
+            state = "measured"
+            share = round(cited / denominator * 100, 1)
+            low_confidence = denominator < DEFAULT_LOW_CONFIDENCE_THRESHOLD
+
+        out.append({
+            "target_url": target_url,
+            "state": state,
+            "share": share,
+            "n": denominator,
+            "total_n": total_n,
+            "refused_rate": refused_rate,
+            "low_confidence": low_confidence,
+        })
+
+    return out
+
+
 def build_health(
     store: EventStore | None = None,
     *,

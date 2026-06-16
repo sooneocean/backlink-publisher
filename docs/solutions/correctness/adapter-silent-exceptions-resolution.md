@@ -15,7 +15,7 @@ This blueprint establishes a **Standardized Logging and Propagation Pattern** fo
 The following files under `src/backlink_publisher/publishing/adapters/` contain silent or sub-optimal broad exception handling:
 
 ### 2.1. `linkedin_api.py`
-* **Location**: Lines [138-141](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/linkedin_api.py#L138-L145)
+* **Location**: Lines [138-141](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/linkedin_api.py#L138-L145)
 * **Code Block**:
   ```python
   data = {}
@@ -34,7 +34,7 @@ The following files under `src/backlink_publisher/publishing/adapters/` contain 
 ### 2.2. `medium_browser.py`
 This module has the most extensive use of browser automation and several silent catches:
 
-* **Location**: Lines [161-164](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L161-L164)
+* **Location**: Lines [161-164](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L161-L164)
 * **Code Block**:
   ```python
   try:
@@ -44,7 +44,7 @@ This module has the most extensive use of browser automation and several silent 
   ```
 * **Issues**: Silently catches any exception while fetching context cookies and proceeds with an empty list. No telemetry or log trace is created, hiding issues with the Playwright browser context.
 
-* **Location**: Lines [257-266](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L257-L266)
+* **Location**: Lines [257-266](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L257-L266)
 * **Code Block**:
   ```python
   try:
@@ -57,7 +57,7 @@ This module has the most extensive use of browser automation and several silent 
   ```
 * **Issues**: The broad `except Exception:` swallows probe errors during a Playwright timeout. While the probe is best-effort, a failed probe due to a detached page or selenium error should log a debug statement so operators know *why* the CAPTCHA probe failed.
 
-* **Location**: Lines [321-325](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L321-L325)
+* **Location**: Lines [321-325](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L321-L325)
 * **Code Block**:
   ```python
   try:
@@ -68,7 +68,7 @@ This module has the most extensive use of browser automation and several silent 
   ```
 * **Issues**: This is a critical silent swallow. If clicking `SAVE_DRAFT` fails, it falls back to sleeping 3000ms with zero logs, warnings, or indicators. If Medium's UI layout changes, this failure will remain completely invisible.
 
-* **Location**: Lines [409-421](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L409-L421)
+* **Location**: Lines [409-421](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/medium_browser.py#L409-L421)
 * **Code Block**:
   ```python
   def _save_screenshot(page: Any, config: Config, article_id: str) -> None:
@@ -84,7 +84,7 @@ This module has the most extensive use of browser automation and several silent 
 ---
 
 ### 2.3. `blogger_api.py`
-* **Location**: Lines [95-98](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/0511_backlink%20%20publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/blogger_api.py#L95-L98)
+* **Location**: Lines [95-98](file:///Users/dex/YDEX/INPORTANT%20WORK/外链/backlink-publisher/backlink-publisher/src/backlink_publisher/publishing/adapters/blogger_api.py#L95-L98)
 * **Code Block**:
   ```python
   creds: Credentials | None = None

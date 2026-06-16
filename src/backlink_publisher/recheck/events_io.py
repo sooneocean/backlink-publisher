@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from backlink_publisher.events._project_helpers import write_quarantines
 from backlink_publisher.events.kinds import LINK_RECHECKED
-from backlink_publisher.recheck import verdicts
+from backlink_publisher.recheck import indexability, verdicts
 from backlink_publisher.recheck.selection import _parse_ts
 
 if TYPE_CHECKING:
@@ -52,6 +52,16 @@ def emit_recheck(store: "EventStore", results: list[dict]) -> int:
                 "expected_nofollow": bool(r.get("expected_nofollow")),
                 "anchor_drift": bool(r.get("anchor_drift")),
                 "anchor_baseline_missing": bool(r.get("anchor_baseline_missing")),
+                # Orthogonal indexability axis (additive — NOT in the floor).
+                # Fail-open to UNKNOWN if absent so a reader never mistakes an
+                # unclassified page for indexable. ``indexability_reason`` is
+                # clamped to the closed vocab AT THIS SEAM (never raw bytes).
+                "indexability": r.get("indexability") or indexability.UNKNOWN,
+                "indexability_reason": (
+                    r.get("indexability_reason")
+                    if r.get("indexability_reason") in indexability.REASON_VOCAB
+                    else None
+                ),
                 "source": r.get("source", "events"),
             }
             event_id = store.append(

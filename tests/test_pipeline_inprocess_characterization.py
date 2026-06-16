@@ -458,6 +458,104 @@ def test_report_anchors_from_profile_empty_document(cfg_dir):
     assert res.envelope is None  # no breach → no exit-6 alarm envelope
 
 
+# ---------------------------------------------------------------------------
+# In-process parity for plan + report-anchors (thin-WebUI Unit 7 closeout).
+# `validate` already had its `inprocess_matches_subprocess` anchors above;
+# `plan` and `report-anchors` were missing theirs — added by plan
+# 2026-06-01-009 Unit 2 step 0 as the Unit-8 migration safety gate. Both
+# subprocess calls here OMIT `__cfg_dir`, so they inherit the autouse
+# sandbox `BACKLINK_PUBLISHER_CONFIG_DIR` from os.environ — i.e. the SAME
+# config the in-process PipelineAPI call resolves. The only intentional
+# asymmetry is fetch-verify: subprocess uses `--no-fetch-verify` (gate
+# skipped), in-process plan() runs the gate but the autouse content-fetch
+# fixture passes every URL, so no row is dropped either way.
+# ---------------------------------------------------------------------------
+
+
+def _normalize_plan_rows(rows: list[dict]) -> list[dict]:
+    """Drop run-variant fields so two plan runs compare equal.
+
+    ``run_id`` and any ``*_at`` timestamp vary per run; the planned-payload
+    identity (``id``) is content-derived and stable under ``PYTHONHASHSEED=0``,
+    so it is NOT dropped — a drift there would be a real behavior change.
+    """
+    out = []
+    for row in rows:
+        row = json.loads(json.dumps(row))  # deep copy
+        row.pop("run_id", None)
+        for k in list(row):
+            if k.endswith("_at"):
+                row.pop(k, None)
+        out.append(row)
+    return out
+
+
+def test_plan_inprocess_matches_subprocess_good_seed():
+    """In-process plan good-seed rows == subprocess golden (same sandbox config)."""
+    from webui_app.api.pipeline_api import PipelineAPI
+
+    stdin = json.dumps(_valid_plan_seed()) + "\n"
+    # No __cfg_dir → subprocess inherits the autouse sandbox config dir, matching
+    # the in-process call. BACKLINK_NO_FETCH_VERIFY=1 + --no-fetch-verify skip the
+    # network gate on the subprocess side.
+    sub = _run_cli(
+        "plan-backlinks",
+        ["--no-fetch-verify"],
+        stdin=stdin,
+        extra_env={"BACKLINK_NO_FETCH_VERIFY": "1"},
+    )
+    assert sub.returncode == 0, f"subprocess plan failed: {sub.stderr}"
+
+    res = PipelineAPI().plan(stdin)
+    assert res.success is True, f"in-process plan failed: {res.error}"
+    assert res.exit_code == 0
+    assert _normalize_plan_rows(res.rows) == _normalize_plan_rows(sub.jsonl_rows())
+
+
+def test_plan_inprocess_matches_subprocess_error_seed():
+    """In-process plan unsupported-platform → same typed error/exit as golden."""
+    from webui_app.api.pipeline_api import PipelineAPI
+
+    bad = _valid_plan_seed()
+    bad["platform"] = "xyznonexistent"
+    stdin = json.dumps(bad) + "\n"
+    sub = _run_cli(
+        "plan-backlinks",
+        ["--no-fetch-verify"],
+        stdin=stdin,
+        extra_env={"BACKLINK_NO_FETCH_VERIFY": "1"},
+    )
+    assert sub.returncode == 2
+    sub_env = sub.envelope
+    assert sub_env is not None
+
+    res = PipelineAPI().plan(stdin)
+    assert res.success is False
+    assert res.error_class == sub_env.error_class == "InputValidationError"
+    assert res.exit_code == sub_env.exit_code == 2
+
+
+def test_report_anchors_inprocess_matches_subprocess_from_profile_empty():
+    """In-process report_anchors(--from-profile, empty) == subprocess golden document."""
+    from webui_app.api.pipeline_api import PipelineAPI
+
+    # No __cfg_dir → subprocess inherits the autouse sandbox config (empty profile),
+    # matching the in-process PipelineAPI().report_anchors() config resolution.
+    sub = _run_cli(
+        "report-anchors",
+        ["--from-profile", "https://example.com", "--json"],
+        stdin="",
+    )
+    assert sub.returncode == 0, f"subprocess report failed: {sub.stderr}"
+
+    res = PipelineAPI().report_anchors("https://example.com", as_json=True)
+    assert res.success is True, f"in-process report failed: {res.error}"
+    assert res.exit_code == 0
+    # report-anchors emits a single JSON document, not JSONL rows — compare the
+    # parsed documents (read via .stdout, per the report_anchors docstring).
+    assert json.loads(res.stdout) == json.loads(sub.stdout)
+
+
 # ===========================================================================
 # Concurrency baseline — pins audit hazard H3 (shared sys.stdout/stderr).
 # ===========================================================================

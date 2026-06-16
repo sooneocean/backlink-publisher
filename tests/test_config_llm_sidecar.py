@@ -26,6 +26,7 @@ _LLM_ENV_VARS = (
     "BACKLINK_LLM_API_KEY",
     "BACKLINK_LLM_BASE_URL",
     "BACKLINK_LLM_MODEL",
+    "BACKLINK_LLM_PROVIDER",
     "BACKLINK_LLM_TEMPERATURE",
     "BACKLINK_LLM_SYSTEM_PROMPT",
     "BACKLINK_LLM_USE_ARTICLE_GEN",
@@ -51,6 +52,7 @@ _FULL_SETTINGS = {
     "endpoint": "https://api.openai.com/v1",
     "api_key": "sk-test-123",
     "model": "gpt-4o-mini",
+    "provider": "openai",
     "temperature": 0.5,
     "system_prompt": "anchor prompt",
     "use_article_gen": True,
@@ -71,6 +73,7 @@ def test_sidecar_happy_path_maps_all_fields(tmp_path):
     assert cfg.base_url == "https://api.openai.com/v1"
     assert cfg.api_key == "sk-test-123"
     assert cfg.model == "gpt-4o-mini"
+    assert cfg.provider == "openai"
     assert cfg.temperature == 0.5
     assert cfg.system_prompt == "anchor prompt"
     assert cfg.use_article_gen is True
@@ -96,6 +99,7 @@ def test_sidecar_minimal_required_trio_only(tmp_path):
     # Toggles default off; prompts collapse to None.
     assert cfg.use_article_gen is False
     assert cfg.use_image_gen is False
+    assert cfg.provider == "openai-compatible"
     assert cfg.system_prompt is None
     assert cfg.article_system_prompt is None
     assert cfg.temperature == 0.7
@@ -247,12 +251,14 @@ def test_load_config_env_wins_over_sidecar(tmp_path, monkeypatch):
     monkeypatch.setenv("BACKLINK_LLM_BASE_URL", "https://env.example/v1")
     monkeypatch.setenv("BACKLINK_LLM_API_KEY", "env-key")
     monkeypatch.setenv("BACKLINK_LLM_MODEL", "env-model")
+    monkeypatch.setenv("BACKLINK_LLM_PROVIDER", "openai")
     config_toml = tmp_path / "config.toml"
     _write_sidecar(tmp_path, _FULL_SETTINGS)
     cfg = load_config(config_toml)
     assert cfg.llm_anchor_provider is not None
     assert cfg.llm_anchor_provider.base_url == "https://env.example/v1"
     assert cfg.llm_anchor_provider.model == "env-model"
+    assert cfg.llm_anchor_provider.provider == "openai"
 
 
 def test_load_config_no_sources_leaves_provider_none(tmp_path):

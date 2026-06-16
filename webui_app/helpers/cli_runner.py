@@ -119,6 +119,18 @@ def _rewrite_cli_cmd(cmd):
     return new_cmd, env
 
 
+def _base_subprocess_kwargs(stdin, cwd, env, timeout: int = 300):
+    """Shared kwargs for subprocess.run in run_pipe and run_pipe_capture."""
+    return dict(
+        input=stdin,
+        capture_output=True,
+        text=True,
+        cwd=cwd,
+        env=env,
+        timeout=timeout,
+    )
+
+
 # Cap on surfaced CLI error text. Long enough that the real diagnostic (an
 # ImportError / AuthExpiredError / traceback) is never cut off, bounded so an
 # attacker-influenced message (a target URL, a fetched-page snippet folded into
@@ -172,12 +184,7 @@ def run_pipe_capture(cmd, stdin) -> dict[str, str | int]:
     try:
         result = subprocess.run(
             new_cmd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            cwd=_REPO_ROOT or os.getcwd(),
-            env=env,
-            timeout=300,  # 5-minute timeout
+            **_base_subprocess_kwargs(stdin, _REPO_ROOT or os.getcwd(), env),
         )
     except subprocess.TimeoutExpired as exc:
         return {
@@ -198,12 +205,7 @@ def run_pipe(cmd, stdin):
     try:
         result = subprocess.run(
             new_cmd,
-            input=stdin,
-            capture_output=True,
-            text=True,
-            cwd=_REPO_ROOT or os.getcwd(),
-            env=env,
-            timeout=300,  # 5-minute timeout
+            **_base_subprocess_kwargs(stdin, _REPO_ROOT or os.getcwd(), env),
         )
     except subprocess.TimeoutExpired as exc:
         raise Exception(f'CLI timeout after 300 seconds: {exc.stderr or ""}')

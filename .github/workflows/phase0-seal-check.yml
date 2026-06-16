@@ -22,6 +22,10 @@ permissions:
                         # even though the comment is attached to a PR (closes
                         # v1 security F7 + auto-fix v2-F9)
 
+concurrency:
+  group: phase0-seal-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     # `name:` makes the check_run report this string as the check name.
@@ -33,6 +37,7 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'test/telegraph-rel-absent') ||
       startsWith(github.event.pull_request.head.ref, 'feat/telegraph-webui-docs')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:

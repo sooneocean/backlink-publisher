@@ -1,15 +1,13 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <title>设置 - Backlink Publisher</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <meta name="csrf-token" content="{{ csrf_token or '' }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css') }}">
-</head>
-<body>
+{% extends 'base.html' %}
+{# Settings page — base layout + ES-module entry (Plan 2026-06-01-007 Units 2-3).
+   <head>/Bootstrap/csrf-meta come from base.html; settings.js is the ESM entry
+   (replaced the bare settings_main script). fetch_json.js stays for the classic
+   bind_channel; channel-binding bridges velog via a DOM event; no inline on*. #}
+{% block title %}设置 - Backlink Publisher{% endblock %}
+{% block head_extra %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/settings.css', v=asset_version) }}">
+{% endblock %}
+{% block content %}
     <nav class="navbar" style="display:flex;justify-content:space-between;align-items:center;">
         <h1><i class="bi bi-gear me-2"></i>设置</h1>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -309,7 +307,7 @@
                             {% if notion_status.bound %}
                             <button type="submit" name="clear" value="1"
                                     class="btn btn-outline-danger" style="margin-left:8px;"
-                                    onclick="return confirm('清除 Notion token 文件？');">
+                                    data-confirm="清除 Notion token 文件？">
                                 清除
                             </button>
                             {% endif %}
@@ -354,14 +352,7 @@
 
     </div>
 
-     <script>window.__settingsBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([])} | tojson }};</script>
-     <script src="{{ url_for('static', filename='js/fetch_json.js') }}"></script>
-     <script src="{{ url_for('static', filename='js/settings_main.js') }}"></script>
-
-    <script src="/static/js/bind_channel.js" defer></script>
-    <script src="/static/js/channel-binding.js" defer></script>
-
-    <!-- Loading Overlay -->
+    <!-- Loading Overlay (settings.js toggles #_loadingOverlay) -->
     <div id="_loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(15,15,15,0.55);z-index:9999;flex-direction:column;align-items:center;justify-content:center;">
         <div style="background:white;border-radius:20px;padding:40px 48px;text-align:center;max-width:320px;box-shadow:0 24px 64px rgba(0,0,0,0.25);">
             <div class="spinner-border mb-4" style="width:3rem;height:3rem;color:var(--primary);" role="status">
@@ -371,5 +362,21 @@
             <div id="_loadingSubtext" style="font-size:0.85rem;color:#6b7280;line-height:1.5;">请稍候</div>
         </div>
     </div>
-</body>
-</html>
+{% endblock %}
+
+{% block page_data %}
+     <script>window.__settingsBootstrap = {{ {'plans_list': plans_list | default(none), 'profiles': profiles | default([])} | tojson }};</script>
+{% endblock %}
+
+{% block page_module %}
+     {# U3: settings.js is the ES-module entry (replaced the bare settings script). fetch_json.js
+        stays because the classic bind_channel.js still reads window.fetchJson;
+        channel-binding.js dispatches a `velog:login` DOM event that settings.js handles. #}
+     <script src="{{ url_for('static', filename='js/fetch_json.js', v=asset_version) }}"></script>
+     <script type="module" src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
+     <script src="{{ url_for('static', filename='js/bind_channel.js', v=asset_version) }}" defer></script>
+     <script src="{{ url_for('static', filename='js/channel-binding.js', v=asset_version) }}" defer></script>
+{% endblock %}
+
+{# Pro Mode Copilot — side panel (Plan U4) #}
+{% include '_copilot_panel.html' %}

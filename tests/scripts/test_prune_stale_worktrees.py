@@ -155,9 +155,10 @@ def test_handles_worktree_paths_with_spaces(tmp_path: Path) -> None:
     porcelain `worktree <path>` line, which silently truncated everything
     past the first space. Both the main-worktree-skip logic and the
     per-worktree path comparisons then matched the wrong string and the
-    script silently skipped every entry. Caught by dogfooding against
-    the real workspace which lives under `0511_backlink  publisher/`
-    (two spaces).
+    script silently skipped every entry.     Caught by dogfooding against a real workspace whose path
+    contained two consecutive spaces. (Project renamed 2026-06-01
+    to `backlink-publisher/`, no spaces; regression test still
+    applies to installations with spaces in their workspace path.)
     """
     # Build the same fixture as fixture_repo but rooted at a path that has spaces.
     spaced_root = tmp_path / "has spaces in name"

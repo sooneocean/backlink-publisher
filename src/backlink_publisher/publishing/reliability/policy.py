@@ -31,7 +31,6 @@ Plan: docs/plans/2026-05-28-001-feat-publish-reliability-policy-plan.md
 from __future__ import annotations
 
 import os
-import time
 from typing import TYPE_CHECKING, Any, Callable
 
 from backlink_publisher._util.errors import AuthExpiredError, ExternalServiceError

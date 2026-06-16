@@ -1,4 +1,5 @@
 """Blogger / Medium token file I/O."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,7 @@ import os
 import stat
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 #: All token-FILE-backed credential platforms, in scan order. Single source of
 #: truth for both the run-start baseline snapshot and the per-row drift re-check.
@@ -26,13 +27,17 @@ _TOKEN_FILES: list[tuple[str, str]] = [
     ("writeas", "writeas-token.json"),
     ("tumblr", "tumblr-credentials.json"),
     ("linkedin", "linkedin-token.json"),
+    ("hackmd", "hackmd-token.json"),
+    ("mataroa", "mataroa-token.json"),
+    ("gitlabpages", "gitlabpages-token.json"),
 ]
 
 
-def _resolve_config_dir():
+def _resolve_config_dir() -> Path:
     """Indirect lookup of ``_config_dir`` via the package — restores
     monkeypatchability after the Unit 5 split (see ``writer.py``)."""
     from backlink_publisher import config as _cfg
+
     return _cfg._config_dir()
 
 
@@ -65,7 +70,7 @@ def _load_token(path: Path | None, default_filename: str) -> dict[str, Any] | No
         return None
     try:
         with open(token_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            return cast("dict[str, Any] | None", json.load(f))
     except Exception:
         return None
 
@@ -154,6 +159,89 @@ def save_devto_token(data: dict[str, Any], path: Path | None = None) -> None:
     Expected keys: api_key (str).
     """
     _save_token(data, path, "devto-token.json")
+
+
+def load_hackmd_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load HackMD API token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "hackmd-token.json")
+
+
+def save_hackmd_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save HackMD API token dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at HackMD → Settings → API → Create token.
+    """
+    _save_token(data, path, "hackmd-token.json")
+
+
+def load_mataroa_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Mataroa API key JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "mataroa-token.json")
+
+
+def save_mataroa_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Mataroa API key dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Enable at mataroa.blog → account settings → API.
+    """
+    _save_token(data, path, "mataroa-token.json")
+
+
+def load_gitlabpages_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load GitLab personal access token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "gitlabpages-token.json")
+
+
+def save_gitlabpages_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save GitLab PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). PAT needs ``api`` (or a project-scoped
+    write_repository) scope on the target Pages project.
+    """
+    _save_token(data, path, "gitlabpages-token.json")
+
+
+def load_zenn_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Zenn GitHub PAT JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "zenn-token.json")
+
+
+def save_zenn_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Zenn GitHub PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at github.com → Settings →
+    Developer settings → Personal access tokens → New token
+    (repo or specific: contents:write on the Zenn-connected repo).
+    """
+    _save_token(data, path, "zenn-token.json")
+
+
+def load_qiita_token(path: Path | None = None) -> dict[str, Any] | None:
+    """Load Qiita personal access token JSON ({token: "..."}).
+
+    Returns None if the file is absent — callers treat None as unbound.
+    """
+    return _load_token(path, "qiita-token.json")
+
+
+def save_qiita_token(data: dict[str, Any], path: Path | None = None) -> None:
+    """Save Qiita PAT dict to JSON file with mode 0600.
+
+    Expected keys: token (str). Generate at qiita.com → Settings → Applications.
+    """
+    _save_token(data, path, "qiita-token.json")
 
 
 def save_wordpresscom_token(data: dict[str, Any], path: Path | None = None) -> None:

@@ -383,7 +383,7 @@ class TestTierPersistenceContract:
 
         js = (
             Path(__file__).resolve().parents[1]
-            / "webui_app" / "static" / "js" / "settings_main.js"
+            / "webui_app" / "static" / "js" / "settings.js"
         ).read_text(encoding="utf-8")
         # Per-tier key namespace + tier-scoped selector.
         assert "settings:collapse:" in js

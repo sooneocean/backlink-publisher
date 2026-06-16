@@ -24,7 +24,6 @@ from typing import Any
 
 from ._manifest_types import BindDescriptor, Policy, UiMeta
 
-
 # ── velog ──────────────────────────────────────────────────────────────────
 #
 # First channel to declare a complete manifest (Plan 2026-05-25-002 Unit 3).
@@ -58,8 +57,7 @@ VELOG_MANIFEST: dict[str, Any] = dict(
             card_template="_settings_channel_velog.html",
             extras={
                 "browser_recipe": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes.velog"
+                    "backlink_publisher.publishing.browser_publish.recipes.velog"
                 ),
                 "bind_recipe": "backlink_publisher.cli._bind.recipes.velog",
                 "login_module": "backlink_publisher.cli.velog_login",
@@ -144,9 +142,7 @@ BLOGGER_MANIFEST: dict[str, Any] = dict(
             card_template="_settings_channel_blogger.html",
             extras={
                 "oauth_config_section": "blogger_oauth",
-                "token_loader": (
-                    "backlink_publisher.config.load_blogger_token"
-                ),
+                "token_loader": ("backlink_publisher.config.load_blogger_token"),
             },
         ),
     ],
@@ -227,6 +223,221 @@ DEVTO_MANIFEST: dict[str, Any] = dict(
 )
 
 
+# ── hackmd ───────────────────────────────────────────────────────────────────
+#
+# HackMD v1 REST API (Bearer token). Token-paste backend ({"token": "<token>"})
+# at ``<config_dir>/hackmd-token.json``. dofollow="uncertain" (rationale at
+# register() call site) — third-party probe = dofollow, OUR canary pending.
+# Plan 2026-06-01-007 Wave 1.
+
+HACKMD_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="HackMD",
+        domain="hackmd.io",
+        category="docs",
+        icon="bi-markdown",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/hackmd-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "HackMD → Settings → API → Create token",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
+# ── mataroa ──────────────────────────────────────────────────────────────────
+#
+# Mataroa open REST API (Bearer token). Token-paste backend ({"token": "<token>"})
+# at ``<config_dir>/mataroa-token.json``. dofollow="uncertain" (rationale at
+# register() call site) — third-party probe = dofollow, OUR canary pending.
+# Plan 2026-06-01-007 Wave 1.
+
+MATAROA_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Mataroa",
+        domain="mataroa.blog",
+        category="blog",
+        icon="bi-journal-text",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/mataroa-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "mataroa.blog → account settings → API",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
+# ── gitlabpages ──────────────────────────────────────────────────────────────
+#
+# GitLab Pages via the Repository Files API (PRIVATE-TOKEN PAT). Token-paste
+# backend ({"token": "<pat>"}) at ``<config_dir>/gitlabpages-token.json``; the
+# project/branch/public-path live in ``[gitlabpages]`` in config.toml. Requires
+# a pre-existing ``pages`` CI job on the target project (no auto-Jekyll).
+# dofollow="uncertain" (rationale at register() call site) — rel is
+# operator-controlled but *.gitlab.io indexation is partial + publish is async,
+# so an OUR-post index,follow canary gates the flip to True. Plan 2026-06-01-007.
+
+GITLABPAGES_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="GitLab Pages",
+        domain="gitlab.io",
+        category="static-site",
+        icon="bi-gitlab",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/gitlabpages-token.json",
+            extras={
+                "secret_shape": '{"token": "<pat>"}',
+                "requires_config_section": "[gitlabpages]",
+                "precondition": "target project must have a `pages` CI job emitting public/",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
+# ── qiita ──────────────────────────────────────────────────────────────────
+#
+# Qiita v2 REST API (Bearer token). Token-paste backend ({"token": "..."})
+# at ``<config_dir>/qiita-token.json``. dofollow=False — confirmed nofollow
+# noopener on all outbound links (2026-06-01 discovery run, 12/86 ratio).
+# JP developer platform, referral_value="high". Wave-2 discovery (2026-06-01).
+
+QIITA_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Qiita",
+        domain="qiita.com",
+        category="dev-blog",
+        icon="bi-code-slash",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/qiita-token.json",
+            extras={
+                "secret_shape": '{"token": "..."}',
+                "token_location": "qiita.com → Settings → Applications → New token (read_qiita + write_qiita)",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=("ja",),
+    ),
+)
+
+
+# ── zenn ───────────────────────────────────────────────────────────────────
+#
+# Zenn: GitHub-repo git-push archetype. Articles committed as Markdown to a
+# GitHub repo connected to the operator's Zenn account. Token-paste backend
+# (GitHub PAT {"token": "..."}) at ``<config_dir>/zenn-token.json``.
+# dofollow=False — confirmed nofollow noopener noreferrer on all outbound
+# links (2026-06-01 discovery run, 36/137 ratio). Wave-2 discovery (2026-06-01).
+# PRECONDITION: [zenn] section in config.toml with github_repo + username.
+
+ZENN_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Zenn",
+        domain="zenn.dev",
+        category="dev-blog",
+        icon="bi-code-square",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/zenn-token.json",
+            extras={
+                "secret_shape": '{"token": "<github-pat>"}',
+                "token_location": "github.com → Settings → Developer settings → Personal access tokens (contents:write scope on your Zenn-connected repo)",
+                "requires_config_section": "[zenn] with github_repo + username",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=("ja",),
+    ),
+)
+
+
+# ── hatena ─────────────────────────────────────────────────────────────────
+#
+# Hatena Blog AtomPub + WSSE. Secret JSON shape:
+# ``{"hatena_id": "...", "blog_id": "...", "api_key": "..."}`` at
+# ``<config_dir>/hatena-credentials.json`` (0600). hatena_id/blog_id are not
+# secret (they appear in the post URL); api_key (Settings → Advanced → AtomPub)
+# is password-equivalent. dofollow="uncertain" (rationale at register() site);
+# no documented rate limit, so ``throttle_band=None``.
+
+HATENA_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Hatena Blog",
+        domain="hatenablog.com",
+        category="blog",
+        icon="bi-journal-text",
+    ),
+    bind=[
+        BindDescriptor(
+            backend="token-paste",
+            storage_state_path="<config_dir>/hatena-credentials.json",
+            extras={
+                "secret_shape": (
+                    '{"hatena_id": "...", "blog_id": "...", "api_key": "..."}'
+                ),
+                "api_key_location": "Hatena Blog → Settings → Advanced → AtomPub",
+            },
+        ),
+    ],
+    policy=Policy(
+        throttle_band=None,
+        env_keys={},
+        retry_id="default",
+        liveness_probe_sec=None,
+        language_whitelist=(),
+    ),
+)
+
+
 # ── notion ─────────────────────────────────────────────────────────────────
 #
 # Notion Integration API — creates a Page in a database via Bearer token.
@@ -277,8 +488,7 @@ MASTODON_MANIFEST: dict[str, Any] = dict(
             storage_state_path="<config_dir>/mastodon-cookies.json",
             extras={
                 "browser_recipe": (
-                    "backlink_publisher.publishing.browser_publish."
-                    "recipes.mastodon"
+                    "backlink_publisher.publishing.browser_publish.recipes.mastodon"
                 ),
                 "selectors_module": (
                     "backlink_publisher.publishing.browser_publish."
@@ -417,8 +627,72 @@ TUMBLR_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(display_name="Tumblr", domain="tumblr.com", category="social"),
 )
 WORDPRESSCOM_MANIFEST: dict[str, Any] = dict(
-    ui=UiMeta(display_name="WordPress", domain="wordpress.com", category="general-blog"),
+    ui=UiMeta(
+        display_name="WordPress", domain="wordpress.com", category="general-blog"
+    ),
 )
 WRITEAS_MANIFEST: dict[str, Any] = dict(
     ui=UiMeta(display_name="Write.as", domain="write.as", category="general-blog"),
+)
+
+# ── Zero-Auth MVP (Plan 2026-06-04-001 Wave 1) ──────────────────────────
+# PostEasy — anonymous microblog, 90-day TTL, REST API.
+POSTEASY_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="PostEasy",
+        domain="post-easy.org",
+        category="anonymous-paste",
+        icon="bi-chat-dots",
+    ),
+)
+
+# BrewPage — instant HTML/MD hosting, 15-30 day TTL, REST API.
+BREWPAGE_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="BrewPage",
+        domain="brewpage.app",
+        category="instant-publish",
+        icon="bi-lightning-charge",
+    ),
+)
+
+# HtmlDrop — anonymous HTML paste, 24h TTL, REST API (Wave 3b).
+HTMLDROP_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="HtmlDrop",
+        domain="htmldrop.in",
+        category="instant-publish",
+        icon="bi-code-slash",
+    ),
+)
+
+# Nonograph — anonymous markdown publishing, CSRF form POST (Wave 3a).
+NONOGRAPH_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Nonograph",
+        domain="nonogra.ph",
+        category="anonymous-paste",
+        icon="bi-file-text",
+    ),
+)
+
+# Pubmark — free instant Markdown publishing, REST API (this wave).
+PUBMARK_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Pubmark",
+        domain="pubmark.site",
+        category="anonymous-paste",
+        icon="bi-pencil-square",
+    ),
+)
+
+# Unmarkdown — markdown publishing platform with REST API (Discovery Batch 1).
+UNMARKDOWN_MANIFEST: dict[str, Any] = dict(
+    ui=UiMeta(
+        display_name="Unmarkdown",
+        domain="unmarkdown.com",
+        category="general-blog",
+        icon="bi-pencil",
+    ),
+    visibility="experimental",
 )

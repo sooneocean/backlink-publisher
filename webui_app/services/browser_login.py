@@ -34,6 +34,11 @@ from pathlib import Path
 
 from backlink_publisher.config.loader import _cache_dir
 
+# Absolute path so the spawned subprocess finds ``backlink_publisher`` regardless
+# of the CWD the caller used to launch the WebUI.  Mirrors the pattern in
+# bind_job.py which uses the same derivation.
+_SRC_DIR = str(Path(__file__).parent.parent.parent / "src")
+
 
 def _log_dir() -> Path:
     out = _cache_dir() / "browser-login-logs"
@@ -65,9 +70,7 @@ def spawn_browser_login(module: str, *, probe_seconds: float = 1.5) -> SpawnResu
     log_path.write_bytes(b"")  # truncate prior crash output
 
     existing_pp = os.environ.get("PYTHONPATH", "")
-    pythonpath = (
-        "src" + (os.pathsep + existing_pp) if existing_pp else "src"
-    )
+    pythonpath = _SRC_DIR + (os.pathsep + existing_pp if existing_pp else "")
 
     fh = log_path.open("ab")
     try:

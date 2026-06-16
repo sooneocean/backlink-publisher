@@ -55,6 +55,24 @@ def ce_draft_publish_now():
     return redirect(f'/?tab=draft&flash_type={flash_type}&flash_msg={result["flash_msg"]}')
 
 
+@bp.route('/ce:draft/ai-accept', methods=['POST'])
+def ce_draft_ai_accept():
+    """Accept an AI-reviewed draft so it can be published or scheduled."""
+    item_id = request.form.get('id', '')
+    result = _draft.accept_ai_review(item_id)
+    flash_type = result.get("flash_type") or ("success" if result["ok"] else "warning")
+    return redirect(f'/?tab=draft&flash_type={flash_type}&flash_msg={result["flash_msg"]}')
+
+
+@bp.route('/ce:draft/ai-fallback', methods=['POST'])
+def ce_draft_ai_fallback():
+    """Accept the fallback-safe draft path without rewriting article content."""
+    item_id = request.form.get('id', '')
+    result = _draft.fallback_ai_review(item_id)
+    flash_type = result.get("flash_type") or ("success" if result["ok"] else "warning")
+    return redirect(f'/?tab=draft&flash_type={flash_type}&flash_msg={result["flash_msg"]}')
+
+
 @bp.route('/ce:draft/cancel', methods=['POST'])
 def ce_draft_cancel():
     """Cancel a scheduled draft job."""

@@ -1,7 +1,8 @@
 ---
 title: "feat: Cyclomatic-complexity budget gate + _run_resume decomposition"
 type: feat
-status: active
+status: completed
+shipped: 6fbfda9c (#305)
 date: 2026-05-29
 origin: docs/brainstorms/2026-05-29-cyclomatic-complexity-budget-requirements.md
 deepened: 2026-05-29

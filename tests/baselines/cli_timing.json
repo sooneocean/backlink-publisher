@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-06-06T13:22:22.511535+00:00",
+  "imports": {
+    "backlink_publisher": {
+      "median_ms": 0.24,
+      "p95_ms": 0.43,
+      "samples": 5
+    },
+    "backlink_publisher.cli.plan_backlinks": {
+      "median_ms": 250.26,
+      "p95_ms": 429.13,
+      "samples": 5
+    },
+    "backlink_publisher.cli.publish_backlinks": {
+      "median_ms": 172.64,
+      "p95_ms": 272.01,
+      "samples": 5
+    },
+    "backlink_publisher._util.io": {
+      "median_ms": 5.87,
+      "p95_ms": 8.84,
+      "samples": 5
+    },
+    "backlink_publisher.config": {
+      "median_ms": 25.4,
+      "p95_ms": 38.66,
+      "samples": 5
+    }
+  }
+}

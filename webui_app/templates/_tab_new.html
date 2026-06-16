@@ -105,7 +105,7 @@
                 {% if profiles %}
                 <div style="display:flex;gap:8px;align-items:center;">
                     <select id="profilePicker" class="form-select form-select-sm" style="width:180px;"
-                            onchange="loadProfile(this.value)">
+                            data-action="load-profile">
                         <option value="">— 载入配置 —</option>
                         {% for p in profiles %}
                         <option value="{{ loop.index0 }}">{{ p.name }}</option>
@@ -134,7 +134,7 @@
                             <div class="mt-2">
                                 <small class="text-muted">锚文本建议:</small>
                                 {% for anchor in config.suggested_anchors %}
-                                <span class="badge bg-light text-dark border cursor-pointer" onclick="document.getElementsByName('custom_tags')[0].value += '{{ anchor }},'" style="cursor:pointer; margin-right: 5px;">{{ anchor }}</span>
+                                <span class="badge bg-light text-dark border cursor-pointer" data-action="append-tag" data-tag="{{ anchor }}" style="cursor:pointer; margin-right: 5px;">{{ anchor }}</span>
                                 {% endfor %}
                             </div>
                             {% endif %}
@@ -167,7 +167,7 @@
                             <i class="bi bi-rocket me-2"></i>生成发布计划
                         </button>
                         <button type="button" class="btn btn-outline-secondary btn-sm"
-                                onclick="saveProfilePrompt()" title="将当前设置保存为命名配置">
+                                data-action="save-profile" title="将当前设置保存为命名配置">
                             <i class="bi bi-bookmark-plus me-1"></i>保存为配置
                         </button>
                     </div>
@@ -219,7 +219,7 @@
                     <!-- Inline Editor -->
                     <div style="margin-top:10px;">
                         <button type="button" class="btn btn-sm btn-outline-secondary"
-                                onclick="toggleEditor({{ loop.index0 }})"
+                                data-action="toggle-editor" data-idx="{{ loop.index0 }}"
                                 id="editBtn-{{ loop.index0 }}">
                             <i class="bi bi-pencil me-1"></i>编辑内容
                         </button>
@@ -227,14 +227,15 @@
                             <textarea id="editorArea-{{ loop.index0 }}"
                                       rows="12" class="form-control"
                                       style="font-family:monospace;font-size:12px;line-height:1.6;"
-                                      onkeyup="markDirty({{ loop.index0 }})">{{ plan.content_markdown }}</textarea>
+                                      data-action="mark-dirty" data-idx="{{ loop.index0 }}">{{ plan.content_markdown }}</textarea>
                             <div style="margin-top:8px;display:flex;gap:8px;">
                                 <button type="button" class="btn btn-sm btn-primary"
-                                        onclick="saveEdit({{ loop.index0 }})">
+                                        data-action="save-edit" data-idx="{{ loop.index0 }}">
                                     <i class="bi bi-check2 me-1"></i>确认修改
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-secondary"
-                                        onclick="cancelEdit({{ loop.index0 }}, {{ plan.content_markdown | tojson }})">
+                                        data-action="cancel-edit" data-idx="{{ loop.index0 }}"
+                                        data-original='{{ plan.content_markdown | tojson }}'>
                                     <i class="bi bi-x me-1"></i>取消
                                 </button>
                                 <small id="editStatus-{{ loop.index0 }}" class="text-muted" style="line-height:30px;"></small>

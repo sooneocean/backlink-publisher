@@ -8,16 +8,21 @@ directly.  Every mutating method returns a dict with ``ok`` / ``error`` /
 from __future__ import annotations
 
 import uuid
+import json
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
 from apscheduler.jobstores.base import JobLookupError
 
+from backlink_publisher.llm.client import _redact_for_log
 from backlink_publisher._util.logger import plan_logger
 from webui_store import drafts_store as _drafts_store
 
 from ..helpers.contexts import _calc_next_available
 from ..scheduler import _publish_draft_job, _scheduler
+
+_SECRET_LIKE_TOKEN_RE = re.compile(r"\bsk-[A-Za-z0-9._-]+")
 
 
 # ── helpers ────────────────────────────────────────────────────────────────
@@ -41,6 +46,137 @@ def _remove_scheduled_job(job_id: str) -> bool:
                          reason=type(exc).__name__)
         return False
     return True
+
+
+def _ai_review_state_from_plans(plans_jsonl: str) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    for line in plans_jsonl.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+
+    ai_rows = [
+        row.get("ai_generation")
+        for row in rows
+        if isinstance(row.get("ai_generation"), dict)
+    ]
+    if not ai_rows:
+        return {
+            "required": False,
+            "accepted": True,
+            "status": "not_applicable",
+            "issues": [],
+            "provider": None,
+            "cover_prompt_present": False,
+        }
+
+    issues: list[dict[str, Any]] = []
+    for ai in ai_rows:
+        for issue in ai.get("issues") or []:
+            if not isinstance(issue, dict):
+                continue
+            clean_issue = dict(issue)
+            if isinstance(clean_issue.get("message"), str):
+                clean_issue["message"] = _SECRET_LIKE_TOKEN_RE.sub(
+                    "sk-***",
+                    _redact_for_log(clean_issue["message"]),
+                )
+            issues.append(clean_issue)
+
+    accepted = all(
+        ai.get("validation_accepted") is True
+        and ai.get("status") in {"reviewable", "accepted", "fallback_accepted"}
+        for ai in ai_rows
+    )
+    statuses = {
+        str(ai.get("status"))
+        for ai in ai_rows
+        if isinstance(ai.get("status"), str)
+    }
+    if accepted and statuses == {"accepted"}:
+        status = "accepted"
+    elif accepted and statuses == {"fallback_accepted"}:
+        status = "fallback_accepted"
+    elif accepted:
+        status = "reviewable"
+    elif statuses == {"fallback_used"}:
+        status = "fallback_used"
+    else:
+        status = "rejected"
+
+    providers = [
+        str(ai.get("provider"))
+        for ai in ai_rows
+        if isinstance(ai.get("provider"), str) and ai.get("provider")
+    ]
+    provider = providers[0] if providers else None
+    if len(set(providers)) > 1:
+        provider = "mixed"
+
+    return {
+        "required": True,
+        "accepted": accepted,
+        "status": status,
+        "issues": issues,
+        "provider": provider,
+        "cover_prompt_present": any(bool(row.get("cover_prompt")) for row in rows),
+    }
+
+
+def _ai_publish_gate(item: dict[str, Any] | None) -> dict[str, Any] | None:
+    ai_review = (item or {}).get("ai_review")
+    if not isinstance(ai_review, dict):
+        return None
+    if ai_review.get("required") and not ai_review.get("accepted"):
+        return {
+            "ok": False,
+            "error_code": "AI_DRAFT_REVIEW_REQUIRED",
+            "flash_type": "warning",
+            "flash_msg": "AI 草稿尚未通過審核，不能發布。",
+        }
+    return None
+
+
+def _mark_ai_generation_reviewed(plans_jsonl: str, *, status: str) -> str:
+    updated_lines: list[str] = []
+    for line in plans_jsonl.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            updated_lines.append(line)
+            continue
+        if isinstance(row, dict) and isinstance(row.get("ai_generation"), dict):
+            ai_generation = dict(row["ai_generation"])
+            ai_generation["validation_accepted"] = True
+            ai_generation["status"] = status
+            row = {**row, "ai_generation": ai_generation}
+        updated_lines.append(json.dumps(row, ensure_ascii=False))
+    return "\n".join(updated_lines)
+
+
+def _ai_generation_statuses(plans_jsonl: str) -> set[str]:
+    statuses: set[str] = set()
+    for line in plans_jsonl.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(row, dict) or not isinstance(row.get("ai_generation"), dict):
+            continue
+        status = row["ai_generation"].get("status")
+        if isinstance(status, str):
+            statuses.add(status)
+    return statuses
 
 
 # ── DraftAPI ───────────────────────────────────────────────────────────────
@@ -88,6 +224,7 @@ class DraftAPI:
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
             "article_urls": [],
             "error": None,
+            "ai_review": _ai_review_state_from_plans(plans_jsonl),
         }
         try:
             _drafts_store.insert_first(item)
@@ -116,6 +253,100 @@ class DraftAPI:
         """Return all draft items."""
         return _drafts_store.load()
 
+    # ── AI review ─────────────────────────────────────────────────────────
+
+    def _complete_ai_review(
+        self,
+        item_id: str,
+        *,
+        status: str,
+        action: str,
+        flash_msg: str,
+    ) -> dict[str, Any]:
+        if not item_id:
+            return {"ok": False, "flash_msg": "參數缺失"}
+
+        item = _drafts_store.get_item(item_id)
+        if item is None:
+            return {
+                "ok": False,
+                "error_code": "AI_DRAFT_NOT_FOUND",
+                "flash_type": "warning",
+                "flash_msg": "找不到此 AI 草稿。",
+            }
+
+        ai_review = item.get("ai_review")
+        if not isinstance(ai_review, dict) or not ai_review.get("required"):
+            return {
+                "ok": False,
+                "error_code": "AI_DRAFT_REVIEW_NOT_REQUIRED",
+                "flash_type": "info",
+                "flash_msg": "此草稿不需要 AI 審核。",
+            }
+
+        updated_review = dict(ai_review)
+        updated_review.update(
+            {
+                "accepted": True,
+                "status": status,
+                "accepted_action": action,
+                "accepted_at": datetime.now().isoformat(timespec="seconds"),
+            }
+        )
+        updated_plans = _mark_ai_generation_reviewed(
+            str(item.get("plans_jsonl") or ""),
+            status=status,
+        )
+
+        try:
+            _drafts_store.update_item(
+                item_id,
+                ai_review=updated_review,
+                plans_jsonl=updated_plans,
+            )
+        except Exception as exc:
+            plan_logger.error("draft_ai_review_update_failed", item_id=item_id, error=str(exc))
+            return {
+                "ok": False,
+                "error_code": "PERSISTENCE_FAILURE",
+                "flash_type": "danger",
+                "flash_msg": f"AI 審核狀態保存失敗：本地儲存更新失敗 ({type(exc).__name__})",
+            }
+
+        return {
+            "ok": True,
+            "flash_type": "success",
+            "flash_msg": flash_msg,
+        }
+
+    def accept_ai_review(self, item_id: str) -> dict[str, Any]:
+        """Mark an AI-reviewed draft as accepted by the operator."""
+        return self._complete_ai_review(
+            item_id,
+            status="accepted",
+            action="ai_accept",
+            flash_msg="已接受 AI 草稿，可發布或排程。",
+        )
+
+    def fallback_ai_review(self, item_id: str) -> dict[str, Any]:
+        """Accept the current template/fallback-safe draft path without rewriting content."""
+        item = _drafts_store.get_item(item_id) if item_id else None
+        if item is not None:
+            statuses = _ai_generation_statuses(str(item.get("plans_jsonl") or ""))
+            if statuses and statuses != {"fallback_used"}:
+                return {
+                    "ok": False,
+                    "error_code": "AI_DRAFT_FALLBACK_UNAVAILABLE",
+                    "flash_type": "warning",
+                    "flash_msg": "此草稿沒有可用的 template fallback 內容，請改用接受 AI 草稿或重新生成。",
+                }
+        return self._complete_ai_review(
+            item_id,
+            status="fallback_accepted",
+            action="fallback_accept",
+            flash_msg="已使用 fallback 草稿，可發布或排程。",
+        )
+
     # ── schedule ──────────────────────────────────────────────────────────
 
     def schedule(
@@ -129,6 +360,10 @@ class DraftAPI:
         """
         if not item_id or not scheduled_at_str:
             return {"ok": False, "flash_msg": "参数缺失"}
+
+        gated = _ai_publish_gate(_drafts_store.get_item(item_id))
+        if gated is not None:
+            return gated
 
         try:
             requested_dt = datetime.fromisoformat(scheduled_at_str)
@@ -180,6 +415,11 @@ class DraftAPI:
         """Immediately schedule a draft to publish in ~5 seconds."""
         if not item_id:
             return {"ok": False, "flash_msg": "参数缺失"}
+
+        item = _drafts_store.get_item(item_id)
+        gated = _ai_publish_gate(item)
+        if gated is not None:
+            return gated
 
         run_date = datetime.now() + timedelta(seconds=5)
         try:
@@ -322,6 +562,24 @@ class DraftAPI:
         """Schedule multiple drafts for near-immediate publish, staggered."""
         if not ids:
             return {"ok": False, "flash_msg": "未选择任何项"}
+
+        blocked_ids = []
+        for item_id in ids:
+            item = _drafts_store.get_item(item_id)
+            if not item:
+                continue
+            if _ai_publish_gate(item) is not None:
+                blocked_ids.append(item_id)
+
+        if blocked_ids:
+            return {
+                "ok": False,
+                "error_code": "AI_DRAFT_REVIEW_REQUIRED",
+                "flash_type": "warning",
+                "flash_msg": f"AI 草稿尚未通過審核，批量發布已中止（{len(blocked_ids)} 項）。",
+                "blocked_ids": blocked_ids,
+                "blocked_count": len(blocked_ids),
+            }
 
         base = datetime.now()
         completed_jobs = []

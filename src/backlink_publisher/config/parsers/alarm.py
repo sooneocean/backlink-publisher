@@ -19,6 +19,13 @@ _ANCHOR_ALARM_THRESHOLD_FIELDS: tuple[str, ...] = (
     "top3_concentration_ceiling",
 )
 
+#: Keys an ``[[anchor_alarm.override]]`` row may carry. Anything else is an
+#: operator typo — rejected loudly, mirroring the global-scope unknown-key
+#: guard so the override path is not silently more permissive.
+_ANCHOR_ALARM_OVERRIDE_KEYS: frozenset[str] = frozenset(
+    {"match", "scope", *_ANCHOR_ALARM_THRESHOLD_FIELDS}
+)
+
 
 def _coerce_threshold(section_label: str, key: str, value: Any) -> float:
     """Coerce a threshold scalar; raise ``InputValidationError`` on bad input.
@@ -99,6 +106,13 @@ def _parse_anchor_alarm(section: Any) -> AnchorAlarmConfig:
                 raise InputValidationError(
                     f"[[anchor_alarm.override]] row {i} must be a table"
                 )
+            for key in row:
+                if key not in _ANCHOR_ALARM_OVERRIDE_KEYS:
+                    raise InputValidationError(
+                        f"[[anchor_alarm.override]] row {i}: '{key}' is not a "
+                        f"known field (expected 'match', 'scope', or one of "
+                        f"{_ANCHOR_ALARM_THRESHOLD_FIELDS})"
+                    )
             match = row.get("match")
             scope = row.get("scope")
             if not isinstance(match, str) or not match:

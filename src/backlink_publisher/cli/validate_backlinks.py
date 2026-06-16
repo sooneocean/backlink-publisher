@@ -52,6 +52,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Input JSONL file (default: stdin)",
     )
     parser.add_argument(
+        "--zero-auth",
+        action="store_true",
+        default=False,
+        help="Restrict validation to rows targeting zero-auth (no-login) platforms",
+    )
+    parser.add_argument(
         "--no-validate-url-check",
         action="store_true",
         default=False,
@@ -104,6 +110,13 @@ def main(argv: list[str] | None = None) -> None:
         rows = list(read_jsonl(args.input))
     except SystemExit as exc:
         raise SystemExit(exc.code)
+
+    if getattr(args, "zero_auth", False):
+        from backlink_publisher.publishing.registry import zero_auth_platforms
+        zaps = zero_auth_platforms()
+        validate_logger.recon("zero_auth_filter", in_count=len(rows), zero_auth_platforms=list(zaps))
+        rows = [r for r in rows if r.get("platform", "") in zaps]
+        validate_logger.info(f"filtered to {len(rows)} rows after zero-auth filter")
 
     validate_logger.info(f"validating {len(rows)} payloads")
 

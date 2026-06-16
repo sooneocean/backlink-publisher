@@ -54,6 +54,9 @@ PROTECTED_GLOBS: frozenset[str] = frozenset(
         "schedule-settings.json",
         "publish-queue.json",
         "channel-status.json",
+        "score-store.json",
+        "seen-urls.json",
+        "wizard-config.json",
         # Medium auth-state files (0600, written by bind recipe)
         "*-last-account.txt",
         "*-last-account.tentative",
@@ -61,6 +64,8 @@ PROTECTED_GLOBS: frozenset[str] = frozenset(
         "*-meta.json.tentative",
         # Canary health state (contains per-platform drift history, operator platform data)
         "canary-health.json",
+        # Asset version stamp (written to config dir by _compute_asset_version)
+        "asset-version.stamp",
     }
 )
 

@@ -18,6 +18,62 @@ from .target import _clean_pool
 _log = logging.getLogger(__name__)
 
 
+def _parse_work_urls(entry: dict, raw_domain: str) -> list[str]:
+    """Validate and normalise the ``work_urls`` list for one target entry."""
+    raw: Any = entry.get("work_urls", []) or []
+    if not isinstance(raw, list):
+        raw = []
+
+    urls: list[str] = []
+    dropped = 0
+    for u in raw:
+        if not isinstance(u, str):
+            dropped += 1
+            continue
+        normalized = validate_https_url(u)
+        if not normalized:
+            dropped += 1
+            continue
+        urls.append(normalized)
+    if dropped:
+        _log.warning(
+            "[targets.%r].work_urls: dropped %d non-https or invalid URL(s)",
+            raw_domain, dropped,
+        )
+    return urls
+
+
+def _parse_work_templates(entry: dict, raw_domain: str) -> list[str]:
+    """Return the resolved ``work_anchor_templates`` list for one target entry."""
+    raw = entry.get("work_anchor_templates")
+    if raw is None:
+        return list(DEFAULT_WORK_TEMPLATES)
+    if isinstance(raw, list) and all(isinstance(t, str) for t in raw):
+        stripped = [t.strip() for t in raw if t.strip()]
+        return stripped or list(DEFAULT_WORK_TEMPLATES)
+    _log.warning(
+        "[targets.%r].work_anchor_templates must be a list of strings, "
+        "using defaults",
+        raw_domain,
+    )
+    return list(DEFAULT_WORK_TEMPLATES)
+
+
+def _parse_blocklist(entry: dict, raw_domain: str) -> list[str] | None:
+    """Return the resolved ``list_path_blocklist`` for one target entry."""
+    raw = entry.get("list_path_blocklist")
+    if raw is None:
+        return None
+    if isinstance(raw, list) and all(isinstance(p, str) for p in raw):
+        return [p for p in raw if p]
+    _log.warning(
+        "[targets.%r].list_path_blocklist must be a list of strings, "
+        "ignoring (default blocklist applies)",
+        raw_domain,
+    )
+    return None
+
+
 def _parse_target_three_url(targets_section: Any) -> dict[str, ThreeUrlConfig]:
     """Parse ``[targets."<main_domain>"]`` entries that carry the three-URL
     work-themed schema. Plan 2026-05-13-004 Unit 3.
@@ -83,59 +139,9 @@ def _parse_target_three_url(targets_section: Any) -> dict[str, ThreeUrlConfig]:
             )
             continue
 
-        # work_urls: drop non-https entries silently (already warned by url_utils
-        # consumers — log a single line per target if any get dropped).
-        raw_work_urls = entry.get("work_urls", []) or []
-        if not isinstance(raw_work_urls, list):
-            raw_work_urls = []
-        work_urls: list[str] = []
-        dropped_work = 0
-        for u in raw_work_urls:
-            if not isinstance(u, str):
-                dropped_work += 1
-                continue
-            normalized = validate_https_url(u)
-            if not normalized:
-                dropped_work += 1
-                continue
-            work_urls.append(normalized)
-        if dropped_work:
-            _log.warning(
-                "[targets.%r].work_urls: dropped %d non-https or invalid URL(s)",
-                raw_domain, dropped_work,
-            )
-
-        templates_raw = entry.get("work_anchor_templates")
-        if templates_raw is None:
-            templates = list(DEFAULT_WORK_TEMPLATES)
-        elif isinstance(templates_raw, list) and all(
-            isinstance(t, str) for t in templates_raw
-        ):
-            templates = [t.strip() for t in templates_raw if t.strip()]
-            if not templates:
-                templates = list(DEFAULT_WORK_TEMPLATES)
-        else:
-            _log.warning(
-                "[targets.%r].work_anchor_templates must be a list of strings, "
-                "using defaults",
-                raw_domain,
-            )
-            templates = list(DEFAULT_WORK_TEMPLATES)
-
-        blocklist_raw = entry.get("list_path_blocklist")
-        if blocklist_raw is None:
-            blocklist: list[str] | None = None
-        elif isinstance(blocklist_raw, list) and all(
-            isinstance(p, str) for p in blocklist_raw
-        ):
-            blocklist = [p for p in blocklist_raw if p]
-        else:
-            _log.warning(
-                "[targets.%r].list_path_blocklist must be a list of strings, "
-                "ignoring (default blocklist applies)",
-                raw_domain,
-            )
-            blocklist = None
+        work_urls = _parse_work_urls(entry, raw_domain)
+        templates = _parse_work_templates(entry, raw_domain)
+        blocklist = _parse_blocklist(entry, raw_domain)
 
         insecure_tls = bool(entry.get("insecure_tls", False))
 
@@ -278,10 +284,15 @@ def upgrade_target_to_threeurl(
             insecure_tls=existing.insecure_tls,
         )
 
-    keywords = config.target_anchor_keywords.get(domain_key, [])
-    if not keywords:
-        # Try trailing-slash variant before declaring bootstrap.
-        keywords = config.target_anchor_keywords.get(main_url.rstrip("/") + "/", [])
+    # Use the canonical accessor so a legacy pool keyed by the bare domain or a
+    # scheme variant is found before declaring bootstrap. The previous manual
+    # lookup tried only the scheme-exact key plus a trailing-slash variant —
+    # but stored keys are always rstrip('/')-normalised by
+    # _parse_target_anchor_keywords, so the trailing-slash branch was dead code
+    # and a bare-domain anchor_keywords pool was silently lost on upgrade.
+    from .anchor import get_anchor_keywords
+
+    keywords = get_anchor_keywords(config, main_url)
 
     if keywords:
         plan_logger.recon(

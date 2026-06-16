@@ -64,6 +64,8 @@ def _isolated_webui_state(tmp_path, monkeypatch):
     monkeypatch.setattr(ws.profiles_store, "path", state_dir / "campaign-profiles.json")
     monkeypatch.setattr(ws.drafts_store, "path", state_dir / "draft-queue.json")
     monkeypatch.setattr(ws.schedule_store, "path", state_dir / "schedule-settings.json")
+    monkeypatch.setattr(ws.wizard_config_store, "path", state_dir / "wizard-config.json")
+    ws.wizard_config_store.mark_skipped()
 
 
 @pytest.fixture(autouse=True)
@@ -169,6 +171,15 @@ def _fetch_csrf(client) -> str:
 
 
 class TestGetRoutes:
+    def test_first_time_root_redirects_to_wizard_when_enabled(self, client, monkeypatch):
+        import webui_store as ws
+
+        monkeypatch.setenv("BACKLINK_PUBLISHER_WIZARD_REDIRECT", "1")
+        ws.wizard_config_store.save({})
+        resp = client.get("/", follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers["Location"].endswith("/wizard")
+
     def test_root_returns_200(self, client):
         resp = client.get("/")
         assert resp.status_code == 200
@@ -185,10 +196,11 @@ class TestGetRoutes:
         assert 'data-bs-target="#batchPanel"' in body
 
     def test_homepage_loads_mode_toggle_script(self, client):
-        """Plan 012 Unit 5 — mode_toggle.js is wired up in the template."""
+        """Plan 012 Unit 5 — mode toggle is wired up. Plan 007 U6: mode_toggle.js
+        is now imported by the index.js ES module (no separate <script> tag)."""
         resp = client.get("/")
         body = resp.data.decode("utf-8", errors="ignore")
-        assert "js/mode_toggle.js" in body
+        assert "js/index.js" in body and 'type="module"' in body
         # Server-side hint must be injected so the JS can read batch_tab flag
         # without an extra round-trip.
         assert "window.__batchTabHint" in body
@@ -297,6 +309,10 @@ class TestGetRoutes:
         resp = client.get("/settings")
         assert resp.status_code == 200
 
+    def test_favicon_returns_empty_204(self, client):
+        resp = client.get("/favicon.ico")
+        assert resp.status_code == 204
+
     def test_settings_with_flash_query_renders(self, client):
         resp = client.get("/settings?flash_type=success&flash_msg=test")
         assert resp.status_code == 200
@@ -337,7 +353,9 @@ class TestGetRoutes:
             templates_dir.glob("_settings_*.html")
         )
         assert candidates, f"no settings templates under {templates_dir}"
+        static_js = Path(__file__).parent.parent / "webui_app" / "static" / "js"
         combined = b"".join(p.read_bytes() for p in candidates)
+        combined += (static_js / "settings.js").read_bytes()
 
         # 12 form action URLs (10 channel-related + 2 global).
         # /settings/medium/oauth-start removed: Medium closed new app registration
@@ -374,13 +392,13 @@ class TestGetRoutes:
         for dom_id in dom_ids:
             assert dom_id in combined, f"missing DOM id: {dom_id!r}"
 
-        # 5 inline JS handler call sites.
+        # 5 handler call sites — Plan 007 U3 migrated inline on* to data-action.
         js_handlers = [
-            b'copyUri(',
-            b'toggleSecret(',
-            b'toggleToken(',
-            b'addRow(',
-            b'removeRow(',
+            b'data-action="copy-uri"',
+            b'data-action="toggle-secret"',
+            b'data-action="toggle-token"',
+            b'data-action="add-row"',
+            b'data-action="remove-row"',
         ]
         for handler in js_handlers:
             assert handler in combined, (
@@ -1213,6 +1231,100 @@ class TestChannelBindSaveRoutes:
         assert resp.status_code == 403
 
 
+class TestAiDraftReviewRoutes:
+    """AI draft review action route smokes.
+
+    Full state mutation coverage lives in tests/test_webui_ai_generation.py; these
+    missing-CSRF probes satisfy the route-contract inventory.
+    """
+
+    def test_post_ai_accept_missing_csrf_returns_403(self, csrf_client):
+        resp = csrf_client.post("/ce:draft/ai-accept")
+        assert resp.status_code == 403
+
+    def test_post_ai_fallback_missing_csrf_returns_403(self, csrf_client):
+        resp = csrf_client.post("/ce:draft/ai-fallback")
+        assert resp.status_code == 403
+
+
+class TestWizardRoutes:
+    """Wizard route smokes. Full store behavior lives in tests/test_wave1_wizard.py."""
+
+    def test_get_wizard_returns_200(self, client):
+        resp = client.get("/wizard")
+        assert resp.status_code == 200
+
+    def test_get_wizard_status_returns_json(self, client):
+        resp = client.get("/api/wizard/status")
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_seed_sources_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/seed-sources",
+            json={"sitemap_urls": ["https://example.com/sitemap.xml"]},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_channels_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/channels",
+            json={"channels": [{"channel": "medium", "bound": False}]},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_rules_returns_json(self, client):
+        resp = client.post(
+            "/wizard/step/rules",
+            json={"polling_interval_seconds": 21600},
+        )
+        assert resp.status_code == 200
+        assert resp.is_json
+
+    def test_post_wizard_launch_returns_json(self, client, monkeypatch):
+        monkeypatch.setattr("webui_app.scheduler._trigger_watch_cycle", lambda: None)
+        resp = client.post("/wizard/step/launch", json={})
+        assert resp.status_code == 200
+        assert resp.is_json
+
+
+class TestCopilotRoutes:
+    """Copilot route smoke. Full lifecycle lives in tests/test_copilot_routes.py;
+    these calls satisfy the route-coverage gate below."""
+
+    def test_get_copilot_advice(self, client, monkeypatch):
+        from webui_app.services.copilot_advisor import AggregateResult
+
+        monkeypatch.setattr(
+            "webui_app.routes.copilot.cached_aggregate",
+            lambda **_kwargs: AggregateResult(
+                tool_results=[],
+                findings=[],
+                degraded=False,
+                considered=0,
+                problem_count=0,
+            ),
+        )
+        resp = client.get("/copilot/advice")
+        assert resp.status_code == 200
+
+    def test_post_copilot_run_live_guarded(self, client):
+        resp = client.post("/copilot/run-live")
+        assert resp.status_code == 403
+
+    def test_post_copilot_ask_no_llm_returns_400(self, client, tmp_path):
+        """POST /copilot/ask without an LLM config returns 400 + json."""
+        resp = client.post(
+            "/copilot/ask",
+            data='{"question": "hello"}',
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        assert resp.is_json
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".
@@ -1515,4 +1627,76 @@ class TestSeoVizRoutes:
         assert resp.is_json
         body = resp.get_json()
         assert "labels" in body
-        assert "datasets" in body
+
+
+class TestScheduleRoutes:
+    """Contract tests for /schedule and /api/scheduled (Plan 2026-05-29-001 Unit 2)."""
+
+    def test_get_schedule_page(self, client, monkeypatch):
+        """GET /schedule renders HTML."""
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(sched_api, "list_scheduled", lambda: {"ok": True, "items": []})
+        resp = client.get("/schedule")
+        assert resp.status_code == 200
+        assert b"html" in resp.data.lower()
+
+    def test_get_api_scheduled(self, client, monkeypatch):
+        """GET /api/scheduled returns JSON with ok + items keys."""
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(sched_api, "list_scheduled", lambda: {"ok": True, "items": []})
+        resp = client.get("/api/scheduled")
+        assert resp.status_code == 200
+        assert resp.is_json
+        data = resp.get_json()
+        assert "ok" in data
+        assert "items" in data
+
+
+class TestPrQueueRoutes:
+    """Contract tests for /pr-queue and /api/pr-queue (B1 PR opportunity queue)."""
+
+    def test_get_pr_queue_page(self, client, monkeypatch):
+        """GET /pr-queue renders HTML."""
+        import webui_app.routes.pr_queue as pq_mod
+
+        monkeypatch.setattr(pq_mod, "_load", lambda: [])
+        resp = client.get("/pr-queue")
+        assert resp.status_code == 200
+        assert b"html" in resp.data.lower()
+
+    def test_get_api_pr_queue(self, client, monkeypatch):
+        """GET /api/pr-queue returns JSON with ok + items keys."""
+        import webui_app.routes.pr_queue as pq_mod
+
+        monkeypatch.setattr(pq_mod, "_load", lambda: [])
+        resp = client.get("/api/pr-queue")
+        assert resp.status_code == 200
+        assert resp.is_json
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert "items" in data
+
+    def test_post_api_pr_queue_status_missing_csrf_returns_403(self, csrf_client):
+        """POST /api/pr-queue/status without CSRF token is rejected."""
+        resp = csrf_client.post(
+            "/api/pr-queue/status",
+            json={"id": "opp-1", "status": "won"},
+        )
+        assert resp.status_code == 403
+
+
+class TestMetricsRoutes:
+    """Contract test for /metrics Prometheus scrape endpoint."""
+
+    def test_get_metrics_returns_text(self, client, monkeypatch):
+        """GET /metrics returns 200 with text/plain Prometheus format."""
+        import webui_app.routes.metrics as metrics_mod
+
+        monkeypatch.setattr(metrics_mod, "_scrape_events_db", lambda: [])
+        monkeypatch.setattr(metrics_mod, "_scrape_content_cache", lambda: [])
+        monkeypatch.setattr(metrics_mod, "_scrape_publish_history", lambda: [])
+        resp = client.get("/metrics")
+        assert resp.status_code == 200
+        assert b"bp_publish_total" in resp.data

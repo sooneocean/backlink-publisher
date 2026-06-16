@@ -32,7 +32,7 @@ def body():
 
 def test_get_channel_status_includes_auth_type():
     cfg = Config()
-    assert get_channel_status("txtfyi", cfg)["auth_type"] == "anon"
+    assert get_channel_status("telegraph", cfg)["auth_type"] == "anon"
     assert get_channel_status("substack", cfg)["auth_type"] == "paste_blob"
     assert get_channel_status("blogger", cfg)["auth_type"] == "oauth"
 
@@ -49,8 +49,8 @@ def test_anon_channel_renders_ready_badge(body):
 
 @pytest.mark.parametrize("cardless", [
     "substack",   # paste_blob
-    "txtfyi",     # anon
     "rentry",     # anon
+    "telegraph",  # anon
     "livejournal",  # userpass
     "wordpresscom",  # token_fields
 ])

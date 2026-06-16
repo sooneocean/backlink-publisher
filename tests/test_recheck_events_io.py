@@ -105,3 +105,62 @@ def test_wal_safe_batch_emit_no_lock_error(store):
     written = emit_recheck(store, results)
     assert written == 50
     assert derive_decay_counts(store)[verdicts.ALIVE] == 50
+
+
+# ── indexability persistence (additive payload key; floor UNCHANGED) ─────────
+
+def _payload(store, aid):
+    rows = store.query(
+        "SELECT article_id, payload_json FROM events WHERE kind = ?", (LINK_RECHECKED,)
+    )
+    return json.loads({r["article_id"]: r for r in rows}[aid]["payload_json"])
+
+
+def test_emit_persists_indexability_blocked_with_reason(store):
+    emit_recheck(store, [_result(1, verdicts.ALIVE, indexability="blocked",
+                                 indexability_reason="meta_noindex")])
+    p = _payload(store, 1)
+    assert p["indexability"] == "blocked"
+    assert p["indexability_reason"] == "meta_noindex"
+
+
+def test_emit_persists_indexability_ok(store):
+    emit_recheck(store, [_result(1, verdicts.ALIVE, indexability="ok",
+                                 indexability_reason=None)])
+    p = _payload(store, 1)
+    assert p["indexability"] == "ok"
+    assert p["indexability_reason"] is None
+
+
+def test_emit_unknown_indexability_not_silently_ok(store):
+    # A page we could not classify must persist `unknown`, never silently `ok`
+    # (the silent-false-success recursion this whole feature guards against).
+    emit_recheck(store, [_result(1, verdicts.ALIVE, indexability="unknown")])
+    p = _payload(store, 1)
+    assert p["indexability"] == "unknown"
+    assert p["indexability"] != "ok"
+
+
+def test_emit_defaults_absent_indexability_to_unknown(store):
+    # A result lacking the key (legacy/dry path) must fail-open to `unknown`,
+    # never None and never absent — so a reader never mistakes it for indexable.
+    emit_recheck(store, [_result(1, verdicts.ALIVE)])  # no indexability key
+    p = _payload(store, 1)
+    assert p["indexability"] == "unknown"
+    assert p["indexability_reason"] is None
+
+
+def test_emit_indexability_reason_is_closed_token_not_raw_bytes(store):
+    # Hygiene: the reason is a fixed vocabulary token, never raw fetched HTML.
+    emit_recheck(store, [_result(1, verdicts.ALIVE, indexability="blocked",
+                                 indexability_reason="x_robots")])
+    assert _payload(store, 1)["indexability_reason"] in {"meta_noindex", "x_robots"}
+
+
+def test_emit_rejects_non_vocab_indexability_reason_at_seam(store):
+    # Seam-level guard: even if some future producer passed raw bytes, the emit
+    # seam must never let a non-closed-vocab reason reach events.db (drops to
+    # None). Defends the events store regardless of the producer.
+    emit_recheck(store, [_result(1, verdicts.ALIVE, indexability="blocked",
+                                 indexability_reason="<meta>" + "x" * 5000)])
+    assert _payload(store, 1)["indexability_reason"] is None

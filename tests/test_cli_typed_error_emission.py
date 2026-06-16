@@ -34,7 +34,7 @@ from backlink_publisher._util.error_envelope import parse
 _SRC = Path(__file__).resolve().parents[1] / "src" / "backlink_publisher"
 _IN_SCOPE_CLI_FILES = [
     _SRC / "cli" / "validate_backlinks.py",
-    _SRC / "cli" / "publish_backlinks.py",
+    _SRC / "cli" / "publish_backlinks" / "__init__.py",  # package after decomposition
     _SRC / "cli" / "_publish_helpers.py",
     _SRC / "cli" / "_resume.py",
     _SRC / "cli" / "plan_backlinks" / "core.py",

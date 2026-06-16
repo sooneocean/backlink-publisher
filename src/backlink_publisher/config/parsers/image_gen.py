@@ -36,6 +36,7 @@ def _parse_image_gen(section: Any) -> ImageGenConfig | None:
         return None
 
     base_url = section.get("base_url")
+    provider = _normalize_provider(section.get("provider"))
     if not isinstance(base_url, str) or not base_url:
         raise InputValidationError(
             "[image_gen].base_url is required when the section is present"
@@ -88,6 +89,7 @@ def _parse_image_gen(section: Any) -> ImageGenConfig | None:
     return ImageGenConfig(
         base_url=base_url,
         model=model,
+        provider=provider,
         banner_size=banner_size,
         daily_cap=daily_cap,
         per_run_cap=per_run_cap,
@@ -99,7 +101,7 @@ def _parse_image_gen(section: Any) -> ImageGenConfig | None:
     )
 
 
-def _coerce_positive_int(value: Any, name: str) -> int:
+def _coerce_positive_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise InputValidationError(
             f"{name} must be a positive integer, got {value!r}"
@@ -107,9 +109,26 @@ def _coerce_positive_int(value: Any, name: str) -> int:
     return value
 
 
-def _coerce_nonneg_int(value: Any, name: str) -> int:
+def _coerce_nonneg_int(value: object, name: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise InputValidationError(
             f"{name} must be a non-negative integer, got {value!r}"
         )
     return value
+
+
+def _normalize_provider(value: object) -> str:
+    raw = value.strip().lower() if isinstance(value, str) else ""
+    if not raw:
+        return "openai-compatible"
+    aliases = {
+        "compatible": "openai-compatible",
+        "openai_compatible": "openai-compatible",
+        "openai-compatible": "openai-compatible",
+        "openai": "openai",
+        "openai-sdk": "openai",
+        "image2": "image2",
+        "codex": "image2",
+        "codex-image2": "image2",
+    }
+    return aliases.get(raw, raw)

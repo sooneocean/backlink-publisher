@@ -6,11 +6,20 @@
 
 ```bash
 pytest tests/                                          # all tests (PYTHONHASHSEED=0 via pyproject.toml)
+pytest tests/ -n auto                                  # parallel full-suite run (~2.5x faster; CI uses this)
 pytest tests/ -m "not real_ssrf_check"                 # skip live-network tests
 pytest tests/test_no_monolith_regrowth.py -k "R4"      # single budget gate
 pytest tests/test_webui_route_contract.py              # slowest single test (~1100+ lines)
 pytest tests/scripts/                                  # worktree script tests
 ```
+
+`-n auto` (pytest-xdist) is determinism-verified for the full suite and wired into
+CI, but is **not** forced via `addopts`: a bare `pytest tests/single_file.py` stays
+serial so a focused inner-loop run does not pay 10-worker startup, and parallel
+machines (worktree swarms) do not multiply process count unexpectedly. Add `-n auto`
+yourself for full-suite runs. The suite is xdist-safe because every store/lock path
+resolves to a per-worker sandbox (`conftest.py` per-process `mkdtemp`) and
+PYTHONHASHSEED=0 is set per worker.
 
 ## Test markers (opt-in live tests)
 

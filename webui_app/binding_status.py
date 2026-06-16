@@ -101,6 +101,67 @@ def __getattr__(name: str) -> object:
 # wordpresscom) live in publishing.registry._REJECTED_PLATFORMS and re-attempts
 # at those names raise RegistryError at import time.
 
+# Backlink outcome taxonomy — mirrors publishing._verify_html.RenderedLinkResult.
+_BACKLINK_OUTCOME_VALUES: frozenset[str] = frozenset(
+    {"effective_backlink", "published_but_ineffective", "needs_canary", "failed"}
+)
+_BACKLINK_DETAIL_KEYS: frozenset[str] = frozenset({
+    "backlink_outcome",
+    "backlink_outcome_reason",
+    "posteasy_expires_at",
+    "brewpage_expires_at",
+    "brewpage_ttl_days",
+    "expires_at",
+})
+
+
+def _get_latest_backlink_outcome(platform: str) -> str | None:
+    """Return the most recent backlink outcome for *platform* from publish history.
+
+    Reads from the WebUI history store (in-memory JSON file) and finds the newest
+    entry whose ``backlink_outcome`` field is set.  Returns ``None`` when no
+    outcome has been recorded yet (first publish, or only failures before the
+    verification hook was added).
+    """
+    try:
+        from webui_store import history_store
+        hist = history_store.load()
+    except Exception:
+        return None
+    for entry in hist:
+        if entry.get("platform") == platform:
+            outcome = entry.get("backlink_outcome")
+            if outcome in _BACKLINK_OUTCOME_VALUES:
+                return outcome
+    return None
+
+
+def _get_latest_backlink_outcome_details(platform: str) -> dict[str, Any]:
+    """Return latest backlink outcome metadata for *platform*.
+
+    Keeps ``_get_latest_backlink_outcome`` stable for existing callers while
+    giving health/settings templates enough detail to explain ineffective
+    backlinks and short-lived anonymous pages.
+    """
+    try:
+        from webui_store import history_store
+        hist = history_store.load()
+    except Exception:
+        return {}
+    for entry in hist:
+        if entry.get("platform") != platform:
+            continue
+        outcome = entry.get("backlink_outcome")
+        if outcome not in _BACKLINK_OUTCOME_VALUES:
+            continue
+        details = {
+            key: entry.get(key)
+            for key in _BACKLINK_DETAIL_KEYS
+            if entry.get(key) not in (None, "")
+        }
+        return details
+    return {}
+
 
 def get_channel_status(name: str, config: Config) -> dict[str, Any]:
     """Cheap offline status — never hits the network.

@@ -25,12 +25,92 @@ _scheduler = BackgroundScheduler(
     job_defaults={'misfire_grace_time': 3600},
 )
 
+
+# ── Scorig hook ──────────────────────────────────────────────────────────
+
+
+def _score_after_publish(target_url: str, channel: str) -> str | None:
+    try:
+        from webui_store.score_store import compute_score, platform_weight_from_dofollow
+        from webui_store import score_store as _score_store
+        from backlink_publisher.publishing.registry import dofollow_status
+
+        ds = dofollow_status(channel)
+        if ds is None:
+            plan_logger.warn("score_unknown_dofollow_status", channel=channel)
+            return None
+        weight = platform_weight_from_dofollow(ds)
+        return _score_store.record_publish(
+            target_url=target_url,
+            channel=channel,
+            platform_weight=weight,
+        )
+    except Exception as exc:
+        plan_logger.warn("score_after_publish_failed", channel=channel, error=str(exc))
+        return None
+
+
+# ── Watch service job ────────────────────────────────────────────────────
+
+
+def _run_watch_cycle() -> None:
+    """Execute one watch-service cycle. Called by APScheduler."""
+    try:
+        from webui_store import seen_urls_store as _seen_urls_store
+        from webui_store import history_store as _history_store_watch
+        from webui_store import queue_store as _queue_store_watch
+        from webui_store import wizard_config_store as _wizard_config_store
+        from .services.watch_service import WatchService
+
+        cfg = _wizard_config_store._get()
+        if not cfg.get("completed"):
+            return
+
+        service = WatchService(
+            seen_urls_store=_seen_urls_store,
+            history_store=_history_store_watch,
+            queue_store=_queue_store_watch,
+        )
+        report = service.run_once(cfg)
+        plan_logger.recon("watch_cycle_complete", report=dict(report))
+    except Exception as exc:
+        plan_logger.error("watch_cycle_failed", error=str(exc))
+
+
+def _trigger_watch_cycle() -> None:
+    """Trigger an immediate watch cycle (called on wizard completion)."""
+    from datetime import timezone as tz
+
+    now = datetime.now(tz.utc)
+    if _scheduler.get_job("watch_service"):
+        _scheduler.reschedule_job("watch_service", trigger="date", run_date=now)
+        plan_logger.recon("watch_cycle_triggered_immediate")
+    else:
+        plan_logger.warn("watch_job_not_found_for_trigger")
+
+
+def _register_watch_job() -> None:
+    """Register the watch-service polling job (does not start until wizard completes)."""
+    _scheduler.add_job(
+        _run_watch_cycle,
+        trigger="interval",
+        seconds=21600,
+        id="watch_service",
+        name="Seed source polling (watch service)",
+        misfire_grace_time=3600,
+        replace_existing=True,
+        next_run_time=None,
+    )
+
+
+# ── Queue processor ──────────────────────────────────────────────────────
+
+
 def _process_queue_job() -> None:
     """轮询队列中的 pending 任务并执行发布，支持 429 自动退避。"""
     tasks = _queue_store.load()
     now = datetime.now()
     
-    # 查找任务：PENDING 且 不在退避时间内
     pending = [t for t in tasks if t.get('status') in ('pending', 'failed') 
                and (not t.get('next_retry_at') or datetime.fromisoformat(t['next_retry_at']) <= now)]
     
@@ -63,10 +143,12 @@ def _process_queue_job() -> None:
                 'status': 'success',
                 'completed_at': now.isoformat()
             })
+            # Record score for successful publish
+            _score_after_publish(
+                target_url=target_url,
+                channel=config.get('platform', 'medium'),
+            )
         else:
-            # publish failed — capture the typed error, detect 429 backoff.
-            # The string check is kept (not error_class) so backoff fires even
-            # when the rate-limit surfaces only in the message text.
             err = result.error or '发布失败'
             if "429" in err or "Too Many Requests" in err:
                 retry_delay = 300
@@ -82,9 +164,6 @@ def _process_queue_job() -> None:
                     'error': err
                 })
     except Exception as exc:
-        # Defensive: PipelineAPI returns a PipeResult rather than raising, so
-        # this catches only seed-construction / store errors — still mark the
-        # task failed rather than leaving it wedged in 'processing'.
         _queue_store.update_task(task_id, {
             'status': 'failed',
             'error': str(exc) or '发布失败'
@@ -129,9 +208,6 @@ def _publish_draft_job(item_id: str) -> None:
             if u
         ]
 
-        # Reflect aggregate outcome on the draft row itself. If any row is
-        # `*_unverified`, the draft is marked `published_unverified` so the
-        # UI badge tells the truth even before recheck runs.
         draft_status = 'published'
         any_unverified = any(
             (r.get('status') or '').endswith('_unverified') for r in publish_results
@@ -144,9 +220,6 @@ def _publish_draft_job(item_id: str) -> None:
             published_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
         )
 
-        # Plan 2026-05-19-006 Unit 1: per-row truth-propagation. The old
-        # implementation hard-wrote `'drafted'` / `'published'` regardless
-        # of per-row `status`, hiding `*_unverified` rows as solid ✓.
         _push_history_per_row(
             publish_results,
             target_url_fallback=item.get('target_url', 'unknown'),
@@ -172,16 +245,7 @@ def _schedule_draft_job(item_id: str, run_date: datetime) -> None:
 
 
 def _restore_processing_tasks() -> None:
-    """Reset queue tasks left in 'processing' back to 'pending'.
-
-    If the WebUI was killed (SIGKILL / power loss / OOM) while a queue
-    processor was mid-flight, the task sits permanently in 'processing'
-    and never gets picked up again because the queue processor only reads
-    'pending' and 'failed' statuses.  Resetting them on every startup is
-    the simplest recovery — the next interval tick re-processes the task.
-
-    This call is idempotent: no 'processing' tasks at startup = no-op.
-    """
+    """Reset queue tasks left in 'processing' back to 'pending'."""
     _queue_store.update(lambda tasks: [
         {**t, 'status': 'pending'} if t.get('status') == 'processing' else t
         for t in tasks
@@ -189,7 +253,7 @@ def _restore_processing_tasks() -> None:
 
 
 def _restore_scheduled_jobs() -> None:
-    """On startup, re-register any 'scheduled' draft items into APScheduler."""
+    """On startup, re-register scheduled jobs and register watch service."""
     _restore_processing_tasks()
 
     _scheduler.add_job(
@@ -199,6 +263,9 @@ def _restore_scheduled_jobs() -> None:
         id='queue_processor',
         replace_existing=True,
     )
+
+    # Register watch service job (does not run until wizard completes)
+    _register_watch_job()
     
     now = datetime.now()
     for item in _drafts_store.load():

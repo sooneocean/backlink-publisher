@@ -169,6 +169,36 @@ def test_override_not_a_list_raises():
         _parse_anchor_alarm({"override": "not-a-list"})
 
 
+def test_override_unknown_key_raises():
+    """Override rows mirror the global raise-loud posture: an unknown key is a
+    typo, not a no-op. Without this guard a misspelled threshold field is
+    silently dropped whenever the row also carries a valid field."""
+    with pytest.raises(InputValidationError, match="not a known field"):
+        _parse_anchor_alarm(
+            {
+                "override": [
+                    {
+                        "match": "x.com",
+                        "scope": "domain",
+                        "entropy_floor": 1.8,  # valid
+                        "exact_ratio_ceil": 0.05,  # typo — would be silently lost
+                    }
+                ]
+            }
+        )
+
+
+def test_override_arbitrary_extra_key_raises():
+    with pytest.raises(InputValidationError, match="not a known field"):
+        _parse_anchor_alarm(
+            {
+                "override": [
+                    {"match": "x.com", "scope": "url", "entropy_floor": 1.5, "note": "hi"}
+                ]
+            }
+        )
+
+
 def test_top_level_not_a_table_raises():
     with pytest.raises(InputValidationError, match="must be a table"):
         _parse_anchor_alarm("scalar")

@@ -23,6 +23,9 @@ from .base import JsonStore
 from .drafts import DraftsStore
 from .history import HistoryStore
 from .queue_store import QueueStore
+from .score_store import ScoreStore
+from .seen_urls_store import SeenUrlsStore
+from .wizard_config_store import WizardConfigStore
 
 
 class WebUIStores:
@@ -40,6 +43,9 @@ class WebUIStores:
         self._drafts: DraftsStore | None = None
         self._schedule: JsonStore | None = None
         self._queue: QueueStore | None = None
+        self._score: ScoreStore | None = None
+        self._seen_urls: SeenUrlsStore | None = None
+        self._wizard_config: WizardConfigStore | None = None
 
     def init_app(self, app: Flask) -> None:
         self._app = app
@@ -85,3 +91,21 @@ class WebUIStores:
                 default_factory=list,
             )
         return self._queue
+
+    @property
+    def score(self) -> ScoreStore:
+        if self._score is None:
+            self._score = ScoreStore(_config_dir() / "score-store.json")
+        return self._score
+
+    @property
+    def seen_urls(self) -> SeenUrlsStore:
+        if self._seen_urls is None:
+            self._seen_urls = SeenUrlsStore(_config_dir() / "seen-urls.json")
+        return self._seen_urls
+
+    @property
+    def wizard_config(self) -> WizardConfigStore:
+        if self._wizard_config is None:
+            self._wizard_config = WizardConfigStore(_config_dir() / "wizard-config.json")
+        return self._wizard_config

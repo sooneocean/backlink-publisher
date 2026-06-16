@@ -226,13 +226,20 @@ _AUTH_TYPE_VALUES: frozenset[str] = frozenset({
 })
 _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     # ANON — no credentials (anonymous publish / auto-bootstrap)
-    "telegraph": "anon", "txtfyi": "anon", "rentry": "anon",
+    "telegraph": "anon", "rentry": "anon",
+    "brewpage": "anon", "posteasy": "anon", "nonograph": "anon", "htmldrop": "anon",
+    "pubmark": "anon",
     # TOKEN — single secret field
     "devto": "token", "writeas": "token",
+    "hackmd": "token", "mataroa": "token",
     # TOKEN+FIELDS — secret + extra config field(s)
     "ghpages": "token_fields", "notion": "token_fields",
     "wordpresscom": "token_fields", "hashnode": "token_fields",
     "tumblr": "token_fields",
+    # hatena: api_key + hatena_id + blog_id (secret + 2 config fields)
+    "hatena": "token_fields",
+    # gitlabpages: PAT + [gitlabpages] project/branch/path config (like ghpages)
+    "gitlabpages": "token_fields",
     # PASTE-BLOB — pasted {"cookies":[...]} JSON (cookie-export)
     "substack": "paste_blob",
     # USERPASS — username + password (stored server-side)
@@ -241,6 +248,8 @@ _AUTH_TYPE_BY_PLATFORM: dict[str, str] = {
     "blogger": "oauth",
     # LIVE-BROWSER — driven browser login (Chrome/Playwright)
     "velog": "live_browser", "medium": "live_browser", "mastodon": "live_browser",
+    # TOKEN — single secret field (Qiita/Zenn require API tokens despite early anon classification)
+    "qiita": "token", "zenn": "token",
 }
 # Which auth_types are consistent with a declared ``bind[].backend``. Used by
 # the consistency test only (not at runtime). ``cookie`` backend currently
@@ -407,6 +416,15 @@ def register(
         policy=policy,
         visibility=visibility,
     )
+    if ui is not None:
+        _UI_META_BY_PLATFORM[platform] = ui
+    _BIND_BY_PLATFORM[platform] = bind_tuple
+    if policy is not None:
+        _POLICY_BY_PLATFORM[platform] = policy
+    if visibility != "active":
+        _VISIBILITY_BY_PLATFORM[platform] = visibility
+    elif platform in _VISIBILITY_BY_PLATFORM:
+        del _VISIBILITY_BY_PLATFORM[platform]
 
 
 def registered_platforms() -> list[str]:
@@ -466,6 +484,32 @@ def referral_value(name: str) -> _ReferralValue | None:
     """
     entry = _REGISTRY.get(name)
     return entry.referral_value if entry else None
+
+
+def zero_auth_platforms() -> frozenset[str]:
+    """Return the set of active platforms requiring zero authentication
+    (auth_type == ``\"anon\"``).
+
+    These are platforms that support anonymous publish without credentials.
+    This is a low-level binding/auth bucket, not a guarantee that the platform
+    produces an effective backlink.
+    """
+    return platforms_by_auth_type("anon")
+
+
+def zero_auth_backlink_platforms() -> frozenset[str]:
+    """Return active zero-auth platforms that may produce effective backlinks.
+
+    This product-level predicate is intentionally narrower than
+    ``zero_auth_platforms()``: anonymous publishers with declared
+    ``dofollow=False`` remain in the auth bucket but are excluded from the
+    zero-auth backlink MVP surface.
+    """
+    return frozenset(
+        p
+        for p in zero_auth_platforms()
+        if dofollow_status(p) in (True, "uncertain")
+    )
 
 
 def dofollow_rationale(name: str) -> str | None:

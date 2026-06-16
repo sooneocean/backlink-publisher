@@ -159,3 +159,51 @@ def test_cli_status_end_to_end(config_dir, capsys):
     out = json.loads(capsys.readouterr().out.strip())
     assert out == {**out, "target_id": "t9", "status": "approved", "reviewer": "bob"}
     assert store.load_status("t9")["status"] == "approved"
+
+
+# --- B2: CRM funnel states + last_touch + is_do_not_contact -----------------
+
+def test_crm_statuses_accepted_by_schema(config_dir):
+    for s in ("contacted", "replied", "won", "lost"):
+        rec = store.set_status("crm-t1", s)
+        assert schema.validate_review_status(rec) == [], f"status={s!r} should be valid"
+
+
+def test_set_status_writes_last_touch(config_dir):
+    rec = store.set_status("crm-t2", "contacted")
+    assert "last_touch" in rec
+    loaded = store.load_status("crm-t2")
+    assert loaded["last_touch"] == rec["last_touch"]
+
+
+def test_last_touch_updates_on_each_transition(config_dir):
+    r1 = store.set_status("crm-t3", "contacted")
+    import time; time.sleep(0.01)
+    r2 = store.set_status("crm-t3", "replied")
+    assert r2["last_touch"] >= r1["last_touch"]
+
+
+def test_is_do_not_contact_false_for_unknown(config_dir):
+    assert store.is_do_not_contact("no-such-target") is False
+
+
+def test_is_do_not_contact_false_for_pending(config_dir):
+    store.set_status("crm-t4", "pending")
+    assert store.is_do_not_contact("crm-t4") is False
+
+
+def test_is_do_not_contact_true_for_won(config_dir):
+    store.set_status("crm-t5", "won")
+    assert store.is_do_not_contact("crm-t5") is True
+
+
+def test_is_do_not_contact_true_for_lost(config_dir):
+    store.set_status("crm-t6", "lost")
+    assert store.is_do_not_contact("crm-t6") is True
+
+
+def test_is_do_not_contact_false_for_rejected(config_dir):
+    # "rejected" is in _DELETE_STATUSES — the row is physically purged,
+    # so load_status returns None and is_do_not_contact correctly returns False.
+    store.set_status("crm-t7", "rejected")
+    assert store.is_do_not_contact("crm-t7") is False

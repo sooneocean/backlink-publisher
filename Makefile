@@ -26,3 +26,7 @@ endif
 reconcile-check:
 	@python -c "from backlink_publisher.events.reconciler import reconcile_all; reconcile_all()" \
 		&& echo "RECONCILE OK" || (echo "RECONCILE FAILED" && exit 1)
+
+.PHONY: test-js
+test-js:
+	node --test tests/js/test_lib_api.mjs tests/js/test_lib_dom.mjs

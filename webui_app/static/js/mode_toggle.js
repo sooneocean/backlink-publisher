@@ -23,9 +23,10 @@
  *   - History nav hide: adds hide-history-nav class to body in batch mode.
  *
  * Gracefully degrades when localStorage is denied (private mode etc.).
+ *
+ * Plan 007 U6: native ES module — index.js imports and calls initModeToggle().
  */
-(function () {
-    'use strict';
+'use strict';
 
     var STORAGE_KEY = 'webui_mode_default';
     var STASH_KEY   = 'webui_url_stash';
@@ -176,9 +177,5 @@
         }
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
-})();
+// Exported; index.js calls initModeToggle() at boot (no self-init).
+export { init as initModeToggle };

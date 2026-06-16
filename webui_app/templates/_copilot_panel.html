@@ -1,0 +1,80 @@
+{# Pro Mode Copilot — global slide-out advisory panel (Plan U4).
+
+   Self-contained: ships its own copilot.css + copilot.js ES module, so a single
+   {% include %} fully wires the panel on a page (there is no shared <head> for
+   the standalone pages). No Bootstrap-offcanvas dependency. ZERO inline on*
+   handlers — copilot.js attaches every listener via data-action delegation;
+   index.html's no-inline-handler test guards this. CSRF meta is owned by
+   base.html (extending pages) / each standalone page (sites.html carries its
+   own) — the panel never injects a duplicate. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/copilot.css', v=asset_version) }}">
+
+<button type="button" id="copilotToggle" class="copilot-fab" data-action="copilot-toggle"
+        aria-expanded="false" aria-controls="copilotPanel" title="Pro 优化助手">
+  <span class="copilot-fab__icon" aria-hidden="true">✦</span>
+  <span class="copilot-fab__label">优化建议</span>
+  <span id="copilotBadge" class="copilot-fab__count d-none" aria-hidden="true">0</span>
+</button>
+
+<aside id="copilotPanel" class="copilot-panel" role="complementary"
+       aria-label="Pro 优化助手" aria-hidden="true" data-advice-url="/copilot/advice">
+  <header class="copilot-panel__head">
+    <h2 class="copilot-panel__title">优化建议</h2>
+    <button type="button" class="copilot-panel__close" data-action="copilot-close"
+            aria-label="关闭面板">&times;</button>
+  </header>
+
+  <div class="copilot-panel__body">
+    {# degraded: a read-only tool failed; partial results still shown honestly #}
+    <div id="copilotDegraded" class="copilot-banner copilot-banner--warn d-none" role="status"></div>
+
+    {# loading #}
+    <div id="copilotLoading" class="copilot-state d-none">
+      <span class="spinner-border spinner-border-sm"></span> 正在汇总只读顾问数据…
+    </div>
+
+    {# error (fetch failed) — distinct from degraded; offers retry #}
+    <div id="copilotError" class="copilot-state copilot-state--error d-none" role="alert">
+      <span id="copilotErrorMsg"></span>
+      <button type="button" class="btn btn-sm btn-outline-danger" data-action="copilot-retry">重试</button>
+    </div>
+
+    {# empty: every tool ran and reported nothing — distinct from "no data" #}
+    <div id="copilotEmpty" class="copilot-state d-none">
+      <p class="copilot-empty__title">没有发现需要优化的项目 ✓</p>
+      <p class="copilot-empty__hint">所有只读顾问都已运行且未报告问题。</p>
+    </div>
+
+    {# ranked, source-traceable findings (filled by copilot.js) #}
+    <ul id="copilotFindings" class="copilot-findings" aria-live="polite"></ul>
+
+    {# per-tool status — transparency about which sources contributed #}
+    <details id="copilotToolStatus" class="copilot-tools d-none">
+      <summary>数据来源状态</summary>
+      <ul id="copilotToolList" class="copilot-tools__list"></ul>
+    </details>
+  </div>
+
+  {# Q&A (U6): interactive when LLM is configured, locked otherwise. #}
+  <footer class="copilot-panel__qa {% if llm_configured %}copilot-qa--unlocked{% else %}copilot-qa--locked{% endif %}">
+    {% if llm_configured %}
+    <div id="copilotQaConvo" class="copilot-qa__convo" aria-live="polite">
+      <p class="copilot-qa__greeting">对顾问建议有疑问？向 AI 追问。</p>
+    </div>
+    <form id="copilotQaForm" class="copilot-qa__form">
+      <input id="copilotQaInput" class="copilot-qa__input" type="text"
+             placeholder="输入你的问题…" maxlength="500" autocomplete="off">
+      <button id="copilotQaSend" class="copilot-qa__send" type="submit"
+              aria-label="发送">发送</button>
+    </form>
+    <div id="copilotQaErr" class="copilot-qa__err d-none" role="alert"></div>
+    {% else %}
+    <div class="copilot-qa__lock" aria-hidden="true">🔒</div>
+    <p class="copilot-qa__title">Pro 问答助手</p>
+    <p class="copilot-qa__hint">绑定金钥后可就上面的建议向 AI 追问。</p>
+    <a class="copilot-qa__bind btn btn-sm btn-outline-primary" href="/settings">绑定金钥</a>
+    {% endif %}
+  </footer>
+</aside>
+
+<script type="module" src="{{ url_for('static', filename='js/copilot.js', v=asset_version) }}"></script>

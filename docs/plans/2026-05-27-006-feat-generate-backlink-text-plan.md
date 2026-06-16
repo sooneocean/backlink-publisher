@@ -1,10 +1,12 @@
 ---
 title: "feat: Add generate-backlink-text LLM content-generation CLI stage"
 type: feat
-status: active
+status: completed
+shipped: cf496e4a (#275)
 date: 2026-05-27
 deepened: 2026-05-27
 origin: docs/brainstorms/2026-05-27-llm-backlink-text-generation-requirements.md
+claims: {}
 ---
 
 # feat: Add `generate-backlink-text` LLM content-generation CLI stage

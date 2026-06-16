@@ -41,18 +41,47 @@ def _reconciliation_gaps():
     success. Returns ``{}`` on any read error so the dashboard never 500s.
     """
     try:
+        import json
+
         from backlink_publisher.checkpoint import list_failed_items
         from backlink_publisher.events.store import EventStore
 
         pending = len(list_failed_items())
         rows = EventStore().query(
-            "SELECT COUNT(*) FROM quarantine_log WHERE failure_type = ?",
-            ("reconcile_gap",),
+            "SELECT raw_payload_json FROM quarantine_log",
         )
-        gaps = int(rows[0][0]) if rows else 0
+        gaps = 0
+        for row in rows:
+            try:
+                payload = json.loads(row[0] or "{}")
+            except (TypeError, ValueError):
+                continue
+            if payload.get("failure_type") == "reconcile_gap":
+                gaps += 1
         return {"pending_checkpoints": pending, "quarantine_gaps": gaps}
     except Exception as exc:  # noqa: BLE001 — never 500 the page
         _log.warning("health: reconciliation gap check failed: %s", exc)
+        return {}
+
+
+def _geo_panel() -> dict:
+    """Read-only GEO citation-share panel data (Plan 2026-05-29-006 U9).
+
+    Returns ``{"targets": [<per-target dicts>]}`` on success, or ``{}`` on any
+    read error so the health dashboard never 500s (fail-open contract — R5).
+    Per-target dicts carry honest state labels matching
+    :class:`~backlink_publisher.geo.share.TargetShare` — never a misleading 0%.
+    Advisory only; nothing here gates publishing.
+    """
+    try:
+        from backlink_publisher.events import EventStore
+
+        from ..health_metrics import geo_citation_share
+
+        rows = geo_citation_share(EventStore())
+        return {"targets": rows} if rows else {}
+    except Exception as exc:  # noqa: BLE001 — never 500 the page
+        _log.warning("health: geo citation-share read failed: %s", exc)
         return {}
 
 
@@ -158,12 +187,71 @@ def ce_health():
             _log.warning("health: forward-path read failed: %s", exc)
             return []
 
+    def _scorecard_rows():
+        """Per-channel value scorecard card (Plan 2026-06-01-005, Unit 8 MVP).
+
+        Reads the same stores the equity-ledger reads, re-keyed by channel —
+        declared registry signals (dofollow / referral_value) beside measured
+        liveness, as a signal vector (no composite). The GA4 referral / GSC
+        discovery / AI-retrievability axes render as ``inert:not-landed``
+        (Wave-0 DESCOPE). Read-only, advisory — never gates publishing.
+        Fail-open: any read error → empty list so the dashboard never 500s."""
+        try:
+            from backlink_publisher.scorecard import build_channel_scorecard
+
+            return [r.to_jsonl_dict() for r in build_channel_scorecard()]
+        except Exception as exc:  # noqa: BLE001 — never 500 the page on scorecard
+            _log.warning("health: channel scorecard read failed: %s", exc)
+            return []
+
+    def _zero_auth_rows():
+        """Zero-auth backlink outcome card (Wave 4 of the zero-auth MVP).
+
+        Reads publish history and groups latest backlink outcomes for every
+        zero-auth platform.  Fail-open: any read error → empty list."""
+        try:
+            from backlink_publisher.publishing.registry import (
+                dofollow_status,
+                referral_value,
+                zero_auth_backlink_platforms,
+            )
+            from webui_app.binding_status import _get_latest_backlink_outcome_details
+            from webui_store import history_store
+
+            # Force history load to happen inside the try/except so a corrupt
+            # history file does not 500 the dashboard.
+            history_store.load()
+
+            rows = []
+            for name in sorted(zero_auth_backlink_platforms() or []):
+                details = _get_latest_backlink_outcome_details(name)
+                rows.append({
+                    "platform": name,
+                    "outcome": details.get("backlink_outcome") or "no_data",
+                    "reason": details.get("backlink_outcome_reason"),
+                    "dofollow": dofollow_status(name),
+                    "referral_value": referral_value(name),
+                    "ttl_days": details.get("brewpage_ttl_days"),
+                    "expires_at": (
+                        details.get("brewpage_expires_at")
+                        or details.get("posteasy_expires_at")
+                        or details.get("expires_at")
+                    ),
+                })
+            return rows
+        except Exception as exc:  # noqa: BLE001 — never 500 the page
+            _log.warning("health: zero-auth rows failed: %s", exc)
+            return []
+
     try:
         projection, health = _g_cache("health_agg", _build)
         canary = _g_cache("canary_health", _canary_rows)
         forward_path = _g_cache("forward_path_health", _forward_path_rows)
         reconciliation_gaps = _g_cache("reconciliation_gaps", _reconciliation_gaps)
         recheck_decay = _g_cache("recheck_decay", _decay_counts)
+        channel_scorecard = _g_cache("channel_scorecard", _scorecard_rows)
+        geo_panel = _g_cache("geo_panel", _geo_panel)
+        zero_auth = _g_cache("zero_auth_health", _zero_auth_rows)
         return _render(
             "health.html",
             health=health,
@@ -172,6 +260,9 @@ def ce_health():
             forward_path=forward_path,
             reconciliation_gaps=reconciliation_gaps,
             recheck_decay=recheck_decay,
+            channel_scorecard=channel_scorecard,
+            geo_panel=geo_panel,
+            zero_auth=zero_auth,
         )
     except Exception as exc:  # noqa: BLE001 — R5: even a render/context error must not 500
         _log.error("health: dashboard render failed, serving minimal fallback: %s", exc)
