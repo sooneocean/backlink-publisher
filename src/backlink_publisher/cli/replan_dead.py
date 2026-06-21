@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 
 from .._util.errors import emit_error
 from .._util.jsonl import write_jsonl
+from backlink_publisher.bulk_input import derive_main_domain
 from backlink_publisher.events.store import EventStore
 from backlink_publisher.events.kinds import LINK_RECHECKED
 from backlink_publisher.recheck import verdicts
@@ -66,19 +67,22 @@ def _deterministic_dead_events(
         if live_url in seen:
             continue
         seen.add(live_url)
-        results.append({
-            "live_url": live_url,
-            "target_url": row["target_url"],
-            "host": row["host"],
-            "platform": payload.get("platform"),
-            "verdict": verdict,
-        })
+        results.append(
+            {
+                "live_url": live_url,
+                "target_url": row["target_url"],
+                "host": row["host"],
+                "platform": payload.get("platform"),
+                "verdict": verdict,
+            }
+        )
     return results
 
 
 def _get_resolved_urls(store: EventStore) -> set[str]:
     """Return set of live_urls whose latest remediation action is resolve."""
     from backlink_publisher.remediation.events_io import resolved_live_urls
+
     return resolved_live_urls(store)
 
 
@@ -116,6 +120,10 @@ def _build_seed(
     """Build a plan-backlinks-compatible seed row."""
     seed: dict = {
         "target_url": target_url,
+        # plan-backlinks requires main_domain (the SEO site root, scheme://host).
+        # Derive it from target_url so replan-dead / auto-recover seeds pass
+        # validation instead of being silently dropped at the plan-backlinks stage.
+        "main_domain": derive_main_domain(target_url),
         "language": language,
         "url_mode": url_mode,
         "publish_mode": publish_mode,
@@ -144,28 +152,41 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     parser.add_argument(
-        "--days", type=int, default=7, metavar="N",
+        "--days",
+        type=int,
+        default=7,
+        metavar="N",
         help="Recency window in days (default: 7)",
     )
     parser.add_argument(
-        "--min-gap", type=int, default=3, metavar="M",
+        "--min-gap",
+        type=int,
+        default=3,
+        metavar="M",
         help="Minimum live-dofollow count before re-planning (default: 3; "
-             "skip targets with >= M live links)",
+        "skip targets with >= M live links)",
     )
     parser.add_argument(
-        "--language", default="en", metavar="LANG",
+        "--language",
+        default="en",
+        metavar="LANG",
         help="Seed language (default: en)",
     )
     parser.add_argument(
-        "--url-mode", default="A", metavar="MODE",
+        "--url-mode",
+        default="A",
+        metavar="MODE",
         help="Seed url_mode (A|B|C; default: A)",
     )
     parser.add_argument(
-        "--publish-mode", default="draft", metavar="MODE",
+        "--publish-mode",
+        default="draft",
+        metavar="MODE",
         help="Seed publish_mode (draft|publish; default: draft)",
     )
     parser.add_argument(
-        "--emit-stderr", action="store_true",
+        "--emit-stderr",
+        action="store_true",
         help="Emit diagnostic stderr lines (default: minimal)",
     )
     args = parser.parse_args(argv)
@@ -185,7 +206,10 @@ def main(argv: list[str] | None = None) -> None:
     dead_events = _deterministic_dead_events(store, since_dt)
     if not dead_events:
         if args.emit_stderr:
-            print(f"replan-dead: 0 dead links found in last {args.days} days", file=sys.stderr)
+            print(
+                f"replan-dead: 0 dead links found in last {args.days} days",
+                file=sys.stderr,
+            )
         return
 
     if args.emit_stderr:
@@ -198,7 +222,9 @@ def main(argv: list[str] | None = None) -> None:
     # Step 2: Load resolved URLs to skip
     resolved = _get_resolved_urls(store)
     if resolved and args.emit_stderr:
-        print(f"replan-dead: {len(resolved)} resolved link(s) excluded", file=sys.stderr)
+        print(
+            f"replan-dead: {len(resolved)} resolved link(s) excluded", file=sys.stderr
+        )
 
     # Step 3: Group dead events by target_url, skip resolved, check min-gap
     # Group first: deduplicate target_url+platform combos
