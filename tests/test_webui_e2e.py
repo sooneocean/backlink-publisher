@@ -121,7 +121,22 @@ def browser_context() -> Generator:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
+        # CI does not install Playwright browsers (these are operator/local
+        # opt-in smoke tests — see CLAUDE.md's treatment of browser tests).
+        # When the Chromium headless-shell binary is absent, launch() raises
+        # `Error: BrowserType.launch: Executable doesn't exist …`. Skip the
+        # whole module's E2E tests rather than erroring the run. Run
+        # `python -m playwright install chromium` to enable them locally.
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception as exc:  # playwright.sync_api.Error on missing binary
+            msg = str(exc)
+            if "Executable doesn't exist" in msg or "playwright install" in msg:
+                pytest.skip(
+                    "Playwright Chromium not installed — skipping WebUI E2E "
+                    "smoke tests (run `python -m playwright install chromium`)."
+                )
+            raise
         yield browser
         browser.close()
 
