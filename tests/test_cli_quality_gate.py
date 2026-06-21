@@ -81,3 +81,46 @@ def test_quality_gate_emit_events_records_required_fields(monkeypatch, tmp_path)
         "draft_label": "seed_1",
         "quality_check": "anchor_density_high",
     }
+
+
+def test_quality_gate_filters_when_run_as_auto_recover_subprocess(
+    monkeypatch, tmp_path
+):
+    """Regression (PR #8): auto-recover Phase 4 pipes seeds through the REAL
+    quality-gate CLI as a subprocess (`python -m ...cli.quality_gate`).
+
+    Why prior code allowed the bug: quality_gate.py shipped referencing an
+    undefined ``_MD_LINK_RE`` (and using ``re``/``json`` without importing them),
+    so every subprocess invocation crashed. ``_pipe_through_cli`` swallows a
+    non-zero exit and returns the seeds UNCHANGED, so the dead stage degraded
+    silently — and every auto_recover test mocks ``subprocess``, so nothing
+    exercised the real CLI. Broken CI (no ``[dev]`` extra) meant the suite never
+    ran to catch the in-process tests either.
+
+    This runs the actual subprocess through auto-recover's own wrapper and proves
+    the stage is alive: a high-anchor-density row is filtered out, a clean row
+    survives. If quality-gate breaks again the silent fallback returns the seed
+    unchanged and this fails — instead of skipping quality control unnoticed.
+    """
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    from backlink_publisher.cli.auto_recover import _pipe_through_cli
+
+    clean = {
+        "target_url": "https://example.com/a",
+        "title": "Clean",
+        "content_markdown": "plain body without any backlink stuffing here",
+    }
+    stuffed = {
+        "target_url": "https://example.com/b",
+        "title": "Stuffed",
+        "content_markdown": "[t](https://example.com/b) tiny",
+    }
+
+    out = _pipe_through_cli([clean, stuffed], "backlink_publisher.cli.quality_gate")
+
+    labels = {r.get("title") for r in out}
+    assert "Clean" in labels, "clean row must pass the quality gate"
+    assert "Stuffed" not in labels, (
+        "high-anchor-density row must be filtered by the real quality-gate "
+        "subprocess; a silent non-zero-exit fallback would let it through"
+    )
