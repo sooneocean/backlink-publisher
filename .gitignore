@@ -1,3 +1,7 @@
+# AI agent session artifacts
+.mimocode/
+.sisyphus/
+
 # velog session dumps (sensitive)
 velog_cookies_flat.txt
 velog_credentials_dump.json
