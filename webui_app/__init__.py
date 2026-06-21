@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask
+
+# ── Periodic store cleanup ────────────────────────────────────────────
+#: Minimum seconds between ``cleanup_expired_stores()`` invocations.
+_CLEANUP_INTERVAL_S: float = 300.0  # 5 minutes
+#: Timestamp of the last store-cleanup run (module-level, persists across
+#: requests). Initialised to 0 so the first request triggers a cleanup.
+_last_store_cleanup_ts: float = 0.0
 
 
 def _get_version_file() -> Path:
@@ -265,6 +273,18 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
             return
         from .helpers.security import _check_csrf_or_abort
         _check_csrf_or_abort()
+
+    @app.before_request
+    def _periodic_store_cleanup():
+        global _last_store_cleanup_ts
+        now = time.time()
+        if (now - _last_store_cleanup_ts) >= _CLEANUP_INTERVAL_S:
+            _last_store_cleanup_ts = now
+            from webui_store import cleanup_expired_stores
+            try:
+                cleanup_expired_stores()
+            except Exception:
+                pass  # Best-effort — must never abort a request.
 
     # Start scheduler unless under pytest (tests don't need background jobs)
     if start_scheduler is None:

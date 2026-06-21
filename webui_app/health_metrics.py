@@ -77,6 +77,55 @@ class BrokenChannel:
 
 
 @dataclass(frozen=True)
+class ChannelHealthCard:
+    """Aggregated channel health overview for the dashboard heart card."""
+
+    rows: list[dict] = field(default_factory=list)
+    routing_history: list[dict] = field(default_factory=list)
+
+
+def build_channel_health_card(store: EventStore) -> ChannelHealthCard:
+    """Build the channel health overview card data from the registry.
+
+    fail-open: any read error returns an empty card so the dashboard never 500s.
+    """
+    try:
+        from backlink_publisher.health import ChannelHealthRegistry
+
+        registry = ChannelHealthRegistry(store)
+        health_rows: list[dict] = []
+        for channel, health in registry.get_all_health().items():
+            advice = "healthy"  # green
+            if health.has_data and health.survival_rate is not None:
+                if health.survival_rate < 0.5:
+                    advice = "avoid"  # red
+                elif health.survival_rate < 0.7:
+                    advice = "caution"  # yellow
+            health_rows.append({
+                "channel": channel,
+                "survival_rate": (
+                    round(health.survival_rate, 2)
+                    if health.survival_rate is not None else None
+                ),
+                "has_data": health.has_data,
+                "total_rechecks": health.total_rechecks,
+                "dead_count": health.dead_count,
+                "primary_death_cause": health.primary_death_cause,
+                "last_alive_at": health.last_alive_at,
+                "last_dead_at": health.last_dead_at,
+                "routing_advice": advice,
+            })
+        return ChannelHealthCard(
+            rows=sorted(
+                health_rows, key=lambda r: r["survival_rate"] or 0, reverse=True,
+            ),
+            routing_history=registry.get_routing_history(limit=20),
+        )
+    except Exception:  # noqa: BLE001 — fail-open, never 500 the dashboard
+        return ChannelHealthCard()
+
+
+@dataclass(frozen=True)
 class Health:
     window_days: int
     since_utc: str

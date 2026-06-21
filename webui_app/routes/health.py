@@ -142,6 +142,19 @@ def ce_health():
             )
         return projection, health
 
+    def _channel_health_card():
+        """Channel health overview card (Plan 2026-06-08-001 U4).
+        Fail-open: any read error -> empty card so the dashboard never 500s."""
+        try:
+            from backlink_publisher.events import EventStore
+            from ..health_metrics import build_channel_health_card
+
+            return build_channel_health_card(EventStore())
+        except Exception:  # noqa: BLE001 — never 500 the page
+            _log.warning("health: channel health card read failed", exc_info=True)
+            from ..health_metrics import ChannelHealthCard
+            return ChannelHealthCard()
+
     def _canary_rows():
         """Read-side join of canary health (Plan 2026-05-27-001 Unit 4, R16).
 
@@ -267,6 +280,7 @@ def ce_health():
 
     try:
         projection, health = _g_cache("health_agg", _build)
+        channel_health = _g_cache("channel_health_card", _channel_health_card)
         canary = _g_cache("canary_health", _canary_rows)
         forward_path = _g_cache("forward_path_health", _forward_path_rows)
         reconciliation_gaps = _g_cache("reconciliation_gaps", _reconciliation_gaps)
@@ -279,6 +293,7 @@ def ce_health():
             "health.html",
             health=health,
             projection=projection,
+            channel_health=channel_health,
             canary=canary,
             forward_path=forward_path,
             reconciliation_gaps=reconciliation_gaps,

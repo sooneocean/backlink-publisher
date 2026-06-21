@@ -66,6 +66,17 @@ PUBLISH_QUALITY_BLOCKED: Final = "publish.quality_blocked"
 #: projector. Carries the action type in ``payload["action"]`` and the target
 #: link URL in ``payload["live_url"]`` (both in the REQUIRED_FIELDS floor).
 REMEDIATION_EVENT: Final = "remediation.event"
+#: Channel health recheck verdict (Plan 2026-06-08-001). Written by the
+#: ``auto-recover`` CLI when processing recheck verdicts into per-channel
+#: survival metrics. Carries the verdict, platform, and target identity in payload.
+CHANNEL_RECHECK_OBSERVED: Final = "channel.recheck_observed"
+#: Health router decision record (Plan 2026-06-08-001). Written by the
+#: ``auto-recover`` CLI after routing a dead backlink to a different channel.
+#: Carries source/target channel and survival rates in payload.
+CHANNEL_ROUTED: Final = "channel.routed"
+#: Channel publish outcome (Plan 2026-06-08-001). Written by the ``auto-recover``
+#: CLI after publishing a routed backlink through the assigned channel.
+CHANNEL_PUBLISHED_TO: Final = "channel.published_to"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -89,6 +100,9 @@ KINDS: Final[frozenset[str]] = frozenset(
         LINK_RECHECKED,
         REMEDIATION_EVENT,
         PUBLISH_QUALITY_BLOCKED,
+        CHANNEL_RECHECK_OBSERVED,
+        CHANNEL_ROUTED,
+        CHANNEL_PUBLISHED_TO,
     }
 )
 
@@ -149,6 +163,14 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # The action + live_url are the load-bearing fields: every remediation
     # event must declare what action was taken and on which backlink.
     REMEDIATION_EVENT: frozenset({"action", "live_url"}),
+    # Channel health events — verdict+platform is the minimal tuple a
+    # downstream reader (ChannelHealthRegistry) needs to compute survival
+    # rates; no event without a verdict is meaningful.
+    CHANNEL_RECHECK_OBSERVED: frozenset({"verdict", "platform"}),
+    # Routing decision identity: which channels were involved and why.
+    CHANNEL_ROUTED: frozenset({"source_channel", "target_channel", "reason"}),
+    # Publish outcome: which platform and its disposition.
+    CHANNEL_PUBLISHED_TO: frozenset({"platform", "status"}),
 }
 
 

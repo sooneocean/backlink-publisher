@@ -281,7 +281,101 @@
     {% endif %}
   </div>
 
-  {# ── 3b. Canary health (Plan 2026-05-27-001 U4, read-side join) ───────── #}
+  {# ── 3b. Channel Health Overview (Plan 2026-06-08-001 U4) ─────────────── #}
+  {% set ch_rows = channel_health.rows | default([]) %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Channel health overview
+      <span class="text-muted small fw-normal">— survival rate / death attribution / routing advice</span>
+    </div>
+    {% if ch_rows %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Channel</th>
+            <th class="text-end">Survival&nbsp;rate</th>
+            <th class="text-end">Rechecks</th>
+            <th class="text-end">Dead</th>
+            <th>Primary death cause</th>
+            <th>Last alive</th>
+            <th>Advice</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in ch_rows %}
+          <tr class="{% if r.routing_advice == 'avoid' %}row-worst{% elif r.routing_advice == 'caution' %}table-warning{% endif %}">
+            <td class="target-cell">{{ r.channel }}</td>
+            <td class="text-end">
+              {% if r.survival_rate is not none %}
+                <span class="{% if r.survival_rate >= 0.7 %}text-success{% elif r.survival_rate >= 0.5 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ r.survival_rate }}
+                </span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-end">{{ r.total_rechecks }}</td>
+            <td class="text-end">{{ r.dead_count }}</td>
+            <td class="small">{{ r.primary_death_cause or '—' }}</td>
+            <td class="small">{{ r.last_alive_at or '—' }}</td>
+            <td>
+              {% if r.routing_advice == 'healthy' %}
+                <span class="badge text-bg-success">healthy</span>
+              {% elif r.routing_advice == 'caution' %}
+                <span class="badge text-bg-warning">caution</span>
+              {% elif r.routing_advice == 'avoid' %}
+                <span class="badge text-bg-danger">avoid</span>
+              {% else %}
+                <span class="badge text-bg-secondary">no data</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-muted text-center py-4">No channel health data yet. Run <code>auto-recover --probe</code> to collect recheck observations.</div>
+    {% endif %}
+  </div>
+
+  {# ── 3c. Routing History (Plan 2026-06-08-001 U4) ─────────────────────── #}
+  {% set rh_rows = channel_health.routing_history | default([]) %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold">
+      Routing history
+      <span class="text-muted small fw-normal">— last 20 routing decisions</span>
+    </div>
+    {% if rh_rows %}
+    <div class="table-responsive">
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Time</th>
+            <th>Source</th>
+            <th>Target</th>
+            <th>Target URL</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in rh_rows %}
+          <tr>
+            <td class="small">{{ h.ts_utc[:19] if h.ts_utc else '—' }}</td>
+            <td class="target-cell">{{ h.source_channel or '—' }}</td>
+            <td class="target-cell">{{ h.target_channel or '—' }}</td>
+            <td class="target-cell small" title="{{ h.target_url }}">{{ (h.target_url or '—')[:60] }}{% if h.target_url and h.target_url|length > 60 %}…{% endif %}</td>
+            <td class="small">{{ h.reason or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card-body text-muted text-center py-4">No routing decisions yet. The auto-recover CLI writes routing events when it re-routes dead backlinks.</div>
+    {% endif %}
+  </div>
+
+  {# ── 3d. Canary health (Plan 2026-05-27-001 U4, read-side join) ───────── #}
   {% set canary_rows = canary | default([]) %}
   {% if canary_rows %}
   <div class="card shadow-sm mb-4">

@@ -19,6 +19,7 @@ import pytest
 
 from backlink_publisher.events import EventStore
 from backlink_publisher.events.kinds import CITATION_OBSERVED
+from webui_app.health_metrics import ChannelHealthCard
 
 
 @pytest.fixture
@@ -173,7 +174,7 @@ def test_never_probed_text_not_zero_percent(client):
                 reconciliation_gaps={},
                 recheck_decay={},
                 channel_scorecard=[],
-            )
+                channel_health=ChannelHealthCard(),            )
         assert "Not yet probed" in html
         assert "0%" not in html
 
@@ -203,7 +204,7 @@ def test_excluded_state_renders_distinct_label(client):
             reconciliation_gaps={},
             recheck_decay={},
             channel_scorecard=[],
-        )
+            channel_health=ChannelHealthCard(),        )
     assert "Excluded from measurement" in html
     # Share column must render as — (not a share percentage)
     assert "0%" not in html
@@ -234,7 +235,7 @@ def test_warming_up_state_shows_probe_count(client):
             reconciliation_gaps={},
             recheck_decay={},
             channel_scorecard=[],
-        )
+            channel_health=ChannelHealthCard(),        )
     assert "Insufficient data" in html
     assert "3 probes" in html
     assert "0%" not in html
@@ -285,7 +286,7 @@ def test_javascript_url_not_rendered_as_link(client):
             reconciliation_gaps={},
             recheck_decay={},
             channel_scorecard=[],
-        )
+            channel_health=ChannelHealthCard(),        )
     # Must not render as a clickable link
     assert 'href="javascript:' not in html
     assert "href=\"javascript:" not in html
@@ -316,7 +317,7 @@ def test_xss_payload_in_target_url_is_html_escaped(client):
             reconciliation_gaps={},
             recheck_decay={},
             channel_scorecard=[],
-        )
+            channel_health=ChannelHealthCard(),        )
     # Raw script tag must not appear — Jinja2 autoescape must have escaped it
     assert "<script>alert(1)</script>" not in html
     # Escaped form should appear
@@ -348,7 +349,7 @@ def test_http_url_renders_as_link(client):
             reconciliation_gaps={},
             recheck_decay={},
             channel_scorecard=[],
-        )
+            channel_health=ChannelHealthCard(),        )
     assert 'href="https://good.example.com"' in html
 
 

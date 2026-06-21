@@ -65,6 +65,7 @@ pr-opportunities = "backlink_publisher.cli.pr_opportunities:main"
 probe-citations = "backlink_publisher.cli.probe_citations:main"
 remediation-queue = "backlink_publisher.cli.remediation_queue:main"
 replan-dead = "backlink_publisher.cli.replan_dead:main"
+auto-recover = "backlink_publisher.cli.auto_recover:main"
 quality-gate = "backlink_publisher.cli.quality_gate:main"
 bp-mcp = "backlink_publisher.mcp.server:main"
 
