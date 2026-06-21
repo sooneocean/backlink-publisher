@@ -536,23 +536,25 @@ def _single_run_lock(cache_dir: Path):
 
 
 def _resolve_config() -> Path:
-    """Resolve the config dir from env or default."""
-    env_var = "BACKLINK_PUBLISHER_CONFIG_DIR"
-    import os
-    path_str = os.environ.get(env_var)
-    if path_str:
-        return Path(path_str)
-    return Path.home() / ".config" / "backlink-publisher"
+    """Resolve the config dir via the canonical loader helper.
+
+    Delegates to ``config.loader._config_dir()`` — the single source of truth
+    for the operator-state root (env override + platform default + test-sandbox
+    fail-closed). Avoids a raw ``Path.home()`` primitive (see
+    tests/test_no_raw_home_path_primitives.py).
+    """
+    from backlink_publisher.config.loader import _config_dir
+    return _config_dir()
 
 
 def _resolve_cache() -> Path:
-    """Resolve the cache dir from env or default."""
-    env_var = "BACKLINK_PUBLISHER_CACHE_DIR"
-    import os
-    path_str = os.environ.get(env_var)
-    if path_str:
-        return Path(path_str)
-    return Path.home() / ".cache" / "backlink-publisher"
+    """Resolve the cache dir via the canonical loader helper.
+
+    Delegates to ``config.loader._cache_dir()`` for the same reasons as
+    ``_resolve_config``.
+    """
+    from backlink_publisher.config.loader import _cache_dir
+    return _cache_dir()
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -40,9 +40,15 @@ TESTS_DIR = Path(__file__).resolve().parent
 _EXEMPT_FILENAMES = {"conftest.py"}
 
 # Closed grandfather allowlist of (filename, key) pairs, re-derived against the
-# branch base (origin/main b14d989): 31 pairs across 25 files. May only shrink.
+# branch base (origin/main b14d989): 33 pairs across 26 files. May only shrink.
+# test_webui_official_url_routes.py is a deliberate CSRF on/off test (it has a
+# dedicated test_post_official_url_requires_csrf_when_enabled case) operating on
+# a fresh per-test create_app() instance — no shared-singleton leak — so the two
+# pairs are sanctioned here per the module docstring's escape hatch.
 GRANDFATHERED: frozenset[tuple[str, str]] = frozenset(
     {
+        ("test_webui_official_url_routes.py", "CSRF_ENABLED"),
+        ("test_webui_official_url_routes.py", "WTF_CSRF_ENABLED"),
         ("test_channel_bind_save.py", "SESSION_COOKIE_SECURE"),
         ("test_drafts_bulk_routes.py", "WTF_CSRF_ENABLED"),
         ("test_e2e_history_batch_management.py", "WTF_CSRF_ENABLED"),

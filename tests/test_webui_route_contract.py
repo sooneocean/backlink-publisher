@@ -1348,6 +1348,18 @@ class TestAutoHealthRoutes:
         assert resp.status_code == 200
 
 
+class TestOfficialUrlRoutes:
+    """/official-url — official-URL autopublish intake (commit b523a29).
+    GET renders the intake page; the full preview/enqueue POST behaviour is
+    covered in test_webui_official_url_routes.py. This contract test ensures
+    the route stays reachable (the route-coverage gate scans this file only).
+    """
+
+    def test_get_official_url_returns_200(self, client):
+        resp = client.get("/official-url")
+        assert resp.status_code == 200
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Coverage assertion — make sure we exercised every @app.route declared.
 # This is the file's primary regression net for "did anyone add a route?".

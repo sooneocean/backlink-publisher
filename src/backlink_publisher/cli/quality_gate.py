@@ -17,6 +17,8 @@ Stage 2.2/2.3/3.1 optimization: Bulk-fetch + SHA reflex + async LLM.
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -28,6 +30,10 @@ from backlink_publisher.events.store import EventStore
 from backlink_publisher.events.kinds import PUBLISH_CONFIRMED, PUBLISH_QUALITY_BLOCKED
 
 _log = get_logger("quality_gate")
+
+# Markdown inline link: ``[text](url)``. Used by _count_md_links for the
+# anchor-density check.
+_MD_LINK_RE = re.compile(r"\[[^\]]*\]\([^)]*\)")
 
 
 def _count_words(text: str) -> int:

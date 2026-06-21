@@ -35,9 +35,12 @@ def test_kinds_set_is_the_15_documented_kinds():
             "link.rechecked",
             "publish.quality_blocked",
             "remediation.event",
+            "channel.recheck_observed",
+            "channel.routed",
+            "channel.published_to",
         }
     )
-    assert len(kinds.KINDS) == 18
+    assert len(kinds.KINDS) == 21
 
 
 @pytest.mark.parametrize(
