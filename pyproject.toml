@@ -30,6 +30,30 @@ dependencies = [
 # webwright is pinned to exact version — upstream is a 3-week-old project in rapid iteration;
 # loose constraints risk silent breaking changes. Upgrade manually after evaluating changelog.
 dev-webwright = ["webwright==0.0.7"]
+# `dev` is the canonical test/lint extra (CLAUDE.md: `pip install -e .[dev]`).
+# CI (.github/workflows/ci.yml) installs this and then runs `python -m radon`,
+# `pytest -n auto --timeout=30 --strict-markers --strict-config`. Each pin below
+# is load-bearing for that command line:
+#   - radon==6.0.1   exact pin — SLOC ceilings in monolith_budget.toml are
+#                    measured against this exact version (see note above).
+#   - pytest-xdist   provides `-n auto`.
+#   - pytest-timeout provides `--timeout`.
+#   - pytest-env     provides the [tool.pytest.ini_options] `env` key (PYTHONHASHSEED).
+#   - pytest-asyncio provides the `asyncio_mode` ini key — REQUIRED because CI runs
+#                    with `--strict-config`, which hard-errors on an unknown ini key
+#                    if the plugin that defines it is absent.
+#   - black / flake8 local-only style tools (CI uses py_compile + ast.parse, not these).
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.5",
+    "pytest-timeout>=2.2",
+    "pytest-env>=1.1",
+    "pytest-asyncio>=0.24",
+    "hypothesis>=6.100",
+    "radon==6.0.1",
+    "black>=24.0",
+    "flake8>=7.0",
+]
 mcp-server = ["mcp>=1.0.0"]
 # orjson for fast JSON parsing (optional, for high-throughput pipelines)
 fast-io = ["orjson>=3.10"]
