@@ -112,7 +112,7 @@ def _dedup_key(url: object) -> str:
     as the prior ``dict.fromkeys`` dedup — they are not supported here.
     """
     if not isinstance(url, str):
-        return url  # type: ignore[return-value]  # fail-soft passthrough
+        return url  # type: ignore[return-value]  # reason: fail-soft passthrough — _check_url can return None, but caller expects str
     try:
         return canonicalize_url(url)
     except ValueError:

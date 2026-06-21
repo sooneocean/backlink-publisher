@@ -66,6 +66,8 @@ PROTECTED_GLOBS: frozenset[str] = frozenset(
         "canary-health.json",
         # Asset version stamp (written to config dir by _compute_asset_version)
         "asset-version.stamp",
+        # Throttle config (read in auto_health.py _resource_budget)
+        "publish-throttle.json",
     }
 )
 

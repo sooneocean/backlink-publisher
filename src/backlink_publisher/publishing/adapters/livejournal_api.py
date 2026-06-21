@@ -168,7 +168,7 @@ class _TimeoutTransport(SafeTransport):
         super().__init__()
         self._timeout = timeout
 
-    def make_connection(self, host):  # type: ignore[no-untyped-def]
+    def make_connection(self, host):  # type: ignore[no-untyped-def]  # reason: override of httplib.HTTPSConnection untyped method; signature matches parent
         conn = super().make_connection(host)
         conn.timeout = self._timeout
         return conn

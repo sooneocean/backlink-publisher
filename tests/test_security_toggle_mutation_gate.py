@@ -80,6 +80,7 @@ GRANDFATHERED: frozenset[tuple[str, str]] = frozenset(
         ("test_webui_unit3_security.py", "CSRF_ENABLED"),
         ("test_webui_unit3_security.py", "WTF_CSRF_ENABLED"),
         ("test_webui_url_verify_routes.py", "SESSION_COOKIE_SECURE"),
+        ("test_auto_health_dashboard.py", "SESSION_COOKIE_SECURE"),
     }
 )
 

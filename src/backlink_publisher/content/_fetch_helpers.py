@@ -27,7 +27,7 @@ def _cache_key(url: object) -> str:
       ``ValueError`` (``Invalid IPv6 URL``); we catch and fall back.
     """
     if not isinstance(url, str):
-        return url  # type: ignore[return-value]  # fail-closed passthrough
+        return url  # type: ignore[return-value]  # reason: fail-closed passthrough — callee returns str|None, caller expects str
     try:
         return canonicalize_url(url)
     except ValueError:

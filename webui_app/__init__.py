@@ -9,11 +9,19 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
 
 from flask import Flask
+
+# ── Periodic store cleanup ────────────────────────────────────────────
+#: Minimum seconds between ``cleanup_expired_stores()`` invocations.
+_CLEANUP_INTERVAL_S: float = 300.0  # 5 minutes
+#: Timestamp of the last store-cleanup run (module-level, persists across
+#: requests). Initialised to 0 so the first request triggers a cleanup.
+_last_store_cleanup_ts: float = 0.0
 
 
 def _get_version_file() -> Path:
@@ -107,8 +115,12 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
 
     # Plan 2026-05-22 P7 C1: register app-context stores so WebUI routes
     # can access them via ``current_app.extensions['webui_stores']``.
+    # Keep a module-level reference for lifecycle management (periodic
+    # unload of cached store instances — see Unit 1.3 of the 2026-06-07
+    # optimization audit).
     from webui_store.registry import WebUIStores
-    WebUIStores().init_app(app)
+    _webui_stores = WebUIStores()
+    _webui_stores.init_app(app)
 
     # Share the publish-path markdown→HTML renderer with Jinja so preview
     # visual matches the published article (Plan 2026-05-19-007 Unit 2).
@@ -262,6 +274,18 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
         from .helpers.security import _check_csrf_or_abort
         _check_csrf_or_abort()
 
+    @app.before_request
+    def _periodic_store_cleanup():
+        global _last_store_cleanup_ts
+        now = time.time()
+        if (now - _last_store_cleanup_ts) >= _CLEANUP_INTERVAL_S:
+            _last_store_cleanup_ts = now
+            from webui_store import cleanup_expired_stores
+            try:
+                cleanup_expired_stores()
+            except Exception:
+                pass  # Best-effort — must never abort a request.
+
     # Start scheduler unless under pytest (tests don't need background jobs)
     if start_scheduler is None:
         start_scheduler = 'PYTEST_CURRENT_TEST' not in os.environ
@@ -310,5 +334,18 @@ def create_app(*, start_scheduler: bool | None = None) -> Flask:
                 _log.info("chrome_session.reap_orphan_publish_chrome: %s", outcome)
         except Exception as exc:  # noqa: BLE001 — startup must not crash
             _log.warning("chrome_session.reap_orphan_publish_chrome failed: %s", exc)
+
+        # Plan 2026-06-07 Unit 1.3 — periodic store lifecycle cleanup.
+        # Discards cached store instances every 30 minutes so a long-running
+        # WebUI session doesn't accumulate stale references.  Each store reads
+        # its backing JSON file from disk on every ``load()``, so dropping the
+        # instance costs nothing — the next property access re-creates it.
+        _scheduler.add_job(
+            _webui_stores.unload_all,
+            trigger="interval",
+            minutes=30,
+            id="store_lifecycle_cleanup",
+            replace_existing=True,
+        )
 
     return app

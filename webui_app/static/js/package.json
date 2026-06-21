@@ -1,5 +1,23 @@
 {
   "type": "module",
   "private": true,
-  "//": "Marks lib/*.js (and the ESM page entries) as native ES modules for Node-based unit checks. Browsers ignore this file; it adds no build step. Legacy classic <script> files load unaffected."
+  "//": "Marks lib/*.js (and the ESM page entries) as native ES modules for Node-based unit checks. Browsers ignore this file; it adds no build step. Legacy classic <script> files load unaffected.",
+  "name": "js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "happy-dom": "^20.10.2",
+    "vitest": "^4.1.8"
+  }
 }

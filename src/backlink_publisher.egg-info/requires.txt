@@ -3,6 +3,7 @@ google-api-python-client>=2.196
 google-auth-oauthlib>=1.4
 google-auth-httplib2>=0.2
 playwright>=1.55
+openai>=2.0
 requests>=2.32.4
 websocket-client>=1.9
 beautifulsoup4>=4.13
@@ -27,6 +28,9 @@ mypy>=1.8
 
 [dev-webwright]
 webwright==0.0.7
+
+[fast-io]
+orjson>=3.10
 
 [mcp-server]
 mcp>=1.0.0

@@ -82,6 +82,7 @@ _ADAPTER_STRING_TO_PLATFORM: dict[str, str] = {
     "medium-browser": "medium",
     "nonograph": "nonograph",
     "nonograph-form-post": "nonograph",
+    "notesio-form-post": "notesio",
     "notion": "notion",
     "posteasy": "posteasy",
     "pubmark": "pubmark",

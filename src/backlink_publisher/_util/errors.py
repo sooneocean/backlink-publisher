@@ -1,4 +1,26 @@
-"""Error definitions for the backlink pipeline."""
+"""Error definitions for the backlink pipeline.
+
+Error hierarchy (Plan 2026-06-08 optimization sprint)::
+
+    PipelineError (exit 5, base)
+    ├── UsageError (exit 1)
+    ├── InputValidationError (exit 2)
+    ├── DependencyError (exit 3)       — "user must take action"
+    │   ├── AuthExpiredError           — credentials expired, re-bind
+    │   ├── BannerUploadError          — media upload failed
+    │   └── ContentRejectedError       — cookie valid, content rejected
+    ├── ExternalServiceError (exit 4)  — service unreachable / rejected
+    │   ├── AntiBotChallengeError       — anti-bot interstitial
+    │   └── PublishPathDriftError       — forward-path drift detected
+    ├── RegistryError (exit 5)         — programmer bug
+    ├── InternalError (exit 5)         — unexpected internal failure
+    ├── RateLimitError                 — rate limited (exit 4)
+    └── ContentError                   — content-related failure (exit 3)
+
+New code SHOULD raise the most specific subclass available. ``except DependencyError``
+continues to catch ``AuthExpiredError`` / ``BannerUploadError`` / ``ContentRejectedError``
+(backward compatible).
+"""
 
 from __future__ import annotations
 
@@ -13,6 +35,45 @@ class PipelineError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(message)
+
+
+class RateLimitError(PipelineError):
+    """Rate limited by an external service.
+
+    Exit 4 (ExternalServiceError family) — same numeric exit code as
+    ``ExternalServiceError`` so existing ``except ExternalServiceError``
+    handlers continue to catch it (or ``except PipelineError``).
+    New downstream code can ``except RateLimitError`` for targeted
+    backoff / throttle-gating.
+
+    Subclasses ``PipelineError`` directly to avoid a forward reference
+    to ``ExternalServiceError`` (defined later in this module). The
+    exit_code 4 mirrors the family contract.
+    """
+
+    exit_code = 4
+
+    def __init__(self, message: str, *, retry_after: float | None = None) -> None:
+        self.retry_after = retry_after
+        msg = message
+        if retry_after is not None:
+            msg += f" (retry after {retry_after}s)"
+        super().__init__(msg)
+
+
+class ContentError(PipelineError):
+    """Content-related failure that prevents publishing.
+
+    Exit 3 (DependencyError family). Sibling of ``AuthExpiredError``.
+    Raised when the content itself is the problem (e.g. content policy
+    violation, server-side content validation failure) — NOT a credential
+    issue, and ``mark_expired`` must NOT fire on this exception.
+
+    Subclasses ``PipelineError`` directly to avoid a forward reference
+    to ``DependencyError``.
+    """
+
+    exit_code = 3
 
 
 class UsageError(PipelineError):

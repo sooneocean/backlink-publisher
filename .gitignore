@@ -1,3 +1,8 @@
+# AI agent session artifacts
+.mimocode/
+.sisyphus/
+.kilo/
+
 # velog session dumps (sensitive)
 velog_cookies_flat.txt
 velog_credentials_dump.json
@@ -168,3 +173,8 @@ start-local.sh
 *.njsproj
 *.sln
 *.sw*
+
+# JS / Node
+node_modules/
+webui_app/static/js/node_modules/
+webui_app/static/js/vitest.config.mjs.bak

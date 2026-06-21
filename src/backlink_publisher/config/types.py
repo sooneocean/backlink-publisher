@@ -112,8 +112,8 @@ class LLMProviderConfig:
     # in ``frw-token.json`` (0600) per SEC-3.  Reading the field
     # raises ``DeprecationWarning`` at parse time; the field will be
     # removed once Unit 4 lands and no call sites remain.
-    use_image_gen: bool = False  # type: ignore[no-redef]
-    image_gen_api_key: str | None = None  # type: ignore[no-redef]
+    use_image_gen: bool = False  # type: ignore[no-redef]  # reason: ImageGenConfig reuses fields from BaseGenConfig base class intentionally
+    image_gen_api_key: str | None = None  # type: ignore[no-redef]  # reason: deprecated field kept for back-compat until migration complete
 
 
 @dataclass

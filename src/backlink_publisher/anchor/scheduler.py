@@ -36,6 +36,7 @@ from typing import Iterable
 
 from backlink_publisher.anchor.profile import (
     ProfileState,
+    _MAX_ENTRIES,
     recent_secondary_count_split,
     recent_type_counts,
     recent_url_category_counts,
@@ -97,7 +98,7 @@ def schedule(
     # picture; incrementing as we go drives within-article diversity.
     working_counts = recent_type_counts(profile)
 
-    main_type = _pick_anchor_type(working_counts, target_proportions)
+    main_type = _pick_anchor_type(working_counts, target_proportions, window_size=_MAX_ENTRIES)
     working_counts[main_type] = working_counts.get(main_type, 0) + 1
 
     # For url_category selection across the article, similarly maintain a
@@ -107,7 +108,7 @@ def schedule(
 
     secondaries: list[SecondaryLink] = []
     for _ in range(secondary_count):
-        sec_type = _pick_anchor_type(working_counts, target_proportions)
+        sec_type = _pick_anchor_type(working_counts, target_proportions, window_size=_MAX_ENTRIES)
         working_counts[sec_type] = working_counts.get(sec_type, 0) + 1
 
         sec_cat = _pick_secondary_url_category(
@@ -148,12 +149,18 @@ def _pick_secondary_count(profile: ProfileState, *, max_available: int) -> int:
 def _pick_anchor_type(
     current_counts: dict[str, int],
     target_proportions: dict[str, float],
+    *,
+    window_size: int = 100,
 ) -> str:
     """Return the anchor type with the largest (target − actual) deficit.
 
-    On cold start (``total == 0``) every type's actual share is 0, so the
-    deficit equals the raw target proportion — and Branded (largest target)
-    wins. No special case needed; the math handles it.
+    At cold start (``total == 0``), deficits use the full ``window_size`` as
+    reference — giving count-based absolute deficits (e.g. branded deficit =
+    55). Once entries exist (``total > 0``), deficits normalize by the current
+    total, enabling within-article diversity via the working-count credit.
+
+    On cold start every type's deficit equals its target count, so Branded
+    (largest target) wins. No special case needed; the math handles it.
 
     Unknown keys in ``current_counts`` are ignored — that defensive handling
     means callers can pass a dict from a different source without first
@@ -162,11 +169,13 @@ def _pick_anchor_type(
     total = sum(current_counts.get(t, 0) for t in ANCHOR_TYPES)
     deficits: dict[str, float] = {}
     for t in ANCHOR_TYPES:
+        target = target_proportions.get(t, 0.0)
         actual = (current_counts.get(t, 0) / total) if total > 0 else 0.0
+        ref = window_size if total == 0 else 1.0
         # Round to absorb floating-point noise — without this, deficits that
-        # are "conceptually equal" (e.g. 0.25-0.20 vs 0.10-0.05) compare as
-        # different at the 1e-17 level and the tie-break order never fires.
-        deficits[t] = round(target_proportions.get(t, 0.0) - actual, 6)
+        # are "conceptually equal" compare as different at the 1e-17 level and
+        # the tie-break order never fires.
+        deficits[t] = round(target * ref - actual, 6)
     return max(
         ANCHOR_TYPES,
         key=lambda t: (deficits[t], -_TYPE_TIEBREAK_RANK[t]),

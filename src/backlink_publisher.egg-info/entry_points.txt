@@ -1,5 +1,6 @@
 [console_scripts]
 audit-state = backlink_publisher.cli.audit_state:main
+auto-publish = backlink_publisher.automation.orchestrator:main
 bind-channel = backlink_publisher.cli.bind_channel:main
 bp-mcp = backlink_publisher.mcp.server:main
 canary-targets = backlink_publisher.cli.canary_targets:main
@@ -21,8 +22,11 @@ pr-opportunities = backlink_publisher.cli.pr_opportunities:main
 preflight-targets = backlink_publisher.cli.preflight_targets:main
 probe-citations = backlink_publisher.cli.probe_citations:main
 publish-backlinks = backlink_publisher.cli.publish_backlinks:main
+quality-gate = backlink_publisher.cli.quality_gate:main
 recheck-backlinks = backlink_publisher.cli.recheck_backlinks:main
 recheck-overlay = backlink_publisher.cli.recheck_overlay:main
+remediation-queue = backlink_publisher.cli.remediation_queue:main
+replan-dead = backlink_publisher.cli.replan_dead:main
 report-anchors = backlink_publisher.cli.report_anchors:main
 validate-backlinks = backlink_publisher.cli.validate_backlinks:main
 velog-login = backlink_publisher.cli.velog_login:main

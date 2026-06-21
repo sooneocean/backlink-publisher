@@ -13,7 +13,7 @@ def _get_mdit() -> Any:
     if _mdit_instance is None:
         from markdown_it import MarkdownIt
         mdit = MarkdownIt("commonmark").enable(["table", "strikethrough"])
-        default_link_open = mdit.renderer.rules.get("link_open")  # type: ignore[attr-defined]
+        default_link_open = mdit.renderer.rules.get("link_open")  # type: ignore[attr-defined]  # reason: markdown-it-py renderer.rules is not typed
 
         def _link_open(
             tokens: Any, idx: int, options: Any, env: Any,
@@ -22,10 +22,10 @@ def _get_mdit() -> Any:
             token.attrSet("target", "_blank")
             token.attrSet("rel", "noopener")
             if default_link_open is not None:
-                return default_link_open(tokens, idx, options, env)  # type: ignore[no-any-return]
-            return mdit.renderer.renderToken(tokens, idx, options, env)  # type: ignore[no-any-return,attr-defined]
+                return default_link_open(tokens, idx, options, env)  # type: ignore[no-any-return]  # reason: callable return type is untyped
+            return mdit.renderer.renderToken(tokens, idx, options, env)  # type: ignore[no-any-return,attr-defined]  # reason: fallback path when default_link_open is None; untyped renderer
 
-        mdit.renderer.rules["link_open"] = _link_open  # type: ignore[attr-defined]
+        mdit.renderer.rules["link_open"] = _link_open  # type: ignore[attr-defined]  # reason: mutating untyped renderer rules dict
         _mdit_instance = mdit
     return _mdit_instance
 
@@ -40,7 +40,7 @@ def render_to_html(md: str) -> str:
     """
     if not md:
         return ""
-    return _get_mdit().render(md)  # type: ignore[no-any-return]
+    return _get_mdit().render(md)  # type: ignore[no-any-return]  # reason: markdown-it-py render() return type is str but mypy can't infer
 
 
 _URL_MODE_OFFSETS = {"A": 0, "B": 1, "C": 2}

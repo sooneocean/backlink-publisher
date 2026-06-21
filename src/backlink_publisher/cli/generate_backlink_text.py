@@ -204,7 +204,7 @@ def main(argv: list[str] | None = None) -> None:  # noqa: C901 — argparse top-
 # ── Endpoint resolution + guard ───────────────────────────────────────────────
 
 
-def _resolve_client(args) -> "LLMClientConfig":  # type: ignore[name-defined]
+def _resolve_client(args) -> "LLMClientConfig":  # type: ignore[name-defined]  # reason: forward reference to class defined later in same file
     """Resolve LLM endpoint/key/model from CLI flags → env → config.
 
     Resolution order for each field:

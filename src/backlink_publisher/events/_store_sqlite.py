@@ -4,6 +4,7 @@ Connection helpers, retry logic, statement-analysis, and file-hygiene
 utilities shared by EventStore and any future SQLite-backed store.
 
 Plan: ``docs/plans/2026-05-26-004-opt-projector-budget-rescue-plan.md``
+Stage 2.1: Reader connection reuse with PID invalidation.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -174,3 +176,86 @@ def _pid_alive(pid: int) -> bool:
     except OSError:
         return True
     return True
+
+
+# --- Stage 2.1: Reader connection cache with PID invalidation ----------
+
+#: Cache for reader connections keyed by db_path (Path objects are hashable)
+#: Includes special "_pid" key to track the owning PID
+_reader_cache: dict[Path, sqlite3.Connection | int] = {}
+_reader_lock = threading.Lock()
+
+#: Environment variable to control reader reuse (default 0 in CLI, 1 in WebUI)
+_REUSE_ENV_VAR = "BACKLINK_EVENTSTORE_REUSE_CONN"
+
+
+def get_read_connection(db_path: Path | None = None) -> sqlite3.Connection | None:
+    """Get a cached reader connection, or open one if none exists.
+
+    Reader connections are cached for the process lifetime and invalidated
+    when the PID changes (e.g., after os.fork() in multiprocessing scenarios).
+    Controlled by BACKLINK_EVENTSTORE_REUSE_CONN env var (default: 0/False).
+
+    Returns None if env var is not set or reader reuse is disabled.
+    Caller does NOT own the connection — it is cached and reused.
+    Do NOT call close() on the returned connection.
+    """
+    try:
+        reuse = os.environ.get(_REUSE_ENV_VAR, "0") == "1"
+    except (ValueError, TypeError):
+        return None
+
+    if not reuse:
+        return None
+
+    current_pid = os.getpid()
+    if db_path is None:
+        db_path = _default_db_path()
+
+    with _reader_lock:
+        cached_pid = _reader_cache.get(Path("_pid"))  # type: ignore[arg-type]
+        if cached_pid != current_pid:
+            # PID changed (fork scenario) — clear the cache
+            for key, conn in list(_reader_cache.items()):
+                if isinstance(conn, sqlite3.Connection):
+                    try:
+                        conn.close()
+                    except Exception:  # noqa: BLE001
+                        pass
+            _reader_cache.clear()
+            _reader_cache[Path("_pid")] = current_pid  # type: ignore[arg-type]
+
+        if db_path not in _reader_cache:
+            # Open a new reader connection (only PRAGMAs, no schema upgrade needed for readers)
+            if not db_path.exists():
+                # No database yet — return None to let caller handle
+                return None
+            conn = sqlite3.connect(str(db_path), timeout=5.0)
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")
+            conn.row_factory = sqlite3.Row
+            conn.execute("BEGIN")  # Keep a shared lock for reader consistency
+            _reader_cache[db_path] = conn
+            return conn
+
+        conn = _reader_cache.get(db_path)
+        if isinstance(conn, sqlite3.Connection):
+            return conn
+        return None
+
+
+def reset_reader_cache() -> None:
+    """Clear cached reader connections. Used by tests and fork detection."""
+    with _reader_lock:
+        for key, conn in list(_reader_cache.items()):
+            if isinstance(conn, sqlite3.Connection):
+                try:
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    pass
+        _reader_cache.clear()
+
+
+# Backward-compatible private name used by EventStore after the Stage 2.1
+# extraction. Keep the alias until store.py is cleaned up in a focused pass.
+_get_read_connection = get_read_connection

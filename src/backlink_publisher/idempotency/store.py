@@ -44,6 +44,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Literal
 
+from .exceptions import IdempotencyError, IdempotencyConflictError, IdempotencyStateError
+from .db_driver import IdempotencyDBDriver
+from .state_machine import validate_transition
 from .._util.url import canonicalize_url
 from ..config import _config_dir
 from ..events._store_sqlite import (
@@ -176,6 +179,7 @@ class DedupStore:
 
     def __init__(self, path: Path | None = None) -> None:
         self.path: Path = path if path is not None else _default_dedup_db_path()
+        self.driver = IdempotencyDBDriver(str(self.path))
 
     # ------------------------------------------------------------------ #
     # Connection plumbing (mirrors EventStore; dedup schema instead of events)
@@ -430,7 +434,22 @@ class DedupStore:
         on the fresh-intent path."""
         owner_pid = os.getpid() if owner_pid is None else owner_pid
 
-        def _claim(conn: sqlite3.Connection, exists: bool) -> None:
+        # ... existing logic ...
+        # (Inside gate_and_claim)
+
+        def _claim(conn: sqlite3.Connection, exists: bool, existing_record: DedupRecord | None = None) -> GateDecision:
+            # 使用新的 state_machine 邏輯判斷
+            if exists and existing_record:
+                if existing_record.state == "done":
+                    return GateDecision("skip", existing_record)
+                if existing_record.state == "uncertain":
+                    return GateDecision("hold", existing_record)
+                if existing_record.state == "attempting":
+                    if not self.is_stale_attempting(existing_record):
+                        return GateDecision("hold", existing_record)
+                    # stale logic...
+
+            # (Rest of the logic...)
             if exists:
                 conn.execute(
                     "UPDATE dedup_keys SET state = 'attempting', verify_ok = NULL, "
@@ -444,11 +463,12 @@ class DedupStore:
                 conn.execute(
                     "INSERT INTO dedup_keys "
                     "(platform, account, target_url, state, verify_ok, live_url, "
-                    " run_id, owner_pid, owner_run_id, owner_started_at, updated_at) "
+                    "run_id, owner_pid, owner_run_id, owner_started_at, updated_at) "
                     "VALUES (?, ?, ?, 'attempting', NULL, NULL, ?, ?, ?, ?, ?)",
                     (key.platform, key.account, key.target_url, run_id, owner_pid,
                      owner_run_id, owner_started_at, _now()),
                 )
+            return GateDecision("dispatch")
 
         def _op() -> GateDecision:
             with self.connect_immediate() as conn:

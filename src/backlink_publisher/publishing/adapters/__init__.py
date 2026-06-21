@@ -32,6 +32,7 @@ from .._manifests import (
     DEVTO_MANIFEST,
     HTMLDROP_MANIFEST,
     NONOGRAPH_MANIFEST,
+    NOTESIO_MANIFEST,
     GHPAGES_MANIFEST,
     GITLABPAGES_MANIFEST,
     HACKMD_MANIFEST,
@@ -101,6 +102,7 @@ from .brewpage_api import BrewPageAPIAdapter
 from .posteasy_api import PostEasyAPIAdapter
 from .htmldrop_api import HtmlDropAPIAdapter
 from .nonograph_api import NonographAPIAdapter
+from .notesio_api import NotesioFormPostAdapter
 from .pubmark_api import PubmarkAPIAdapter
 from .unmarkdown import UnmarkdownAdapter
 from .velog_graphql import VelogGraphQLAdapter
@@ -326,6 +328,15 @@ register(
     dofollow=True,  # browser-tier 2026-06-06: no rel on external links
     referral_value="low",
     **NONOGRAPH_MANIFEST,
+)
+register(
+    "notesio",
+    NotesioFormPostAdapter,
+    dofollow="uncertain",  # plan 2026-06-02-002; page-level dofollow (12/0) was nav/footer links
+    rationale=_R["notesio"],
+    referral_value="low",
+    visibility="hidden",  # plain-text pastebin; backlinks not rendered as <a> links
+    **NOTESIO_MANIFEST,
 )
 register(
     "pubmark",

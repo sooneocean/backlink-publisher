@@ -369,13 +369,12 @@
 {% endblock %}
 
 {% block page_module %}
-     {# U3: settings.js is the ES-module entry (replaced the bare settings script). fetch_json.js
-        stays because the classic bind_channel.js still reads window.fetchJson;
-        channel-binding.js dispatches a `velog:login` DOM event that settings.js handles. #}
-     <script src="{{ url_for('static', filename='js/fetch_json.js', v=asset_version) }}"></script>
-     <script type="module" src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
-     <script src="{{ url_for('static', filename='js/bind_channel.js', v=asset_version) }}" defer></script>
-     <script src="{{ url_for('static', filename='js/channel-binding.js', v=asset_version) }}" defer></script>
+{# U2: ESM entry points — fetch_json.js removed (its logic lives in lib/api.js);
+   bind_channel.js migrated to ESM, imports fetchJson/readCsrf from lib/api.js;
+   channel-binding.js bridges velog via DOM event; no inline on*. #}
+<script type="module" src="{{ url_for('static', filename='js/settings.js', v=asset_version) }}"></script>
+<script type="module" src="{{ url_for('static', filename='js/bind_channel.js', v=asset_version) }}"></script>
+<script src="{{ url_for('static', filename='js/channel-binding.js', v=asset_version) }}" defer></script>
 {% endblock %}
 
 {# Pro Mode Copilot — side panel (Plan U4) #}

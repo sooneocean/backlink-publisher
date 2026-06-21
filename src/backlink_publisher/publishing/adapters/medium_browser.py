@@ -57,8 +57,8 @@ from . import _medium_selectors as sel
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 except ImportError:  # pragma: no cover — tested via DependencyError path
-    sync_playwright = None  # type: ignore[assignment]
-    PlaywrightTimeoutError = Exception  # type: ignore[assignment,misc]
+    sync_playwright = None  # type: ignore[assignment]  # reason: fallback when playwright not installed
+    PlaywrightTimeoutError = Exception  # type: ignore[assignment,misc]  # reason: fallback type alias for optional dep
 
 
 def _json_log(**kwargs: Any) -> str:

@@ -85,18 +85,27 @@ def _geo_panel() -> dict:
         return {}
 
 
-def _decay_counts():
+def _decay_counts(exclude_resolved: bool = True):
     """Read-only backlink decay counts for the dashboard banner (Plan
     2026-05-29-004 U6). Returns ``{host_gone, link_stripped, dofollow_lost,
     alive, probe_error}`` or ``{}`` on any read error so the page never 500s.
+
+    When ``exclude_resolved=True`` (default), links that have been marked
+    ``resolve`` in the remediation queue are excluded — only **unresolved**
+    decay is shown in the banner. Pass ``?show_all=1`` to see total decay.
     """
     try:
         from ..health_metrics import decay_counts
 
-        return decay_counts()
+        return decay_counts(exclude_resolved=exclude_resolved)
     except Exception as exc:  # noqa: BLE001 — never 500 the page
         _log.warning("health: decay count read failed: %s", exc)
         return {}
+
+
+def _total_decay_counts():
+    """Wrapper that always returns total (unfiltered) decay counts."""
+    return _decay_counts(exclude_resolved=False)
 
 
 @bp.route("/ce:health", methods=["GET"])
@@ -132,6 +141,19 @@ def ce_health():
                 or f"{type(exc).__name__}: {exc}",
             )
         return projection, health
+
+    def _channel_health_card():
+        """Channel health overview card (Plan 2026-06-08-001 U4).
+        Fail-open: any read error -> empty card so the dashboard never 500s."""
+        try:
+            from backlink_publisher.events import EventStore
+            from ..health_metrics import build_channel_health_card
+
+            return build_channel_health_card(EventStore())
+        except Exception:  # noqa: BLE001 — never 500 the page
+            _log.warning("health: channel health card read failed", exc_info=True)
+            from ..health_metrics import ChannelHealthCard
+            return ChannelHealthCard()
 
     def _canary_rows():
         """Read-side join of canary health (Plan 2026-05-27-001 Unit 4, R16).
@@ -185,6 +207,19 @@ def ce_health():
             return rows
         except Exception as exc:  # noqa: BLE001 — never 500 the page
             _log.warning("health: forward-path read failed: %s", exc)
+            return []
+
+    def _remediation_rows():
+        """Unresolved backlinks list for the remediation card.
+        Fail-open: any read error → empty list so the dashboard never 500s."""
+        try:
+            from backlink_publisher.remediation.actions import list_unresolved
+            from backlink_publisher.events import EventStore
+
+            unresolved = list_unresolved(EventStore())
+            return unresolved
+        except Exception as exc:  # noqa: BLE001 — never 500 the page
+            _log.warning("health: remediation rows failed: %s", exc)
             return []
 
     def _scorecard_rows():
@@ -245,10 +280,12 @@ def ce_health():
 
     try:
         projection, health = _g_cache("health_agg", _build)
+        channel_health = _g_cache("channel_health_card", _channel_health_card)
         canary = _g_cache("canary_health", _canary_rows)
         forward_path = _g_cache("forward_path_health", _forward_path_rows)
         reconciliation_gaps = _g_cache("reconciliation_gaps", _reconciliation_gaps)
         recheck_decay = _g_cache("recheck_decay", _decay_counts)
+        remediation_rows = _g_cache("remediation_rows", _remediation_rows)
         channel_scorecard = _g_cache("channel_scorecard", _scorecard_rows)
         geo_panel = _g_cache("geo_panel", _geo_panel)
         zero_auth = _g_cache("zero_auth_health", _zero_auth_rows)
@@ -256,10 +293,12 @@ def ce_health():
             "health.html",
             health=health,
             projection=projection,
+            channel_health=channel_health,
             canary=canary,
             forward_path=forward_path,
             reconciliation_gaps=reconciliation_gaps,
             recheck_decay=recheck_decay,
+            remediation_rows=remediation_rows,
             channel_scorecard=channel_scorecard,
             geo_panel=geo_panel,
             zero_auth=zero_auth,

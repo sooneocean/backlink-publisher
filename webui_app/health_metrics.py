@@ -77,6 +77,55 @@ class BrokenChannel:
 
 
 @dataclass(frozen=True)
+class ChannelHealthCard:
+    """Aggregated channel health overview for the dashboard heart card."""
+
+    rows: list[dict] = field(default_factory=list)
+    routing_history: list[dict] = field(default_factory=list)
+
+
+def build_channel_health_card(store: EventStore) -> ChannelHealthCard:
+    """Build the channel health overview card data from the registry.
+
+    fail-open: any read error returns an empty card so the dashboard never 500s.
+    """
+    try:
+        from backlink_publisher.health import ChannelHealthRegistry
+
+        registry = ChannelHealthRegistry(store)
+        health_rows: list[dict] = []
+        for channel, health in registry.get_all_health().items():
+            advice = "healthy"  # green
+            if health.has_data and health.survival_rate is not None:
+                if health.survival_rate < 0.5:
+                    advice = "avoid"  # red
+                elif health.survival_rate < 0.7:
+                    advice = "caution"  # yellow
+            health_rows.append({
+                "channel": channel,
+                "survival_rate": (
+                    round(health.survival_rate, 2)
+                    if health.survival_rate is not None else None
+                ),
+                "has_data": health.has_data,
+                "total_rechecks": health.total_rechecks,
+                "dead_count": health.dead_count,
+                "primary_death_cause": health.primary_death_cause,
+                "last_alive_at": health.last_alive_at,
+                "last_dead_at": health.last_dead_at,
+                "routing_advice": advice,
+            })
+        return ChannelHealthCard(
+            rows=sorted(
+                health_rows, key=lambda r: r["survival_rate"] or 0, reverse=True,
+            ),
+            routing_history=registry.get_routing_history(limit=20),
+        )
+    except Exception:  # noqa: BLE001 — fail-open, never 500 the dashboard
+        return ChannelHealthCard()
+
+
+@dataclass(frozen=True)
 class Health:
     window_days: int
     since_utc: str
@@ -192,17 +241,27 @@ def error_distribution(store: EventStore, *, since_utc: str) -> list[ErrorBucket
     ]
 
 
-def decay_counts(store: EventStore | None = None) -> dict[str, int]:
+def decay_counts(
+    store: EventStore | None = None,
+    *,
+    exclude_resolved: bool = False,
+) -> dict[str, int]:
     """Backlink decay counts by latest recheck verdict (Plan 2026-05-29-004 U6).
 
     Thin wrapper over ``recheck.events_io.derive_decay_counts`` so the /ce:health
     route reads decay state through the same health-metrics surface as the other
     aggregations. Reports current state (latest verdict per link, no age window —
     an old un-rechecked dead link still counts).
+
+    When ``exclude_resolved=True``, links that have been marked ``resolve`` in
+    the remediation queue are excluded — only **unresolved** decay is reported.
     """
     from backlink_publisher.recheck.events_io import derive_decay_counts
 
-    return derive_decay_counts(store if store is not None else EventStore())
+    return derive_decay_counts(
+        store if store is not None else EventStore(),
+        exclude_resolved=exclude_resolved,
+    )
 
 
 def broken_channels() -> list[BrokenChannel]:

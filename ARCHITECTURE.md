@@ -1,270 +1,186 @@
-# Backlink Publisher Architecture
+# backlink-publisher Architecture
 
-This document is the repo-local architecture source of truth. It is descriptive,
-not a replacement for `AGENTS.md`: contribution rules, bugfix discipline,
-adapter recipes, and operational constraints still live there.
+A local-first backlink publishing pipeline with WebUI operations dashboard.
 
-## Purpose
+## Layer Map
 
-`backlink-publisher` is a local-first Python 3.11+ backlink publishing pipeline.
-It plans short backlink article payloads, validates them, and publishes them to
-registered platforms through adapter chains. The primary runtime surfaces are:
-
-- Terminal-native JSONL CLIs installed from `pyproject.toml`.
-- A Flask WebUI launched by `python webui.py`.
-- Operator-local config, cache, JSON stores, and SQLite sidecar stores.
-- GitHub Actions gates for unit tests, syntax checks, plan-claims validation,
-  and selected Phase 0 seal checks.
-
-Stdout from pipeline CLIs is clean JSONL. Diagnostics, typed error envelopes,
-reconciliation lines, and config banners go to stderr.
-
-## Runtime Boundaries
-
-The package code lives under `src/backlink_publisher/`. The WebUI lives at repo
-root in `webui_app/` and `webui_store/`, not under `src/`.
-
-Operator state is local by default:
-
-- Config: `~/.config/backlink-publisher/`, override with
-  `BACKLINK_PUBLISHER_CONFIG_DIR`.
-- Cache/checkpoints: `~/.cache/backlink-publisher/`, override with
-  `BACKLINK_PUBLISHER_CACHE_DIR`.
-- WebUI JSON stores: files under the config directory, lazily resolved by
-  `webui_store`.
-- Event projection: `events.db` under the config directory.
-- Publish idempotency: `dedup.db` under the config directory.
-
-Credential files and token sidecars are present by path convention but their
-values are not architecture evidence and must not be read into docs.
-
-## Active Surfaces
-
-### CLI Pipeline
-
-Console scripts are declared in `pyproject.toml`:
-
-- `plan-backlinks`: reads seed JSONL or CSV/sitemap input and emits planned
-  payload JSONL.
-- `validate-backlinks`: validates planned payloads and emits enriched payloads.
-- `publish-backlinks`: dispatches validated payloads to publisher adapters.
-- Diagnostic and support CLIs include `footprint`, `report-anchors`,
-  `equity-ledger`, `phase0-seal`, `audit-state`, `preflight-targets`,
-  `cull-channels`, `canary-targets`, `plan-check`, `plan-gap`, and
-  `recheck-backlinks`.
-
-The core pipeline shape is:
-
-```text
-seed JSONL
-  -> plan-backlinks
-  -> validate-backlinks
-  -> publish-backlinks
-  -> publish result JSONL
+```
+┌──────────────────────────────────────────────────────────┐
+│                      CLI Layer (27 entrypoints)          │
+│  plan-backlinks | validate-backlinks | publish-backlinks │
+│  → JSONL stdout, stderr diagnostics, exit code 0-6      │
+├──────────────────────────────────────────────────────────┤
+│                    Service Layer                          │
+│  config/  content/  anchor/  events/  geo/  linkcheck/   │
+│  ledger/  scorecard/  gates/  recheck/                   │
+├──────────────────────────────────────────────────────────┤
+│                  Publishing Adapters (30+ platforms)      │
+│  blogging: blogger/medium/velog/telegraph/ghpages/devto  │
+│  social:   mastodon/twitter/linkedin/threads             │
+│  others:   notion/wordpresscom/livejournal/tistory/       │
+├──────────────────────────────────────────────────────────┤
+│                    WebUI (Flask Dashboard)                │
+│  routes/  services/  webui_store/  templates/  static/   │
+│  → operational UI, no public exposure                    │
+├──────────────────────────────────────────────────────────┤
+│                    Events System                          │
+│  store.py (SQLite) → projector → reducers → query        │
+├──────────────────────────────────────────────────────────┤
+│                    MCP Server                             │
+│  server.py — multi-agent orchestration protocol          │
+└──────────────────────────────────────────────────────────┘
 ```
 
-CLI shells own argparse, stdin/stdout/stderr, config echo, log level, and exit
-mapping. Computation that is shared with the WebUI is extracted into engine
-modules where possible, for example `cli/plan_backlinks/_engine.py` and
-`validate/engine.py`.
+## Data Flow
 
-### Flask WebUI
+### Primary Pipeline (deterministic → non-deterministic)
 
-`webui.py` is the launcher and legacy re-export shim. `webui_app.create_app()`
-builds the Flask app, registers blueprints, injects platform and CSRF template
-context, starts APScheduler outside pytest, and runs startup reconciliation.
-
-Route registration is centralized in `webui_app/routes/__init__.py`. The app
-has route modules for pipeline execution, batch flows, checkpoints, history,
-drafts, settings, OAuth, profiles, sites, queue, dashboard, bind flows, token
-paste, URL verification, image generation, SEO visualization, equity ledger,
-health, and channel bind saves.
-
-The WebUI calls pipeline logic through `webui_app/api/pipeline_api.py` and
-`webui_app/helpers/cli_runner.py`. The subprocess bridge rewrites bare CLI names
-to `python -m backlink_publisher.cli.<module>` with `PYTHONPATH=src` so the
-current checkout is used instead of stale editable-install shims.
-
-Security posture:
-
-- Default bind is loopback.
-- Off-loopback binding requires `BACKLINK_PUBLISHER_ALLOW_NETWORK=1` and is
-  explicitly warned as unsupported without additional hardening.
-- `create_app()` enforces a global CSRF guard on POST/PUT/PATCH/DELETE, with
-  OAuth callbacks excluded because they verify their own state.
-- Tests may disable CSRF through sanctioned app config paths.
-
-## Architecture Layers
-
-### Planning
-
-Planning code is under `cli/plan_backlinks/` plus supporting modules:
-
-- `_engine.py`: shared planning kernel and drop accounting.
-- `_payload.py`: payload assembly, article metadata, dofollow-tier metadata.
-- `_links.py`: link construction and content-gate candidate collection.
-- `_templates.py`: language templates.
-- `_zh_short.py`: zh-CN short-form scheduler path.
-- `_work_themed.py`: three-URL work-themed path.
-- `_banners.py`: optional banner image generation runtime.
-
-Planning consumes config, content fetch results, optional LLM anchor generation,
-and optional image generation. The deterministic boundary is documented in
-`docs/architecture/deterministic-planning-principle.md`: planning code should
-keep pure computation separated from external inputs.
-
-### Validation
-
-Schema-level validation is in `schema.py`, `_schema_input.py`, and
-`_schema_output.py`. The CLI wrapper is `cli/validate_backlinks.py`; shared
-validation behavior lives in `validate/engine.py`.
-
-Validation checks payload shape, platform support, link structure, required
-content fields, URL/language behavior, and enrichment. URL reachability checks
-are externally dependent and can be disabled with the CLI flag documented in
-README and AGENTS.
-
-### Publishing
-
-Publisher dispatch is registry-driven:
-
-- `publishing/registry.py`: `Publisher` ABC, `register()`, dispatch metadata,
-  active/bound platform lookup, dofollow/referral metadata, auth classification.
-- `publishing/adapters/__init__.py`: imports adapter classes and registers each
-  platform or fallback chain.
-- `publishing/_manifests.py`: declarative per-channel UI, binding, policy, and
-  visibility metadata.
-- `publishing/banner_dispatcher.py`: optional banner embedding before publish.
-- `publishing/browser_publish/`: browser-driven channel recipes and dispatcher.
-- `publishing/reliability/`: publish policy behavior such as retry or circuit
-  style controls.
-
-Adding a publisher should normally mean adding an adapter class and one
-`register()` call. The schema, CLI choices, and WebUI platform lists derive from
-the registry instead of hardcoded platform lists.
-
-### Config And Secrets
-
-Config dataclasses live in `config/types.py`; loading and parsing live in
-`config/loader.py` and `config/parsers/`; writing and section-preservation logic
-live in `config/writer.py`.
-
-`load_config()` reads `config.toml` from the resolved config directory and
-falls back to selected sidecar settings where implemented. Secret-bearing token
-files are deliberately separate from the main TOML for several adapters.
-
-Tests use `BACKLINK_PUBLISHER_TEST_SANDBOX` plus config/cache override env vars
-to fail closed when subprocesses accidentally escape the sandbox.
-
-### State And Projections
-
-State is intentionally split by responsibility:
-
-- `checkpoint.py`: cache-directory JSON checkpoints for `publish-backlinks`
-  resume and batch status.
-- `webui_store/`: lazy JSON stores for WebUI history, profiles, drafts,
-  schedule, queue, and channel status.
-- `events/store.py`: SQLite-backed append/projected event store at `events.db`,
-  with WAL mode, 0600 file hygiene, and schema upgrade on connect.
-- `idempotency/store.py`: authoritative SQLite dedup store at `dedup.db`, kept
-  separate from `events.db` because publish idempotency is correctness-critical.
-- `canary/store.py`: canary health persistence under the config directory.
-- `ledger/` and `gap/`: read-side equity aggregation and deficit-driven replans.
-
-The event projection is rebuildable. The dedup store is not just a projection;
-it gates publishing with single-flight semantics.
-
-### Content, Link Checking, And SEO
-
-Network and content helpers are separated from pipeline shells:
-
-- `content/`: fetch, scraper, soft-404, HTML helpers, themed generation.
-- `linkcheck/`: HTTP checks, language heuristics, link attribute verification.
-- `anchor/`: anchor language support, metrics, profile, resolver, scheduler,
-  and preflight logic.
-- `footprint.py` and `footprint_corpus.py`: link footprint analysis.
-- `comment_outreach/`: comment outreach discovery, scoring, brief, and status
-  storage.
-
-Tests mock network paths by default. Live checks are opt-in through pytest
-markers.
-
-## Project Capabilities And Local Instructions
-
-Repo instruction files:
-
-- `AGENTS.md`: canonical repo governance and contributor workflow.
-- `webui_app/AGENTS.md`: WebUI-specific structure, conventions, and
-  anti-patterns.
-- `tests/AGENTS.md`: test isolation, markers, budget gates, and test quirks.
-
-Repo-local capability directories:
-
-- `.agents/skills/channel-probe/SKILL.md`: local skill for backlink channel
-  probe triage.
-- `.claude/skills/channel-probe/SKILL.md`: legacy/parallel skill copy.
-- `.claude/settings.local.json`: local tool/settings file; do not treat it as
-  portable architecture proof.
-
-No `CLAUDE.md` was present during this scan.
-
-## Build, Install, And Run
-
-Install:
-
-```bash
-pip install -e .
-pip install -e ".[dev]"
+```
+Seed JSONL → plan-backlinks → validate-backlinks → publish-backlinks
+  stdin         pure logic       enrich + check         platform adapters
+                (deterministic)  (deterministic)        (non-deterministic, network)
 ```
 
-Run CLIs:
+1. **plan-backlinks**: Reads seed JSONL (target URL, keywords, language). Generates article content deterministically. Output: enriched seed JSONL with article body, title, banner.
+2. **validate-backlinks**: Validates content, checks target URLs, enriches metadata. Exits 2 on validation failure.
+3. **publish-backlinks**: Dispatches to registered platform adapters. Retry logic, auth expiry handling, checkpoint/resume. Exit 0 on success, 3 on auth expired, 4 on service error.
 
-```bash
-cat fixtures/seed.jsonl | plan-backlinks | validate-backlinks | publish-backlinks --dry-run
+### Read-Only Advisory Tools
+
+Many CLIs are read-only (exit 0 always):
+- `canary-targets` — re-fetch seeded posts, verify dofollow still alive
+- `gate-probe` — falsification gates for ideation
+- `channel-scorecard` — per-channel quality assessment
+- `equity-ledger` — per-target backlink scorecard
+- `audit-state` — dual-state divergence auditor
+
+### Events Flow
+
+```
+Publish → EventStore.append() → projector → _project_reducers → queries
+             (SQLite, WAL mode)    (state machine)   (aggregate)
 ```
 
-Run WebUI:
+Events are append-only, idempotent (dedup keyed by event hash). The projector reads events and updates read-side state via reducers. events.db is recoverable from JSON store.
 
-```bash
-python webui.py
+## Key Architectural Decisions
+
+### 1. Zero-Build Frontend (Plan 2026-06-01-007)
+- Native ES modules, no bundler/framework
+- Bootstrap 5 + Icons via CDN (non-defer in `<head>`)
+- Server→client data via `window.__pageBootstrap = {{ ... | tojson }}`
+- Cross-module signals via DOM `CustomEvent`, never `window.*` globals
+- CSS custom properties via `tokens.css` (19 design tokens, 94+ var() references)
+
+### 2. Deterministic Planning Principle
+`plan-backlinks` is pure/deterministic (no network, no random). This makes it testable and reproducible. Publishing is inherently non-deterministic (platform APIs, rate limits, auth). The architecture boundary between these phases is enforced at the code level.
+
+### 3. Adapter Registry (R9 Extension Readiness)
+```python
+from backlink_publisher.publishing.registry import register, Publisher
+
+register("platform", PlatformAdapter, dofollow=True, ui=UiMeta(...), bind=[...])
+```
+- Adding a platform = one `register()` call + adapter class
+- No edits to CLI, schema, or dispatch code
+- Dofollow gate enforced at import time
+- Manifest metadata (UiMeta, BindDescriptor, Policy) provides SSoT for WebUI wiring
+
+### 4. Config System (Save-Preserve Taxonomy)
+- Hierarchical TOML at `~/.config/backlink-publisher/config.toml`
+- `save_config` has 5-class taxonomy: (a) emitted every call, (b) conditional, (c) depth-2 preserved, (d) unmanaged preserved, (e) placeholder
+- Credential lifecycle: managed subsections persist on save, propagate to `.config-history/` (cap 20)
+- Medium sidecar fallback for operators who haven't migrated
+
+### 5. Monolith Budget & Plan Claims
+- 14 tracked files with radon SLOC ceilings (enforced by `test_no_monolith_regrowth.py`)
+- Plan claims system: YAML frontmatter `claims:` block → CI gate + overnight radar
+- Cutoff: 2026-05-20, post-cutoff must have claims block
+
+### 6. Error Taxonomy
+```
+PipelineError (exit 5)
+├── UsageError (exit 1)
+├── InputValidationError (exit 2)
+├── DependencyError (exit 3)
+│   ├── AuthExpiredError
+│   ├── BannerUploadError
+│   └── ContentRejectedError
+├── ExternalServiceError (exit 4)
+│   └── AntiBotChallengeError
+├── RegistryError (exit 5)
+└── InternalError (exit 5)
 ```
 
-Developer Make targets are limited to Webwright scaffolding/diagnostics and a
-reconcile check. They are not the publishing pipeline.
+## State Management
 
-## CI And Verification Map
+### WebUI Stores (Module-Level Singletons)
+- 8 store types: history, profiles, drafts, schedule, queue, channel_status, score, seen_urls
+- Backed by `JsonStore` (JSON files on disk)
+- `_LazyStore` wrapper defers initialization until first access
+- `WebUIStores.unload_all()` clears cache; periodic 30-min APScheduler cleanup
 
-GitHub Actions in `.github/workflows/`:
+### Events Store (SQLite)
+- `events.db` with WAL mode, `synchronous=NORMAL`, `busy_timeout=5000`
+- Append-only, idempotent (dedup by event hash)
+- Recoverable from JSON store via `bp-events-rebuild`
 
-- `ci.yml`: Python 3.11 and 3.12, `pip install -e ".[dev]"`, `pytest tests/`,
-  `py_compile`, AST parse, fixture generation, and non-blocking mypy.
-- `plan-claims-gate.yml`: validates touched plan docs on PRs to `main`.
-- `plan-claims-radar.yml`: scheduled drift scan for post-cutoff plan claims.
-- `phase0-seal-check.yml`: verifies selected Telegraph Phase 0 branch families.
+### Channel Status
+- `channel-status.json` tracks per-channel bound/expired/running states
+- `mark_bound()` / `mark_expired()` called by binding CLI and publish dispatch
+- `reconcile_on_load()` checks storage_state file existence at WebUI startup
 
-Important local gates:
+## Publishing Path
 
-- `pytest tests/`
-- `pytest tests/test_no_monolith_regrowth.py -k "R4"`
-- `pytest tests/scripts/`
-- `python -m radon raw -s <budgeted-file>`
-- `plan-check <docs/plans/...-plan.md>`
-- `make reconcile-check`
+### Auth flow
+```
+bind-channel --channel <name> → Playwright headed browser → login
+  → storage_state.json (0600) → mark_bound()
 
-Budget and contract tests enforce monolith SLOC ceilings, adapter dofollow
-metadata, manifest shape, orphaned guard-script references, WebUI/security
-contracts, and pipeline behavior.
+Publish → adapter.publish() → 401/403? → AuthExpiredError
+  → mark_expired() → exit 3 → operator re-binds via WebUI
+```
 
-## Known Gaps And Risks
+### Adapter dispatch
+```
+dispatch(payload, mode, config):
+  1. Check registered_platforms()
+  2. Try each adapter in priority order
+  3. Catch DependencyError → fall through to next adapter
+  4. Catch ExternalServiceError → propagate immediately
+  5. On success → checkpoint + next row
+  6. On AuthExpiredError → mark_expired + exit 3
+```
 
-- There is no repo-local `scripts/preflight.py`; the repo-architecture skill
-  preflight hook was therefore a no-op in this scan.
-- The worktree contained unrelated dirty/untracked files when this document was
-  created, including an existing `AGENTS.md` edit and generated cache
-  directories. Architecture claims above are based on direct file reads, not on
-  a clean worktree assumption.
-- Platform behavior is inherently unstable. Dofollow status, remote auth
-  behavior, Medium/browser flows, and canary truth must be verified with live
-  probes before relying on them operationally.
-- Some docs and plans intentionally contain operator domain details. Do not move
-  those details into public summaries or solution docs without sanitization.
+## Test Infrastructure
+
+- 410 test files, ~6,270 test functions
+- 4 autouse conftest fixtures: isolated config dir, URL checks mocked, content fetch mocked, sockets blocked
+- Custom markers: `real_ssrf_check`, `real_content_fetch`, `real_image_gen`, `real_browser_publish_smoke`
+- `PYTHONHASHSEED=0` required (enforced by pytest-env)
+- JS tests via `node:test` (13 tests for `lib/dom.js esc()`)
+- No browser E2E tests yet (deferred)
+
+## Key Constraints
+
+| Constraint | Rationale |
+|---|---|
+| No JS build step | Double-click → run. No Node/bundler dependency for deployment |
+| No inline on* handlers | Delegated `data-action` pattern for module-scope safety |
+| No window.* globals as API | ESM modules import from `lib/`, signals via CustomEvent |
+| Bootstrap non-defer in `<head>` | Guarantees `window.bootstrap` before any module executes |
+| CSRF global guard | All POST/PUT/PATCH/DELETE require `X-CSRFToken` or form field |
+| CSRF_ENABLED=False in tests | Tests opt out explicitly |
+| Network mocked by default | 4 autouse fixtures prevent accidental live calls |
+| Pipeable CLI contract | stdout=JSONL, stderr=diagnostics, exit code 0-6 |
+| No `choices=` in argparse | Use post-parse validation → `UsageError` (exit 1), not argparse's exit 2 |
+
+## Related Documents
+
+- `AGENTS.md` — canonical project governance, conventions, commands
+- `docs/architecture/deterministic-planning-principle.md` — architecture boundary
+- `docs/architecture/io-budgets.md` — I/O budget documentation
+- `docs/architecture/events-db-scale-tripwire-register.md` — events DB scale limits
+- `docs/optimization-audit-2026-06.md` — comprehensive system audit
+
+*Maintained as architecture SSoT. Update when layers, data flow, or key decisions change.*

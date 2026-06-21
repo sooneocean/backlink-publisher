@@ -42,7 +42,7 @@ from typing import Any
 if sys.version_info >= (3, 11):
     import tomllib
 else:  # pragma: no cover - 3.10 fallback mirrors config/loader.py
-    import tomli as tomllib  # type: ignore[no-redef]
+    import tomli as tomllib  # type: ignore[no-redef]  # reason: conditional import for Python <3.11 compat
 
 from backlink_publisher.config.loader import _config_dir
 from webui_store.base import JsonStore, _LazyStore

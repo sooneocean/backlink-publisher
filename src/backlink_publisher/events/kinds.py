@@ -33,7 +33,7 @@ from __future__ import annotations
 
 from typing import Final
 
-# --- Seam A: the event-kind vocabulary (15 kinds; do NOT rename) ---------
+# --- Seam A: the event-kind vocabulary (do NOT rename) -------------------
 
 PUBLISH_INTENT: Final = "publish.intent"
 PUBLISH_CONFIRMED: Final = "publish.confirmed"
@@ -55,6 +55,28 @@ CITATION_OBSERVED: Final = "citation.observed"
 #: through the projector, so it has no Seam B (STATUS_MAP) entry. Carries the
 #: 5-verdict taxonomy in ``payload["verdict"]`` (see ``recheck.verdicts``).
 LINK_RECHECKED: Final = "link.rechecked"
+#: A pre-publish quality gate blocked this row (Plan 2026-06-07-003 Phase C).
+#: Written directly by the ``quality-gate`` CLI via ``EventStore.append`` — not
+#: through the projector. Carries the failing quality check name in
+#: ``payload["quality_check"]`` and the article identifier in ``payload["draft_label"]``.
+PUBLISH_QUALITY_BLOCKED: Final = "publish.quality_blocked"
+#: Operator action on a backlink decay event — ack / resolve / snooze (Plan
+#: 2026-06-07-001 Phase A). Written directly by the ``remediation-queue`` CLI
+#: or the WebUI remediation panel via ``EventStore.append`` — not through the
+#: projector. Carries the action type in ``payload["action"]`` and the target
+#: link URL in ``payload["live_url"]`` (both in the REQUIRED_FIELDS floor).
+REMEDIATION_EVENT: Final = "remediation.event"
+#: Channel health recheck verdict (Plan 2026-06-08-001). Written by the
+#: ``auto-recover`` CLI when processing recheck verdicts into per-channel
+#: survival metrics. Carries the verdict, platform, and target identity in payload.
+CHANNEL_RECHECK_OBSERVED: Final = "channel.recheck_observed"
+#: Health router decision record (Plan 2026-06-08-001). Written by the
+#: ``auto-recover`` CLI after routing a dead backlink to a different channel.
+#: Carries source/target channel and survival rates in payload.
+CHANNEL_ROUTED: Final = "channel.routed"
+#: Channel publish outcome (Plan 2026-06-08-001). Written by the ``auto-recover``
+#: CLI after publishing a routed backlink through the assigned channel.
+CHANNEL_PUBLISHED_TO: Final = "channel.published_to"
 
 #: Every kind ever written to events.db. The R8a CI gate asserts no writer
 #: emits a kind outside this set.
@@ -76,6 +98,11 @@ KINDS: Final[frozenset[str]] = frozenset(
         IMAGE_GEN_DISABLED_AUTO,
         CITATION_OBSERVED,
         LINK_RECHECKED,
+        REMEDIATION_EVENT,
+        PUBLISH_QUALITY_BLOCKED,
+        CHANNEL_RECHECK_OBSERVED,
+        CHANNEL_ROUTED,
+        CHANNEL_PUBLISHED_TO,
     }
 )
 
@@ -130,6 +157,20 @@ REQUIRED_FIELDS: Final[dict[str, frozenset[str]]] = {
     # cursor) needs; target identity travels in the events.db first-class
     # columns (target_url/host/article_id), not the floor.
     LINK_RECHECKED: frozenset({"verdict"}),
+    # quality_check names the failing gate (anchor_density_high / duplicate_content /
+    # llm_rejected); draft_label identifies the blocked seed row.
+    PUBLISH_QUALITY_BLOCKED: frozenset({"quality_check", "draft_label"}),
+    # The action + live_url are the load-bearing fields: every remediation
+    # event must declare what action was taken and on which backlink.
+    REMEDIATION_EVENT: frozenset({"action", "live_url"}),
+    # Channel health events — verdict+platform is the minimal tuple a
+    # downstream reader (ChannelHealthRegistry) needs to compute survival
+    # rates; no event without a verdict is meaningful.
+    CHANNEL_RECHECK_OBSERVED: frozenset({"verdict", "platform"}),
+    # Routing decision identity: which channels were involved and why.
+    CHANNEL_ROUTED: frozenset({"source_channel", "target_channel", "reason"}),
+    # Publish outcome: which platform and its disposition.
+    CHANNEL_PUBLISHED_TO: frozenset({"platform", "status"}),
 }
 
 
