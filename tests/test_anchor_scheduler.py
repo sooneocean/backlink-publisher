@@ -62,12 +62,14 @@ def test_cold_start_returns_branded_main_with_two_secondaries():
 
 
 def test_cold_start_secondary_types_diversify():
-    """With one Branded already credited from the main, the secondaries
-    should rotate toward Partial / LSI instead of all stacking on Branded."""
+    """At cold start, branded deficit is highest (55) and wins the main link.
+    After crediting +1 to working_counts, the proportional deficit flips and
+    partial/lsi pick up the secondary slots — within-article diversity works."""
     empty = ProfileState(main_domain="https://example.com")
     decision = schedule(empty, SAFE_SEO, DEFAULT_CATS)
     types = [decision.main_link_anchor_type, *(s.anchor_type for s in decision.secondary_links)]
-    # Not all three identical
+    # Main is branded; secondaries diversify via within-article credit
+    assert types[0] == "branded"
     assert len(set(types)) > 1
 
 
@@ -238,8 +240,8 @@ def test_single_non_home_caps_secondary_count_to_one():
 def test_pick_anchor_type_ignores_unknown_count_keys():
     counts = {"branded": 50, "partial": 25, "exact": 10, "lsi": 10, "garbage": 999}
     chosen = _pick_anchor_type(counts, SAFE_SEO)
-    # garbage is ignored → counts sum to 95, branded actual=50/95≈0.526, deficit≈0.024
-    assert chosen in {"branded", "partial", "exact", "lsi"}
+    # garbage ignored → branded deficit = 55-50=5, partial=0, exact=0, lsi=0 → branded wins
+    assert chosen == "branded"
 
 
 def test_pick_anchor_type_missing_target_key_treats_as_zero():
@@ -247,8 +249,7 @@ def test_pick_anchor_type_missing_target_key_treats_as_zero():
     counts = {"branded": 50, "partial": 25, "exact": 10, "lsi": 10}
     partial_target = {"branded": 0.6, "partial": 0.4}  # exact + lsi unspecified
     chosen = _pick_anchor_type(counts, partial_target)
-    # br 50/95, pa 25/95 → both under their targets; branded deficit (0.6 - 0.526=0.074)
-    # vs partial (0.4-0.263=0.137). Partial wins.
+    # branded deficit = 60-50=10, partial deficit = 40-25=15 → partial wins
     assert chosen == "partial"
 
 
