@@ -2,6 +2,8 @@
 
 See `README.md` for project overview and `docs/` for plans, brainstorms, ideation, and solutions.
 
+> **Canonical AI-assistant guide.** `CLAUDE.md` at the repo root is a symlink to this file — edit `AGENTS.md`, never a copy. (Stale `bp-*/AGENTS.md` worktree copies are likewise not canonical; see below.)
+
 ## Dev Commands
 
 ```bash
