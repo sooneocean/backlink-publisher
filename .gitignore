@@ -1,4 +1,3 @@
-
 # velog session dumps (sensitive)
 velog_cookies_flat.txt
 velog_credentials_dump.json
@@ -23,7 +22,7 @@ test_payload.jsonl
 webui.log
 
 # spike scratch (raw API response bodies — may echo credentials)
-/.spike/
+.spike/
 
 # Phase B Medium GraphQL spike scratch notes (B.1) — never push
 docs/spikes/20[0-9][0-9]-*-medium-graphql-spike-notes.md
@@ -33,3 +32,137 @@ docs/spikes/scaffold-*/
 
 # Webwright diagnostic session output — screenshots + scripts, potentially sensitive
 docs/diagnostics/*/
+
+# Python
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+#  Usually these files are written by a python script from a temporary
+#  folder before pyinstaller injects the rest of the bootloader into
+#  the executable.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# Pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*
+
+# Files that might appear in the root of a volume
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs_vista.txt
+
+# EiC file between EAIntegrator and EAITools
+ehthumbs_vista.txt
+Dekstop.ini
+
+# Logs
+*.log
+*.influxdb
+*.db
+*.sqlite
+*.sqlite3
+
+# Local development files
+.agents/
+.graphifyignore
+.playwright-mcp/
+dev/
+settings-pro-mode-smoke.png
+start-local.sh
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
