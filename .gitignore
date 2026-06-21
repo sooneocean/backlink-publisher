@@ -1,6 +1,7 @@
 # AI agent session artifacts
 .mimocode/
 .sisyphus/
+.kilo/
 
 # velog session dumps (sensitive)
 velog_cookies_flat.txt
