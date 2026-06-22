@@ -576,3 +576,40 @@ def test_recent_secondary_count_split_drops_orphan_remnant(profile_cache):
 def test_recent_secondary_count_split_empty_profile():
     state = ProfileState(main_domain="https://nothing")
     assert recent_secondary_count_split(state) == (0, 0)
+
+
+def test_recent_secondary_count_split_default_spans_full_window(profile_cache):
+    """The default look-back must weigh the FULL retained profile, not the
+    20-entry anchor-text dedup window it used to borrow by accident.
+
+    Builds 30 one-secondary articles (oldest) then 5 two-secondary articles
+    (newest) — 75 entries, under the 100-entry retention cap so nothing trims.
+    The default sees all 35; the old 20-article window would have seen only the
+    most recent 20 (15 one-sec + 5 two-sec), undercounting the one-sec bucket.
+    """
+    from backlink_publisher.anchor._profile_analysis import (
+        _DEFAULT_TEXT_WINDOW,
+        _MAX_ENTRIES,
+        _SECONDARY_SPLIT_WINDOW,
+    )
+
+    # The dedicated constant must be the full-window value, never the dedup one.
+    assert _SECONDARY_SPLIT_WINDOW == _MAX_ENTRIES
+    assert _SECONDARY_SPLIT_WINDOW != _DEFAULT_TEXT_WINDOW
+
+    main_domain = "https://fullwin.example"
+    all_entries: list[ProfileEntry] = []
+    for i in range(30):
+        all_entries.append(_main(f"m1_{i}"))
+        all_entries.append(_sec(f"s_{i}", cat="hot"))
+    for i in range(5):
+        all_entries.append(_main(f"m2_{i}"))
+        all_entries.append(_sec(f"sa_{i}", cat="hot"))
+        all_entries.append(_sec(f"sb_{i}", cat="animate"))
+    record_article(main_domain, all_entries)
+    state = load_profile(main_domain)
+
+    # Default (full window): every retained article is weighed.
+    assert recent_secondary_count_split(state) == (30, 5)
+    # The old 20-article window would have undercounted the one-sec bucket.
+    assert recent_secondary_count_split(state, n=20) == (15, 5)
