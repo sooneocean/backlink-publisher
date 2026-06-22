@@ -66,6 +66,7 @@ def test_get_health_unknown_returns_minimal_default():
         "last_drift_at": None,
         "consecutive_oks": 0,
         "quarantined": False,
+        "consecutive_advisory": 0,
     }
     # Read default must not have written a file.
     assert not _health_path().exists()
@@ -73,7 +74,8 @@ def test_get_health_unknown_returns_minimal_default():
 
 def test_health_record_has_quarantine_fields():
     rec = store.record_verdict("velog", store.STATUS_DRIFT_CONFIRMED)
-    # Unit 4 adds quarantined + consecutive_oks alongside the Unit 1 minimal set.
+    # Unit 4 adds quarantined + consecutive_oks + consecutive_advisory
+    # alongside the Unit 1 minimal set.
     assert set(rec) == {
         "status",
         "consecutive_failures",
@@ -81,6 +83,7 @@ def test_health_record_has_quarantine_fields():
         "last_drift_at",
         "consecutive_oks",
         "quarantined",
+        "consecutive_advisory",
     }
     # A single drift is below QUARANTINE_AFTER_N → not yet quarantined.
     assert rec["consecutive_failures"] == 1
@@ -113,6 +116,34 @@ def test_advisory_preserves_counters_and_timestamps():
     assert after["last_ok_at"] == before["last_ok_at"]
     assert after["last_drift_at"] == before["last_drift_at"]
     assert after["status"] == store.STATUS_ADVISORY
+
+
+# ── Unit 4: consecutive-advisory streak (canary-stale detection) ──────────
+
+
+def test_advisory_streak_increments_while_quarantine_counters_frozen():
+    # A drift seeds consecutive_failures=1; subsequent advisory runs must
+    # increment the advisory streak WITHOUT moving the quarantine counter.
+    store.record_verdict("ghpages", store.STATUS_DRIFT_CONFIRMED)
+    a1 = store.record_verdict("ghpages", store.STATUS_ADVISORY)
+    a2 = store.record_verdict("ghpages", store.STATUS_ADVISORY)
+    assert a1["consecutive_advisory"] == 1
+    assert a2["consecutive_advisory"] == 2
+    # Quarantine counter stays frozen across the advisory streak (by design).
+    assert a2["consecutive_failures"] == 1
+
+
+def test_advisory_streak_resets_on_link_alive_drift_and_not_configured():
+    for resetter in (
+        store.STATUS_LINK_ALIVE,
+        store.STATUS_DRIFT_CONFIRMED,
+        store.STATUS_NOT_CONFIGURED,
+    ):
+        store.record_verdict("velog", store.STATUS_ADVISORY)
+        streaked = store.record_verdict("velog", store.STATUS_ADVISORY)
+        assert streaked["consecutive_advisory"] == 2
+        after = store.record_verdict("velog", resetter)
+        assert after["consecutive_advisory"] == 0, resetter
 
 
 def test_multiple_platforms_keyed_independently():
