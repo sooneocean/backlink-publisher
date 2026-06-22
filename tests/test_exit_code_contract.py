@@ -22,12 +22,14 @@ from backlink_publisher._util.errors import (
     AntiBotChallengeError,
     AuthExpiredError,
     BannerUploadError,
+    ContentError,
     ContentRejectedError,
     DependencyError,
     ExternalServiceError,
     InputValidationError,
     InternalError,
     PipelineError,
+    RateLimitError,
     RegistryError,
     UsageError,
     emit_error,
@@ -47,6 +49,8 @@ EXIT_CODE_CONTRACT = [
     (AuthExpiredError, 3),
     (BannerUploadError, 3),
     (ContentRejectedError, 3),
+    (ContentError, 3),
+    (RateLimitError, 4),
     (InternalError, 5),
 ]
 

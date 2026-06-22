@@ -11,7 +11,9 @@ from backlink_publisher.cli import replan_dead
 from backlink_publisher.events.kinds import LINK_RECHECKED, PUBLISH_CONFIRMED
 from backlink_publisher.events.store import EventStore
 from backlink_publisher.recheck import verdicts
-from backlink_publisher.remediation.events_io import emit_event as emit_remediation_event
+from backlink_publisher.remediation.events_io import (
+    emit_event as emit_remediation_event,
+)
 
 
 def _run_replan_dead(monkeypatch, argv: list[str] | None = None):
@@ -65,6 +67,10 @@ def test_replan_dead_emits_seed_for_host_gone(monkeypatch, tmp_path):
     assert rows == [
         {
             "target_url": "https://target.example/page",
+            # Derived from target_url; required by plan-backlinks (regression:
+            # the seed previously omitted this and was silently dropped at the
+            # plan-backlinks validation stage).
+            "main_domain": "https://target.example",
             "language": "en",
             "url_mode": "A",
             "publish_mode": "draft",
@@ -76,6 +82,34 @@ def test_replan_dead_emits_seed_for_host_gone(monkeypatch, tmp_path):
             },
         }
     ]
+
+
+def test_replan_dead_seed_is_plan_backlinks_valid(monkeypatch, tmp_path):
+    """Regression: replan-dead's docstring promises ``plan-backlinks-compatible``
+    seed JSONL, but ``_build_seed`` omitted the required ``main_domain`` field,
+    so every emitted seed was rejected at plan-backlinks' input-validation stage
+    (``missing required field 'main_domain'``) and silently dropped — breaking
+    both the ``replan-dead | plan-backlinks`` pipe and auto-recover's Phase 4.
+
+    Why prior code allowed it: the emit test above asserted the exact (incomplete)
+    seed dict as correct, characterizing the bug as expected output, and no test
+    fed the seed through plan-backlinks' validator. Broken CI (no [dev] extra)
+    meant the suite never ran either.
+
+    This pins the contract directly: a replan-dead seed must pass
+    ``validate_input_payload`` with zero errors.
+    """
+    monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
+    store = EventStore()
+    _append_rechecked(store, verdict=verdicts.HOST_GONE)
+
+    stdout, _ = _run_replan_dead(monkeypatch, ["--days", "30", "--language", "en"])
+    rows = _jsonl(stdout)
+    assert len(rows) == 1
+
+    from backlink_publisher.schema import validate_input_payload
+
+    assert validate_input_payload(rows[0], 1) == []
 
 
 def test_replan_dead_skips_dofollow_lost(monkeypatch, tmp_path):

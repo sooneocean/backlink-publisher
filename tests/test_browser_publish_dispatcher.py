@@ -78,6 +78,14 @@ def stubbed_session(monkeypatch):
             return False
 
     monkeypatch.setattr(disp_mod, "ChromeAttachSession", FakeSession)
+    # available() gates on a real Chrome binary (`_chrome_binary() is not None`),
+    # which CI / headless dev boxes lack — without this the dispatch chain reports
+    # the instance unavailable and raises DependencyError before the stubbed
+    # session is ever used. A stubbed session implies a usable browser env, so
+    # report the binary present too. (available() does a fresh `from .chrome_session
+    # import _chrome_binary`, so patch it on the source module.)
+    from backlink_publisher.publishing.browser_publish import chrome_session as _cs
+    monkeypatch.setattr(_cs, "_chrome_binary", lambda: "/usr/bin/chromium")
     return {"page": page, "captured": captured}
 
 

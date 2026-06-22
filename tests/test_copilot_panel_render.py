@@ -79,7 +79,12 @@ def test_exactly_one_csrf_token_meta_per_page(client, url):
     """Edge case incl. sites.html (no native meta before U4): the partial must
     NOT inject a duplicate — base.html / standalone heads own the single meta."""
     body = _body(client, url)
-    count = body.count('name="csrf-token"')
+    # Count the actual <meta> tag, not the bare `name="csrf-token"` attribute
+    # substring: a page may legitimately reference the selector in inline JS
+    # (e.g. health.html's `querySelector('meta[name="csrf-token"]')`), which the
+    # bare-substring count mistook for a second meta. The contract is about the
+    # number of meta ELEMENTS, so match the opening tag.
+    count = body.count('<meta name="csrf-token"')
     assert count == 1, f"{url} must have exactly one csrf-token meta, got {count}"
 
 
