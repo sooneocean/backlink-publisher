@@ -18,6 +18,15 @@ from backlink_publisher.config import ANCHOR_TYPES
 # initialized module object already carries them when this module loads.
 from .profile import _DEFAULT_TEXT_WINDOW, _MAX_ENTRIES
 
+#: Look-back window (in ARTICLES) for the secondary-link balance controller.
+#: Expressed as an article count, but pinned to ``_MAX_ENTRIES`` (the retained
+#: *entry* cap) so it always spans the FULL retained profile: every article has
+#: at least one entry, so the article count can never exceed the entry cap, and
+#: ``articles[-_SECONDARY_SPLIT_WINDOW:]`` is therefore "all retained articles".
+#: Distinct from ``_DEFAULT_TEXT_WINDOW`` (the 20-entry anchor-text dedup window)
+#: — the two windows answer different questions and must not be conflated.
+_SECONDARY_SPLIT_WINDOW = _MAX_ENTRIES
+
 if TYPE_CHECKING:
     from .profile import ProfileEntry, ProfileState
 
@@ -99,13 +108,18 @@ def _group_into_articles(
 
 def recent_secondary_count_split(
     profile: ProfileState,
-    n: int = _DEFAULT_TEXT_WINDOW,
+    n: int = _SECONDARY_SPLIT_WINDOW,
 ) -> tuple[int, int]:
     """Articles in the most recent ``n`` that had 1 vs 2 secondary links.
 
     Returned as ``(count_with_1_secondary, count_with_2_secondaries)``. The
     scheduler uses this to keep the (1, 2) split converging on 50/50 — see
     Unit 4 ``pick_secondary_count``.
+
+    ``n`` defaults to :data:`_SECONDARY_SPLIT_WINDOW` so the balance controller
+    weighs the FULL retained profile, not just the most recent slice. (It
+    previously defaulted to the unrelated 20-entry anchor-text dedup window,
+    which silently ignored the older half of the retained articles.)
 
     Articles with 0 secondaries (a degraded edge case or unusual record) and
     articles with 3+ secondaries (not currently possible by design) are not
