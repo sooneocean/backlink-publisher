@@ -198,6 +198,59 @@ def test_page_not_readable_is_advisory(tmp_path, monkeypatch, capsys):
 
 
 # --------------------------------------------------------------------------
+# ★ Unit 4: canary-stale detection after a consecutive-advisory streak
+# --------------------------------------------------------------------------
+
+def _run_advisory(cohort):
+    """Run a guaranteed-advisory cycle (page unreadable → cannot prove canary)."""
+    return _run(
+        cohort,
+        fetch_return=PreflightFacts(reason="network_error"),
+        anchor_return=_anchor(
+            page_readable=False, marker_present=None,
+            target_anchor_found=False, reason="network_error",
+        ),
+    )
+
+
+def test_advisory_streak_flags_stale_only_at_threshold(tmp_path, monkeypatch, capsys):
+    _seed_config(tmp_path, monkeypatch,
+                 {"blogger": {"post_url": "https://b.example/p", "expected_target": "https://t.example/"}})
+    # _STALE_ADVISORY_RUNS == 3: runs 1-2 advisory-but-not-stale, run 3 stale.
+    for run_idx in range(1, ct._STALE_ADVISORY_RUNS):
+        _run_advisory(["blogger"])
+        receipts, stderr = _receipts(capsys)
+        assert receipts[0]["verdict"] == "advisory"
+        assert "note" not in receipts[0], f"run {run_idx} flagged stale early"
+        assert "canary_stale_needs_reseed" not in stderr
+
+    # Threshold run: now flagged stale + surfaced loudly on the RECON summary.
+    _run_advisory(["blogger"])
+    receipts, stderr = _receipts(capsys)
+    assert receipts[0]["verdict"] == "advisory"
+    assert receipts[0]["note"] == "canary-stale/needs-reseed"
+    assert "canary_stale_needs_reseed" in stderr
+    assert "blogger" in stderr
+
+
+def test_link_alive_breaks_advisory_streak_resets_stale(tmp_path, monkeypatch, capsys):
+    _seed_config(tmp_path, monkeypatch,
+                 {"blogger": {"post_url": "https://b.example/p", "expected_target": "https://t.example/"}})
+    # Two advisory runs, then a healthy run resets the streak …
+    _run_advisory(["blogger"])
+    _run_advisory(["blogger"])
+    _run(["blogger"], fetch_return=_facts(status=200), anchor_return=_anchor())
+    capsys.readouterr()  # discard
+    from backlink_publisher.canary.store import get_health
+    assert get_health("blogger")["consecutive_advisory"] == 0
+
+    # … so a fresh advisory does NOT immediately re-trip the stale note.
+    _run_advisory(["blogger"])
+    receipts, _ = _receipts(capsys)
+    assert "note" not in receipts[0]
+
+
+# --------------------------------------------------------------------------
 # not-configured (coverage gap, first-class verdict)
 # --------------------------------------------------------------------------
 

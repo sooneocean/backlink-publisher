@@ -295,6 +295,7 @@ def test_health_store_payload_has_only_nonsensitive_fields():
         "last_drift_at",
         "consecutive_oks",
         "quarantined",
+        "consecutive_advisory",
     }
     blob = json.dumps(store.list_all())
     for secret in ("token", "cookie", "password", "Authorization", "api_key"):

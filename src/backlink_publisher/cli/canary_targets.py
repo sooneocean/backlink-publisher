@@ -55,11 +55,11 @@ VERDICTS = (STATUS_LINK_ALIVE, STATUS_DRIFT_CONFIRMED, STATUS_ADVISORY, STATUS_N
 MODE = "evergreen"
 
 #: Consecutive-advisory runs after which a canary post is presumed rotted and a
-#: ``canary-stale/needs-reseed`` note is surfaced. v1 only has the minimal Unit 1
-#: fields, so this thresholds on ``consecutive_failures`` is NOT available for
-#: advisory (advisory preserves counters by design). TODO(Unit 4): track
-#: consecutive-advisory in the health store; until then stale-detection is a
-#: best-effort note keyed off whatever the store exposes.
+#: ``canary-stale/needs-reseed`` note is surfaced (Unit 4). Thresholds on the
+#: dedicated ``consecutive_advisory`` counter in the health store — distinct
+#: from ``consecutive_failures`` (quarantine), which advisory deliberately
+#: freezes. ``_is_stale`` reads the counter; the store increments it on advisory
+#: and resets it on every other verdict.
 _STALE_ADVISORY_RUNS = 3
 
 #: Inter-platform jitter bounds (seconds). Kept tiny; zeroed in tests via the
@@ -210,18 +210,18 @@ def _build_cohort(include_uncertain: bool = False) -> list[str]:
     ]
 
 
-def _is_stale(platform: str, verdict: str) -> bool:
-    """Best-effort canary-stale detection.
+def _is_stale(record: dict[str, Any]) -> bool:
+    """Canary-stale detection (Unit 4).
 
-    v1 health store carries only minimal fields (Unit 1); it does NOT track
-    consecutive-advisory runs (advisory preserves counters by design). So we can
-    only flag stale when the store ALREADY reflects a long advisory streak via
-    a field it exposes. Until Unit 4 adds ``consecutive_advisory`` tracking,
-    this returns False for the advisory path and is a documented gap.
-    TODO(Unit 4): wire consecutive-advisory tracking into the store and
-    threshold on ``_STALE_ADVISORY_RUNS`` here.
+    A canary post that returns ``advisory`` for :data:`_STALE_ADVISORY_RUNS`
+    consecutive runs is presumed rotted — the page is unreadable or its link is
+    no longer PROVABLY present — and surfaced as ``canary-stale/needs-reseed``.
+    Reads the ``consecutive_advisory`` counter maintained by
+    :func:`canary.store.record_verdict` (incremented on advisory, reset to 0 on
+    any other verdict). Backward-compat: records missing the counter read 0, so
+    a pre-Unit-4 health file simply never trips until it accrues a fresh streak.
     """
-    return False
+    return int(record.get("consecutive_advisory", 0) or 0) >= _STALE_ADVISORY_RUNS
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None) -> None:
 
             verdict = _classify(facts, anchor, configured=True)
             failed = _failed_checks(facts, anchor, configured=True)
-            record_verdict(platform, verdict)
+            rec = record_verdict(platform, verdict)
 
             # Wave 4 zero-auth MVP: best-effort rendered-link verification.
             # Adds backlink_outcome to the receipt when the page is readable
@@ -355,7 +355,7 @@ def main(argv: list[str] | None = None) -> None:
             except Exception:  # noqa: BLE001 — best-effort; never fails the canary
                 backlink_outcome = "failed"
 
-            is_stale = verdict == STATUS_ADVISORY and _is_stale(platform, verdict)
+            is_stale = verdict == STATUS_ADVISORY and _is_stale(rec)
             if is_stale:
                 stale.append(platform)
             receipt = _build_receipt(platform, verdict, failed, stale=is_stale)
