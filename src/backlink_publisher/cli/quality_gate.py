@@ -22,6 +22,7 @@ import re
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
+from urllib.parse import urlparse
 
 from .._util.errors import emit_error
 from .._util.jsonl import json_loads, read_jsonl, write_jsonl
@@ -31,29 +32,62 @@ from backlink_publisher.events.kinds import PUBLISH_CONFIRMED, PUBLISH_QUALITY_B
 
 _log = get_logger("quality_gate")
 
-# Markdown inline link: ``[text](url)``. Used by _count_md_links for the
-# anchor-density check.
-_MD_LINK_RE = re.compile(r"\[[^\]]*\]\([^)]*\)")
+# Markdown inline link ``[text](url)`` with the URL captured (group 1) so the
+# anchor-density check can attribute each link to a host.
+_MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]*)\)")
+
+# CJK ranges (CJK Unified, Hiragana/Katakana, Hangul). These scripts are written
+# without spaces, so a whitespace word count under-counts them ~5-10x and makes
+# anchor density meaningless (every zh/ja/ko article would exceed any threshold).
+_CJK_RE = re.compile(r"[一-鿿぀-ヿ가-힯]")
 
 
 def _count_words(text: str) -> int:
-    """Count whitespace-delimited words in a string."""
-    return len(text.split())
+    """Count words, CJK-aware.
+
+    Whitespace-delimited tokens for space-separated scripts, plus one unit per
+    CJK glyph (Chinese/Japanese/Korean are unspaced — a bare ``str.split`` would
+    count a whole sentence as one or two tokens).
+    """
+    cjk = len(_CJK_RE.findall(text))
+    non_cjk = len(_CJK_RE.sub(" ", text).split())
+    return cjk + non_cjk
 
 
-def _count_md_links(text: str) -> int:
-    """Count markdown links ``[text](url)`` in a string."""
-    return len(_MD_LINK_RE.findall(text))
+def _host(url: str | None) -> str:
+    """Lowercased hostname of a URL, or '' if unparseable/empty."""
+    if not url:
+        return ""
+    try:
+        return (urlparse(url).hostname or "").lower()
+    except (ValueError, TypeError):
+        return ""
+
+
+def _count_self_site_links(text: str, hosts: set[str]) -> int:
+    """Count markdown links whose URL host is one of ``hosts``.
+
+    Anchor-stuffing is over-optimization of links to the *target / money site*,
+    not outbound citations to authority domains (Wikipedia, MDN, …). Counting
+    every link would penalise legitimate outbound references and collide with
+    plan-backlinks' deliberate ">=6 in-body self-site link" contract; restricting
+    the density numerator to self-site links measures the actual stuffing vector.
+    """
+    if not hosts:
+        return 0
+    return sum(1 for url in _MD_LINK_RE.findall(text) if _host(url) in hosts)
 
 
 def _check_anchor_density(
     seed: dict[str, Any],
     max_density: float,
 ) -> str | None:
-    """Check anchor density. Returns None if pass, or a reason string if blocked.
+    """Check self-site anchor density. Returns None if pass, else a reason string.
 
     Reads ``article_content_markdown`` from the seed if present; otherwise
-    returns None (skip check — content not yet generated).
+    returns None (skip check — content not yet generated). The density numerator
+    counts only links pointing at the seed's ``target_url`` / ``main_domain``
+    host (see ``_count_self_site_links``); the denominator is CJK-aware.
     """
     body = seed.get("article_content_markdown")
     if not body:
@@ -65,11 +99,14 @@ def _check_anchor_density(
     if words == 0:
         return None
 
-    links = _count_md_links(body)
+    hosts = {
+        h for h in (_host(seed.get("target_url")), _host(seed.get("main_domain"))) if h
+    }
+    links = _count_self_site_links(body, hosts)
     density = links / words
     if density > max_density:
         return (
-            f"anchor_density_high: {links}/{words} links/words "
+            f"anchor_density_high: {links}/{words} self-site links/words "
             f"({density:.1%} > {max_density:.0%})"
         )
     return None
@@ -110,8 +147,7 @@ def _check_content_uniqueness(
 
     # Query events.db for articles whose body SHA starts with the same prefix
     rows = store.query(
-        "SELECT payload_json FROM events "
-        "WHERE kind = 'publish.confirmed'",
+        "SELECT payload_json FROM events " "WHERE kind = 'publish.confirmed'",
     )
     for row in rows:
         try:
@@ -157,7 +193,7 @@ def _check_llm_quality(
         prompt = (
             "You are a content quality reviewer. Rate the following article "
             f"on a scale of 0-100 for quality, relevance, and coherence. "
-            f"Respond ONLY with a JSON object: {{\"score\": <int>}}\n\n"
+            f'Respond ONLY with a JSON object: {{"score": <int>}}\n\n'
             f"Title: {title}\n"
             f"Target URL: {target_url}\n"
             f"Body:\n{body[:2000]}"
@@ -176,8 +212,7 @@ def _check_llm_quality(
 
         if score < quality_min:
             return (
-                f"llm_rejected: LLM quality score {score} < "
-                f"minimum {quality_min}"
+                f"llm_rejected: LLM quality score {score} < " f"minimum {quality_min}"
             )
     except ImportError:
         # No LLM client available — skip check
@@ -228,23 +263,36 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     parser.add_argument(
-        "--max-density", type=float, default=0.05, metavar="F",
-        help="Maximum allowed anchor link density (default: 0.05 = 5%)",
+        "--max-density",
+        type=float,
+        default=0.05,
+        metavar="F",
+        help="Maximum self-site anchor density: links to the target/main_domain "
+        "host per word, CJK-aware (default: 0.05 = 5%). Outbound citations to "
+        "other domains are not counted.",
     )
     parser.add_argument(
-        "--max-similarity", type=float, default=0.70, metavar="F",
+        "--max-similarity",
+        type=float,
+        default=0.70,
+        metavar="F",
         help="Maximum allowed content similarity to existing (default: 0.70)",
     )
     parser.add_argument(
-        "--quality-llm", action="store_true",
+        "--quality-llm",
+        action="store_true",
         help="Enable LLM quality scoring (optional, requires LLM config)",
     )
     parser.add_argument(
-        "--quality-min", type=int, default=40, metavar="N",
+        "--quality-min",
+        type=int,
+        default=40,
+        metavar="N",
         help="Minimum LLM quality score (default: 40; only with --quality-llm)",
     )
     parser.add_argument(
-        "--emit-events", action="store_true",
+        "--emit-events",
+        action="store_true",
         help="Emit publish.quality_blocked events to events.db",
     )
     args = parser.parse_args(argv)
@@ -290,7 +338,9 @@ def main(argv: list[str] | None = None) -> None:
 
         # R2: Content uniqueness check
         uniqueness_reason = _check_content_uniqueness(
-            seed, store, args.max_similarity,
+            seed,
+            store,
+            args.max_similarity,
         )
         if uniqueness_reason:
             reasons.append(uniqueness_reason)
@@ -305,9 +355,7 @@ def main(argv: list[str] | None = None) -> None:
             blocked_count += 1
             for reason in reasons:
                 quality_check = reason.split(":")[0]
-                msg = (
-                    f"quality-gate: blocked [{draft_label}] — {reason}"
-                )
+                msg = f"quality-gate: blocked [{draft_label}] — {reason}"
                 blocked_reasons.append(msg)
                 print(msg, file=sys.stderr)
 

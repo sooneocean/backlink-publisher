@@ -56,6 +56,55 @@ def test_quality_gate_blocks_high_anchor_density(monkeypatch):
     assert "quality-gate: 0 passed, 1 blocked" in stderr
 
 
+def test_quality_gate_ignores_outbound_links_in_density(monkeypatch):
+    """Only self-site (target/main_domain) links count toward anchor density.
+
+    Outbound citations to authority domains are not anchor-stuffing; counting
+    every markdown link would penalise legitimate references and collide with
+    plan-backlinks' deliberate ">=6 in-body self-site link" contract. This body
+    has 1 self-site link + 3 outbound links in ~30 words: self-site density is
+    ~3% (passes), but counting all 4 links would be ~13% (blocked).
+    """
+    body = (
+        "An introduction to [Example](https://example.com/a) for new readers, "
+        "with further background available from established reference sources. "
+        "See also [Wikipedia](https://en.wikipedia.org), "
+        "[MDN](https://developer.mozilla.org), and "
+        "[GitHub](https://github.com) for additional context and deeper reading."
+    )
+    row = {
+        "target_url": "https://example.com/a",
+        "title": "Outbound heavy",
+        "content_markdown": body,
+    }
+
+    stdout, stderr = _run_quality_gate(monkeypatch, [row])
+
+    assert _jsonl(stdout) == [row]
+    assert "quality-gate: 1 passed, 0 blocked" in stderr
+
+
+def test_quality_gate_counts_cjk_glyphs_as_words(monkeypatch):
+    """Density denominator is CJK-aware: Chinese/Japanese/Korean text is unspaced,
+    so a whitespace word count would see ~1 word and flag every CJK article as
+    100%+ density. This zh article has 3 self-site links among ~280 hanzi —
+    ~1% density (passes); a bare str.split() denominator would block it.
+    """
+    para = "这是一篇关于示例网站的中文文章内容用于测试锚文字密度的计算方式"
+    link = "[示例](https://example.com/a)"
+    body = f"{para}{link}{para}{link}{para}{link}{para}"
+    row = {
+        "target_url": "https://example.com/a",
+        "title": "中文草稿",
+        "content_markdown": body,
+    }
+
+    stdout, stderr = _run_quality_gate(monkeypatch, [row])
+
+    assert _jsonl(stdout) == [row]
+    assert "quality-gate: 1 passed, 0 blocked" in stderr
+
+
 def test_quality_gate_emit_events_records_required_fields(monkeypatch, tmp_path):
     monkeypatch.setenv("BACKLINK_PUBLISHER_CONFIG_DIR", str(tmp_path))
     row = {

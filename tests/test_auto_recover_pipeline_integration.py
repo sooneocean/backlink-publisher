@@ -74,8 +74,12 @@ def test_replan_to_plan_to_quality_gate_bridge(monkeypatch, tmp_path):
     )
     assert body, "plan-backlinks must generate a non-empty article body"
 
-    # Phase 4b: quality-gate must RUN on the real generated article (exit 0,
-    # well-formed JSONL out) — pass-or-block is a calibration question, not
-    # asserted here.
+    # Phase 4b: the generated article must SURVIVE the quality gate, so the
+    # closed loop actually yields a publishable row. Regression: with the
+    # default 5% gate counting every markdown link (incl. outbound citations)
+    # and a whitespace word count, plan-backlinks' own output (~5.6% all-link
+    # density, far higher for CJK) was blocked 100% — the loop produced zero
+    # output. quality-gate now counts only self-site links over a CJK-aware
+    # word count, so the planner's standard article passes.
     gated = _pipe(planned, "backlink_publisher.cli.quality_gate")
-    assert isinstance(gated, list)
+    assert len(gated) == 1, "the generated article must survive the quality gate"
