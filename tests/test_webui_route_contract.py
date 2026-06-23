@@ -1814,6 +1814,45 @@ class TestCalcNextAvailable:
             f"got {result}, expected >= {now + timedelta(hours=4)}"
         )
 
+    def test_reschedule_draft_not_blocked_by_own_scheduled_at(self, monkeypatch):
+        """Guards: rescheduling an already-scheduled draft must not be blocked
+        by the draft's own current scheduled_at.
+
+        Root cause: _calc_next_available included every 'scheduled' draft (by
+        design — to enforce min-interval between consecutive publishes), but
+        had no way to exclude the draft being rescheduled. The draft's own
+        scheduled_at became the last_published anchor, pushing any new time
+        further out and making it impossible to move the schedule at all.
+        """
+        from datetime import datetime, timedelta
+        from unittest.mock import MagicMock
+        import webui_app.helpers.contexts as ctx_mod
+
+        # Draft A is currently scheduled at T+8h.
+        # User wants to reschedule to T+2h (earlier slot).
+        base = datetime(2026, 6, 23, 10, 0)
+        old_scheduled_at = (base + timedelta(hours=8)).isoformat()  # 6pm
+        requested_dt = base + timedelta(hours=2)                     # noon
+
+        monkeypatch.setattr(ctx_mod, "_drafts_store", MagicMock(load=lambda: [
+            {"id": "draft-a", "status": "scheduled", "scheduled_at": old_scheduled_at},
+        ]))
+        monkeypatch.setattr(ctx_mod, "_history_store", MagicMock(load=lambda: []))
+        monkeypatch.setattr(ctx_mod, "_load_schedule_settings",
+                            lambda: {"min_interval_hours": 4, "jitter_minutes": 0})
+
+        # Without exclude_id: draft-a's own 6pm blocks the 12pm request.
+        blocked = ctx_mod._calc_next_available(requested_dt)
+        assert blocked >= base + timedelta(hours=8 + 4), (
+            f"without exclude_id, 12pm request should be blocked past 10pm; got {blocked}"
+        )
+
+        # With exclude_id: draft-a is excluded; no other constraints → requested_dt returned.
+        unblocked = ctx_mod._calc_next_available(requested_dt, exclude_id="draft-a")
+        assert unblocked == requested_dt, (
+            f"with exclude_id='draft-a', should return requested 12pm; got {unblocked}"
+        )
+
 
 class TestPrQueueRoutes:
     """Contract tests for /pr-queue and /api/pr-queue (B1 PR opportunity queue)."""

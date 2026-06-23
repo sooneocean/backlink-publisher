@@ -370,7 +370,7 @@ class DraftAPI:
         except ValueError:
             return {"ok": False, "flash_msg": "时间格式错误"}
 
-        final_dt = _calc_next_available(requested_dt)
+        final_dt = _calc_next_available(requested_dt, exclude_id=item_id)
         try:
             _drafts_store.update_item(
                 item_id,
