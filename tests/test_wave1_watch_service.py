@@ -402,3 +402,40 @@ class TestRunOnce:
         })
         assert report["polled_sources"] == 1
         assert report["new_urls"] == 2
+
+    def test_run_once_load_balances_across_channels_within_one_cycle(self, tmp_path):
+        """Two new URLs discovered in ONE cycle, two equal-priority channels,
+        empty history → the URLs must spread one-per-channel.
+
+        Regression: ``select_best_channel`` only read persisted history, never
+        the enqueues made earlier in the same ``run_once`` cycle. So every URL
+        in a batch saw identical per-channel counts and all routed to the same
+        least-busy channel — defeating load-balancing for the common case of a
+        sitemap poll yielding many URLs at once.
+        """
+        seen = SeenUrlsStore(tmp_path / "seen.json")
+        history = HistoryStore(tmp_path / "history.json")
+        history.save([])
+        queue = QueueStore(tmp_path / "queue.json", default_factory=list)
+        service = WatchService(
+            seen_urls_store=seen,
+            history_store=history,
+            queue_store=queue,
+        )
+        report = service.run_once({
+            "seed_sources": [
+                {"type": "manual", "value": "https://t-1.com\nhttps://t-2.com",
+                 "enabled": True},
+            ],
+            "channels": [
+                {"channel": "medium", "bound": True, "dofollow_preference": True,
+                 "daily_cap": 10, "language_whitelist": []},
+                {"channel": "blogger", "bound": True, "dofollow_preference": True,
+                 "daily_cap": 10, "language_whitelist": []},
+            ],
+        })
+        assert report["enqueued"] == 2
+        platforms = sorted(t["config"]["platform"] for t in queue.load())
+        assert platforms == ["blogger", "medium"], (
+            f"both URLs in one cycle hammered a single channel: {platforms}"
+        )

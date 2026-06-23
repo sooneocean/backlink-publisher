@@ -302,6 +302,8 @@ class WatchService:
         self,
         target_url: str,
         channels_config: list[dict],
+        *,
+        pending_counts: dict[str, int] | None = None,
     ) -> dict | None:
         """Select the best channel for *target_url* using priority rules.
 
@@ -311,8 +313,14 @@ class WatchService:
         3. Filter: language whitelist match
         4. Sort by: dofollow priority → daily cap headroom
         5. Return best candidate or None
+
+        ``pending_counts`` lets the caller fold in selections already made
+        earlier in the same cycle (``run_once``) — without it, every URL in one
+        batch sees identical persisted counts and routes to the same channel,
+        defeating both the daily-cap headroom check and load-balancing.
         """
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        pending_counts = pending_counts or {}
         qualified: list[tuple[int, int, dict]] = []
 
         for ch_cfg in channels_config:
@@ -341,16 +349,19 @@ class WatchService:
                 # can infer language from the target URL content.
                 pass
 
-            # Daily cap
+            # Daily cap — fold in selections already made this cycle so a batch
+            # of URLs can't all slip past a near-exhausted cap or pile onto one
+            # channel.
             daily_cap = ch_cfg.get("daily_cap", 10)
             today_count = _today_publish_count(ch_name, self._history)
-            headroom = daily_cap - today_count
+            effective_count = today_count + pending_counts.get(ch_name, 0)
+            headroom = daily_cap - effective_count
             if headroom <= 0:
                 continue  # cap exhausted
 
             # Dofollow priority (lower = better)
             priority = _get_dofollow_priority(ch_name)
-            qualified.append((priority, today_count, ch_cfg))
+            qualified.append((priority, effective_count, ch_cfg))
 
         if not qualified:
             return None
@@ -432,6 +443,10 @@ class WatchService:
         new_urls = self.detect_new_urls(candidates)
         report["new_urls"] = len(new_urls)
 
+        # Per-cycle channel selections so successive URLs in this batch see the
+        # enqueues already made (load-balancing + cap headroom).
+        cycle_counts: dict[str, int] = {}
+
         # Step 3-5: For each new URL, check coverage and enqueue
         for candidate in new_urls:
             url = candidate["url"]
@@ -467,7 +482,9 @@ class WatchService:
                 continue
 
             # Step 4: Select best channel
-            best = self.select_best_channel(url, channels_cfg)
+            best = self.select_best_channel(
+                url, channels_cfg, pending_counts=cycle_counts
+            )
             if best is None:
                 report["uncovered"].append(
                     {"url": url, "reason": "no_suitable_channel"}
@@ -476,6 +493,7 @@ class WatchService:
 
             # Step 5: Enqueue
             self.enqueue_publish(url, best["channel"], candidate)
+            cycle_counts[best["channel"]] = cycle_counts.get(best["channel"], 0) + 1
             report["enqueued"] += 1
 
         return report
