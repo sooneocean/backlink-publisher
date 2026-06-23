@@ -1729,6 +1729,60 @@ class TestListScheduledFilter:
         assert result["items"] == [], "failed draft with stale scheduled_at should not appear"
 
 
+class TestCalcNextAvailable:
+    """Unit-tests for _calc_next_available() — guards the published_unverified gap.
+
+    A publish that results in ``published_unverified`` status must count toward
+    the min-interval calculation. The previous code checked only ``published``
+    and ``drafted``, silently ignoring unverified publishes and allowing
+    back-to-back scheduling immediately after an unverified publish.
+    """
+
+    def test_published_unverified_history_enforces_min_interval(self, monkeypatch):
+        from datetime import datetime, timedelta
+        from unittest.mock import MagicMock
+        import webui_app.helpers.contexts as ctx_mod
+
+        now = datetime(2026, 6, 23, 10, 0)
+        recent_ts = now.strftime('%Y-%m-%d %H:%M')
+
+        monkeypatch.setattr(ctx_mod, "_drafts_store", MagicMock(load=lambda: []))
+        monkeypatch.setattr(ctx_mod, "_history_store", MagicMock(load=lambda: [
+            {"id": "h1", "status": "published_unverified", "created_at": recent_ts},
+        ]))
+        monkeypatch.setattr(ctx_mod, "_load_schedule_settings",
+                            lambda: {"min_interval_hours": 4, "jitter_minutes": 0})
+
+        result = ctx_mod._calc_next_available(now)
+
+        assert result >= now + timedelta(hours=4), (
+            f"published_unverified should enforce 4h min-interval; "
+            f"got {result}, expected >= {now + timedelta(hours=4)}"
+        )
+
+    def test_published_unverified_draft_enforces_min_interval(self, monkeypatch):
+        from datetime import datetime, timedelta
+        from unittest.mock import MagicMock
+        import webui_app.helpers.contexts as ctx_mod
+
+        now = datetime(2026, 6, 23, 10, 0)
+        recent_ts = now.strftime('%Y-%m-%dT%H:%M')
+
+        monkeypatch.setattr(ctx_mod, "_drafts_store", MagicMock(load=lambda: [
+            {"id": "d1", "status": "published_unverified", "published_at": recent_ts},
+        ]))
+        monkeypatch.setattr(ctx_mod, "_history_store", MagicMock(load=lambda: []))
+        monkeypatch.setattr(ctx_mod, "_load_schedule_settings",
+                            lambda: {"min_interval_hours": 4, "jitter_minutes": 0})
+
+        result = ctx_mod._calc_next_available(now)
+
+        assert result >= now + timedelta(hours=4), (
+            f"published_unverified draft should enforce 4h min-interval; "
+            f"got {result}, expected >= {now + timedelta(hours=4)}"
+        )
+
+
 class TestPrQueueRoutes:
     """Contract tests for /pr-queue and /api/pr-queue (B1 PR opportunity queue)."""
 
