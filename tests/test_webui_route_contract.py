@@ -1689,6 +1689,46 @@ class TestScheduleRoutes:
         assert "items" in data
 
 
+class TestListScheduledFilter:
+    """Unit-tests for list_scheduled() filter — guards the or→and regression.
+
+    A published/failed draft with a stale ``scheduled_at`` field must NOT
+    appear in the schedule list. Only items where BOTH ``status=='scheduled'``
+    AND ``scheduled_at`` is set are genuinely pending.
+    """
+
+    def test_published_draft_with_stale_scheduled_at_excluded(self, monkeypatch):
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(
+            sched_api._drafts_store, "load",
+            lambda: [
+                {"id": "pub-stale", "status": "published",
+                 "scheduled_at": "2026-06-24T10:00:00"},
+                {"id": "real-sched", "status": "scheduled",
+                 "scheduled_at": "2026-06-25T10:00:00"},
+            ],
+        )
+        result = sched_api.list_scheduled()
+        ids = [i["id"] for i in result["items"]]
+        assert "pub-stale" not in ids, "published draft with stale scheduled_at leaked into schedule list"
+        assert "real-sched" in ids
+
+    def test_failed_draft_with_stale_scheduled_at_excluded(self, monkeypatch):
+        import webui_app.api.scheduled_api as sched_api
+
+        monkeypatch.setattr(
+            sched_api._drafts_store, "load",
+            lambda: [
+                {"id": "fail-stale", "status": "failed",
+                 "scheduled_at": "2026-06-24T10:00:00"},
+            ],
+        )
+        result = sched_api.list_scheduled()
+        assert result["ok"] is True
+        assert result["items"] == [], "failed draft with stale scheduled_at should not appear"
+
+
 class TestPrQueueRoutes:
     """Contract tests for /pr-queue and /api/pr-queue (B1 PR opportunity queue)."""
 

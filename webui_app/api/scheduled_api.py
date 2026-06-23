@@ -14,7 +14,7 @@ def list_scheduled() -> dict[str, Any]:
         items = [
             item for item in _drafts_store.load()
             if item.get("status") == "scheduled"
-            or item.get("scheduled_at")
+            and item.get("scheduled_at")
         ]
         return {"ok": True, "items": items}
     except Exception as exc:
