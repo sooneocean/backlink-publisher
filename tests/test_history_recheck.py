@@ -47,6 +47,41 @@ class TestRecheckOne:
         m = recheck_one(item, verify_fn=lambda *a, **kw: VerificationResult(ok=True, reason=""))
         assert m["status"] == "published"
 
+    def test_ok_unchanged_published_is_not_confirmed(self):
+        """An already-``published`` row that re-verifies OK did NOT transition
+        (it was not ``unverified``/``failed``), so it must not be reported as a
+        confirmation. The summary's ``confirmed`` counter means "upgraded"."""
+        item = {
+            "id": "x",
+            "status": "published",
+            "title": "Hello",
+            "target_url": "https://t.example/",
+            "article_urls": ["https://medium.com/p/zzz"],
+        }
+        m = recheck_one(item, verify_fn=lambda *a, **kw: VerificationResult(ok=True, reason=""))
+        assert m["status"] == "published"
+        assert m["_outcome"] == "unchanged", (
+            f"already-published row miscounted as {m['_outcome']!r}"
+        )
+
+    def test_already_failed_staying_failed_is_not_downgraded(self):
+        """An already-``failed`` row that still fails verification did NOT
+        transition, so it must not be reported as a fresh downgrade."""
+        item = {
+            "id": "x",
+            "status": "failed",
+            "title": "Hello",
+            "target_url": "https://t.example/",
+            "article_urls": ["https://medium.com/p/missing"],
+        }
+        m = recheck_one(
+            item, verify_fn=lambda *a, **kw: VerificationResult(ok=False, reason="HTTP 404"),
+        )
+        assert m["status"] == "failed"
+        assert m["_outcome"] == "unchanged", (
+            f"already-failed row miscounted as {m['_outcome']!r}"
+        )
+
     def test_ok_upgrades_failed_to_published(self):
         item = {
             "id": "x",
@@ -166,6 +201,31 @@ class TestRecheckMany:
         assert by_id["ok2"]["status"] == "drafted"
         assert by_id["bad"]["status"] == "failed"
         assert by_id["noURL"]["status"] == "failed"
+
+    def test_unchanged_rows_do_not_inflate_summary(self):
+        """Re-checking rows that keep their status must not inflate the
+        confirmed / downgraded counters — only genuine transitions count.
+
+        Regression: ``_outcome`` was derived from the verify result alone, so
+        an already-``published`` row (verify OK) inflated ``confirmed`` and an
+        already-``failed`` row (verify not OK) inflated ``downgraded_to_failed``,
+        producing a misleading "N 升为已发布 / N 标为失败" flash."""
+        items = [
+            {"id": "stay_pub", "status": "published", "article_urls": ["u"],
+             "title": "ok", "target_url": "https://t/"},
+            {"id": "stay_fail", "status": "failed", "article_urls": ["u"],
+             "title": "bad", "target_url": "https://t/"},
+        ]
+
+        def _verify(url, **kw):
+            return VerificationResult(ok=kw.get("title") == "ok", reason="404")
+
+        _by_id, summary = recheck_many(items, verify_fn=_verify)
+        assert summary.checked == 2
+        assert summary.confirmed == 0, f"confirmed inflated: {summary.confirmed}"
+        assert summary.downgraded_to_failed == 0, (
+            f"downgraded inflated: {summary.downgraded_to_failed}"
+        )
 
     def test_summary_flash_string(self):
         s = RecheckSummary(checked=5, confirmed=2, downgraded_to_failed=2, skipped=1)
