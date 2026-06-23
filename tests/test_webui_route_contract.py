@@ -1150,6 +1150,38 @@ class TestQueueDashboardRoutes:
         assert resp.status_code == 403
 
 
+class TestRetryTaskClearsBackoff:
+    """Guards: HistoryAPI.retry_task() must clear next_retry_at.
+
+    When a queue task fails with a 429, scheduler.py sets next_retry_at to a
+    future time. The operator's manual retry must clear that field; otherwise
+    QueueStore.get_runnable() keeps filtering the task out until the
+    automatically-scheduled retry time expires.
+    """
+
+    def test_retry_clears_future_next_retry_at(self, monkeypatch, tmp_path):
+        from datetime import datetime, timedelta
+        import webui_store as ws
+        from webui_app.api.history_api import HistoryAPI
+
+        monkeypatch.setattr(ws.queue_store, "path", tmp_path / "q.json")
+
+        future = (datetime.now() + timedelta(minutes=5)).isoformat()
+        ws.queue_store.save([{
+            "id": "t-retry", "status": "failed",
+            "error": "频率限制 (429)", "next_retry_at": future,
+            "config": {}, "urls": [],
+        }])
+
+        HistoryAPI().retry_task("t-retry")
+
+        runnable = ws.queue_store.get_runnable()
+        assert len(runnable) == 1, "task must be immediately runnable after manual retry"
+        assert runnable[0]["next_retry_at"] is None, (
+            "retry_task must clear next_retry_at so get_runnable() picks it up"
+        )
+
+
 class TestBindRoutes:
     """Plan 2026-05-19-001 Unit 4 + Plan 003 Unit 4 — POST + GET smoke for
     the bind blueprint and identity-mismatch resolution routes.

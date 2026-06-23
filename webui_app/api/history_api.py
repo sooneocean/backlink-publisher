@@ -175,5 +175,5 @@ class HistoryAPI:
         """Reset a queue task to pending for retry."""
         if not task_id:
             return {"ok": False, "error": "Missing task_id"}
-        _queue_store.update_task(task_id, {"status": "pending", "error": None})
+        _queue_store.update_task(task_id, {"status": "pending", "error": None, "next_retry_at": None})
         return {"ok": True, "message": "任务已重置为待发布状态"}
