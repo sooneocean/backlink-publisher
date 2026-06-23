@@ -207,3 +207,49 @@ class TestProcessQueueJobUsesGetRunnable:
 
         fake_api.return_value.publish_seed.assert_called_once()
         assert queue_store.load()[0]["status"] == "success"
+
+
+# ── Regression: history write failure must not corrupt draft status ───────────
+
+class TestPublishDraftJobHistoryFailure:
+    """Guards: an I/O error in _push_history_per_row after a successful
+    publish must not overwrite the draft status from 'published' to 'failed'.
+
+    Root cause: _push_history_per_row() was inside the outer try/except that
+    catches publish errors. A history write failure (e.g. disk full) propagated
+    to the except handler which called _drafts_store.update_item(status='failed'),
+    corrupting the 'published' status already written on success.
+    """
+
+    def test_history_write_failure_does_not_corrupt_published_status(
+        self, _scheduler_module
+    ):
+        from webui_store import drafts_store as _ws_drafts_store
+
+        _ws_drafts_store.save([])
+        _ws_drafts_store.insert_first({
+            'id': 'draft-pub',
+            'status': 'scheduled',
+            'target_url': 'https://example.com',
+            'platform': 'medium',
+            'publish_mode': 'draft',
+            'language': 'zh-CN',
+            'plans_jsonl': '{"target_url": "https://example.com"}',
+        })
+
+        fake_result = MagicMock()
+        fake_result.success = True
+        fake_result.stdout = (
+            '{"published_url": "https://medium.com/p/test", "status": "drafted"}'
+        )
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_push_history_per_row",
+                          side_effect=OSError("disk full")):
+            fake_api.return_value.publish.return_value = fake_result
+            _scheduler_module._publish_draft_job('draft-pub')
+
+        item = _ws_drafts_store.get_item('draft-pub')
+        assert item is not None
+        assert item['status'] in ('published', 'published_unverified'), (
+            f"Draft status corrupted to {item['status']!r} by history write failure"
+        )
