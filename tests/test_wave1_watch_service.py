@@ -176,6 +176,36 @@ class TestDetectNewUrls:
         assert len(new) == 1
         assert new[0]["url"] == "https://new.com"
 
+    def test_deduplicates_same_url_within_one_cycle(self):
+        """A URL appearing twice in one candidate batch (e.g. two seed
+        sources, or duplicate <loc> entries in a sitemap) must be returned
+        only once.
+
+        Regression: ``is_new`` is checked against the *persisted* store, but
+        ``mark_seen`` only runs later in ``run_once``. So two identical
+        not-yet-seen URLs both passed the filter and ``run_once`` enqueued the
+        same target twice in a single cycle (double publish).
+        """
+        service = WatchService(seen_urls_store=MockSeenUrlsStore())
+        urls = [
+            {"url": "https://dup.com/page", "source_type": "manual", "source_origin": "list-a"},
+            {"url": "https://dup.com/page", "source_type": "sitemap", "source_origin": "sitemap.xml"},
+        ]
+        new = service.detect_new_urls(urls)
+        assert len(new) == 1, f"duplicate URL not collapsed within cycle: {new}"
+
+    def test_dedup_treats_trailing_slash_as_same_url(self):
+        """Normalisation (trailing slash / case) is part of the hash, so
+        ``https://x.com`` and ``https://x.com/`` are the same target and must
+        collapse to one within a cycle."""
+        service = WatchService(seen_urls_store=MockSeenUrlsStore())
+        urls = [
+            {"url": "https://x.com/page", "source_type": "manual", "source_origin": "a"},
+            {"url": "https://x.com/page/", "source_type": "manual", "source_origin": "b"},
+        ]
+        new = service.detect_new_urls(urls)
+        assert len(new) == 1
+
 
 # ── WatchService check_coverage ────────────────────────────────────────────
 

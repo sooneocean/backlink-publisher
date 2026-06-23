@@ -259,11 +259,23 @@ class WatchService:
     # ── Detection ────────────────────────────────────────────────────────
 
     def detect_new_urls(self, candidates: list[dict]) -> list[dict]:
-        """Return only candidates whose URL has never been seen before."""
+        """Return only candidates whose URL has never been seen before.
+
+        Also collapses duplicates *within* this batch: a URL listed by two
+        seed sources (or repeated as a ``<loc>`` in one sitemap) is returned
+        only once. ``mark_seen`` runs later in ``run_once``, so without this
+        in-batch guard both occurrences would pass ``is_new`` and the same
+        target would be enqueued twice in a single cycle.
+        """
         new = []
+        batch_seen: set[str] = set()
         for c in candidates:
             url = c["url"]
+            h = _url_hash(url)
+            if h in batch_seen:
+                continue
             if self._seen.is_new(url):
+                batch_seen.add(h)
                 new.append(c)
         return new
 
