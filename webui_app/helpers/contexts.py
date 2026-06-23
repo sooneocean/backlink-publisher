@@ -137,14 +137,24 @@ def _save_schedule_settings(data: dict) -> None:
     _schedule_store.save(data)
 
 
-def _calc_next_available(requested_dt: datetime) -> datetime:
-    """Return the earliest publish time that respects min-interval + jitter."""
+def _calc_next_available(
+    requested_dt: datetime,
+    *,
+    exclude_id: str | None = None,
+) -> datetime:
+    """Return the earliest publish time that respects min-interval + jitter.
+
+    ``exclude_id``: when rescheduling an existing draft, pass its id so its
+    own ``scheduled_at`` is not counted as a constraint against itself.
+    """
     settings = _load_schedule_settings()
     min_hours = settings.get('min_interval_hours', 4)
     jitter_mins = settings.get('jitter_minutes', 30)
 
     last_published = None
     for item in _g_cache('drafts', _drafts_store.load):
+        if exclude_id and item.get('id') == exclude_id:
+            continue
         if item.get('status') in ('published', 'published_unverified', 'scheduled'):
             ts = item.get('published_at') or item.get('scheduled_at')
             if ts:
