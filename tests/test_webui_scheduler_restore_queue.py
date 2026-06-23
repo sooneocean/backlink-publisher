@@ -380,3 +380,59 @@ class TestPublishDraftJobScoreAfterPublish:
             _scheduler_module._publish_draft_job('draft-fail')
 
         mock_score.assert_not_called()
+
+
+# ── Regression: _run_watch_cycle must wire channel_status_store ───────────────
+
+
+class TestRunWatchCycleChannelStatusStoreWired:
+    """Guards: _run_watch_cycle must pass channel_status_store to WatchService
+    so that channels whose auth has expired are never selected for new enqueues.
+
+    Root cause: WatchService was constructed without channel_status_store=,
+    leaving self._channel_status=None and making the expired-channel guard in
+    select_best_channel dead code for every production watch cycle.
+    """
+
+    def test_run_watch_cycle_does_not_enqueue_for_expired_channel(
+        self, _scheduler_module
+    ):
+        from webui_store import queue_store
+
+        queue_store.save([])
+
+        wizard_cfg = {
+            "completed": True,
+            "seed_sources": [
+                {"type": "manual", "value": "https://new-target.example/p",
+                 "enabled": True, "label": "test"}
+            ],
+            "channels": [
+                {"channel": "medium", "bound": True, "daily_cap": 10,
+                 "language_whitelist": []}
+            ],
+        }
+        mock_wizard = MagicMock()
+        mock_wizard._get.return_value = wizard_cfg
+
+        mock_ch_status = MagicMock()
+        mock_ch_status.load.return_value = {"medium": {"status": "expired"}}
+
+        mock_seen = MagicMock()
+        mock_seen.is_new.return_value = True
+        mock_seen.mark_seen.return_value = {}
+
+        mock_history = MagicMock()
+        mock_history.load.return_value = []
+
+        with patch("webui_store.wizard_config_store", mock_wizard), \
+             patch("webui_store.channel_status_store", mock_ch_status), \
+             patch("webui_store.seen_urls_store", mock_seen), \
+             patch("webui_store.history_store", mock_history):
+            _scheduler_module._run_watch_cycle()
+
+        tasks = queue_store.load()
+        assert tasks == [], (
+            f"expired channel 'medium' must not receive queued tasks, "
+            f"but _run_watch_cycle enqueued: {tasks}"
+        )

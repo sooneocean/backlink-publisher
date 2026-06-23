@@ -60,6 +60,7 @@ def _run_watch_cycle() -> None:
         from webui_store import history_store as _history_store_watch
         from webui_store import queue_store as _queue_store_watch
         from webui_store import wizard_config_store as _wizard_config_store
+        from webui_store import channel_status_store as _channel_status_store
         from .services.watch_service import WatchService
 
         cfg = _wizard_config_store._get()
@@ -70,6 +71,7 @@ def _run_watch_cycle() -> None:
             seen_urls_store=_seen_urls_store,
             history_store=_history_store_watch,
             queue_store=_queue_store_watch,
+            channel_status_store=_channel_status_store,
         )
         report = service.run_once(cfg)
         plan_logger.recon("watch_cycle_complete", report=dict(report))
