@@ -108,12 +108,13 @@ def _register_watch_job() -> None:
 
 def _process_queue_job() -> None:
     """轮询队列中的 pending 任务并执行发布，支持 429 自动退避。"""
-    tasks = _queue_store.load()
     now = datetime.now()
-    
-    pending = [t for t in tasks if t.get('status') in ('pending', 'failed') 
-               and (not t.get('next_retry_at') or datetime.fromisoformat(t['next_retry_at']) <= now)]
-    
+    # Delegate the status + retry-due filter to the shared, unit-tested
+    # QueueStore.get_runnable() helper instead of a divergent inline copy.
+    # The two were byte-identical, but the inline copy was the untested one and
+    # could silently drift from the helper's semantics.
+    pending = _queue_store.get_runnable()
+
     if not pending:
         return
 

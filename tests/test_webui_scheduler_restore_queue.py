@@ -157,3 +157,53 @@ class TestRestoreScheduledJobsIntegration:
 
         tasks = queue_store.load()
         assert tasks[0]["status"] == "pending"
+
+
+# ── Regression: _process_queue_job delegates to QueueStore.get_runnable ──────
+
+class TestProcessQueueJobUsesGetRunnable:
+    """Guards the dedup: ``_process_queue_job`` must honor the status +
+    retry-due gate via the shared ``QueueStore.get_runnable()`` helper, not a
+    divergent inline copy. Two paths: a not-yet-due failed task is skipped (no
+    publish attempted, status untouched); a due task is picked and published.
+    """
+
+    def test_future_retry_task_is_skipped_no_publish(self, _scheduler_module):
+        from datetime import datetime, timedelta
+        from webui_store import queue_store
+
+        future = (datetime.now() + timedelta(hours=1)).isoformat()
+        queue_store.save([
+            {"id": "future-failed", "status": "failed",
+             "config": {"platform": "medium"}, "urls": ["https://x.example/p"],
+             "next_retry_at": future},
+        ])
+
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api:
+            _scheduler_module._process_queue_job()
+
+        # get_runnable() filtered it out → early return, no publish attempt …
+        fake_api.assert_not_called()
+        # … and the task was never flipped to 'processing'.
+        assert queue_store.load()[0]["status"] == "failed"
+
+    def test_due_task_is_picked_and_published(self, _scheduler_module):
+        from datetime import datetime, timedelta
+        from webui_store import queue_store
+
+        past = (datetime.now() - timedelta(minutes=1)).isoformat()
+        queue_store.save([
+            {"id": "due-failed", "status": "failed",
+             "config": {"platform": "medium"}, "urls": ["https://x.example/p"],
+             "next_retry_at": past},
+        ])
+
+        fake_result = MagicMock()
+        fake_result.success = True
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_score_after_publish"):
+            fake_api.return_value.publish_seed.return_value = fake_result
+            _scheduler_module._process_queue_job()
+
+        fake_api.return_value.publish_seed.assert_called_once()
+        assert queue_store.load()[0]["status"] == "success"
