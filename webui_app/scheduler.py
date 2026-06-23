@@ -222,6 +222,10 @@ def _publish_draft_job(item_id: str) -> None:
             article_urls=article_urls,
             published_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
         )
+        _score_after_publish(
+            target_url=item.get('target_url', 'unknown'),
+            channel=platform,
+        )
 
         try:
             _push_history_per_row(

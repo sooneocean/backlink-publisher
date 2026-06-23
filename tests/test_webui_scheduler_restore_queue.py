@@ -313,3 +313,70 @@ class TestPublishDraftJobHistoryFailure:
         assert item['status'] in ('published', 'published_unverified'), (
             f"Draft status corrupted to {item['status']!r} by history write failure"
         )
+
+
+# ── Regression: _publish_draft_job must score on successful publish ───────────
+
+class TestPublishDraftJobScoreAfterPublish:
+    """Guards: _publish_draft_job must call _score_after_publish after a
+    successful scheduled-draft publish, mirroring _process_queue_job.
+
+    Root cause: _score_after_publish was only called from _process_queue_job
+    (queue-mode publishes) and never from _publish_draft_job (scheduled-draft
+    publishes). Every scheduled-draft publish was silently omitted from the
+    score store, even though score_store.backfill_from_history shows the store
+    is designed to capture all publishes.
+    """
+
+    def test_score_recorded_on_successful_draft_publish(self, _scheduler_module):
+        from webui_store import drafts_store as _ws_drafts_store
+
+        _ws_drafts_store.save([])
+        _ws_drafts_store.insert_first({
+            'id': 'draft-score',
+            'status': 'scheduled',
+            'target_url': 'https://example.com/page',
+            'platform': 'medium',
+            'publish_mode': 'draft',
+            'language': 'zh-CN',
+            'plans_jsonl': '{"target_url": "https://example.com/page"}',
+        })
+
+        fake_result = MagicMock()
+        fake_result.success = True
+        fake_result.stdout = (
+            '{"published_url": "https://medium.com/p/abc", "status": "drafted"}'
+        )
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_score_after_publish") as mock_score:
+            fake_api.return_value.publish.return_value = fake_result
+            _scheduler_module._publish_draft_job('draft-score')
+
+        mock_score.assert_called_once_with(
+            target_url='https://example.com/page',
+            channel='medium',
+        )
+
+    def test_score_not_called_on_failed_draft_publish(self, _scheduler_module):
+        from webui_store import drafts_store as _ws_drafts_store
+
+        _ws_drafts_store.save([])
+        _ws_drafts_store.insert_first({
+            'id': 'draft-fail',
+            'status': 'scheduled',
+            'target_url': 'https://example.com/fail',
+            'platform': 'medium',
+            'publish_mode': 'draft',
+            'language': 'zh-CN',
+            'plans_jsonl': '{"target_url": "https://example.com/fail"}',
+        })
+
+        fake_result = MagicMock()
+        fake_result.success = False
+        fake_result.error = 'API error'
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_score_after_publish") as mock_score:
+            fake_api.return_value.publish.return_value = fake_result
+            _scheduler_module._publish_draft_job('draft-fail')
+
+        mock_score.assert_not_called()
