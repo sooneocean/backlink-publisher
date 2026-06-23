@@ -145,7 +145,7 @@ def _calc_next_available(requested_dt: datetime) -> datetime:
 
     last_published = None
     for item in _g_cache('drafts', _drafts_store.load):
-        if item.get('status') in ('published', 'scheduled'):
+        if item.get('status') in ('published', 'published_unverified', 'scheduled'):
             ts = item.get('published_at') or item.get('scheduled_at')
             if ts:
                 try:
@@ -158,7 +158,7 @@ def _calc_next_available(requested_dt: datetime) -> datetime:
 
     for item in _g_cache('history', _history_store.load):
         ts = item.get('created_at')
-        if ts and item.get('status') in ('drafted', 'published'):
+        if ts and item.get('status') in ('drafted', 'published', 'published_unverified'):
             try:
                 dt = datetime.strptime(ts, '%Y-%m-%d %H:%M')
                 if last_published is None or dt > last_published:
