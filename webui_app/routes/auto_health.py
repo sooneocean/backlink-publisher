@@ -43,7 +43,11 @@ def _pipeline_throughput() -> dict[str, Any]:
         history = history_store.load() or []
         total = len(history)
         successful = sum(1 for h in history if h.get("status") in ("published", "published_unverified"))
-        failed = total - successful
+        # ``failed`` must count only genuine failures (``failed`` / ``failed_partial``).
+        # ``total - successful`` wrongly swept ``drafted`` rows — the success status
+        # of the default draft publish mode — into the failed bucket, showing
+        # Failed=N / Success Rate=0% for a run of successful drafts.
+        failed = sum(1 for h in history if str(h.get("status") or "").startswith("failed"))
 
         # Group by day
         days: dict[str, int] = {}
