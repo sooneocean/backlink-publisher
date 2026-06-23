@@ -162,12 +162,14 @@ def _process_queue_job() -> None:
             else:
                 _queue_store.update_task(task_id, {
                     'status': 'failed',
-                    'error': err
+                    'error': err,
+                    'next_retry_at': None,
                 })
     except Exception as exc:
         _queue_store.update_task(task_id, {
             'status': 'failed',
-            'error': str(exc) or '发布失败'
+            'error': str(exc) or '发布失败',
+            'next_retry_at': None,
         })
 
 
