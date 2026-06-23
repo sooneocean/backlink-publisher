@@ -60,3 +60,23 @@ def test_queue_failed_task_waits_until_retry_time(tmp_path):
     runnable = store.get_runnable()
 
     assert [task["id"] for task in runnable] == ["past-failed"]
+
+
+def test_failed_task_without_retry_time_is_not_runnable(tmp_path):
+    """A permanently-failed task (non-429, next_retry_at=None) must not be
+    returned by get_runnable().
+
+    Regression: ``not t.get("next_retry_at")`` evaluated True for None, so
+    every permanently-failed task was re-run every minute by the queue
+    processor until the operator manually retried it.
+    """
+    store = QueueStore(tmp_path / "queue.json", default_factory=list)
+    store.save([
+        {"id": "perm-failed", "status": "failed", "next_retry_at": None},
+    ])
+
+    runnable = store.get_runnable()
+
+    assert runnable == [], (
+        f"permanently-failed task (next_retry_at=None) must not be runnable: {runnable}"
+    )
