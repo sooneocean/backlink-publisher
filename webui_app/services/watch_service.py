@@ -338,12 +338,12 @@ class WatchService:
 
             # Dofollow priority (lower = better)
             priority = _get_dofollow_priority(ch_name)
-            qualified.append((priority, -today_count, ch_cfg))
+            qualified.append((priority, today_count, ch_cfg))
 
         if not qualified:
             return None
 
-        # Sort by priority asc, then by today_count desc (load-balancing
+        # Sort by priority asc, then by today_count asc (load-balancing
         # across equal-priority channels: pick the one with fewer publishes
         # today)
         qualified.sort(key=lambda x: (x[0], x[1]))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -273,6 +274,37 @@ class TestSelectBestChannel:
         best = service.select_best_channel("https://a.com", channels)
         assert best is not None
         assert best["channel"] == "medium"
+
+    def test_equal_priority_load_balances_to_fewer_publishes_today(self):
+        """Among equal dofollow-priority channels, the one with FEWER publishes
+        today must win (load-balancing), per the documented tie-break.
+
+        Regression: the secondary sort key was ``-today_count`` ascending,
+        which selected the BUSIEST channel — the opposite of load-balancing,
+        concentrating publishes on one channel and exhausting its cap first.
+        """
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # blogger published 5x today, medium published 1x today; both dofollow.
+        history = MagicMock()
+        history.load.return_value = [
+            *({"platform": "blogger", "created_at": f"{today} 0{i}:00",
+               "status": "published"} for i in range(5)),
+            {"platform": "medium", "created_at": f"{today} 09:00",
+             "status": "published"},
+        ]
+        service = WatchService(history_store=history)
+        channels = [
+            {"channel": "blogger", "bound": True, "dofollow_preference": True,
+             "daily_cap": 10, "language_whitelist": []},
+            {"channel": "medium", "bound": True, "dofollow_preference": True,
+             "daily_cap": 10, "language_whitelist": []},
+        ]
+        best = service.select_best_channel("https://a.com", channels)
+        assert best is not None
+        assert best["channel"] == "medium", (
+            "expected load-balancing to pick the channel with fewer publishes "
+            f"today, got {best['channel']!r}"
+        )
 
 
 # ── WatchService enqueue_publish ──────────────────────────────────────────
