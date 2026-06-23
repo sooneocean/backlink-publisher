@@ -209,6 +209,66 @@ class TestProcessQueueJobUsesGetRunnable:
         assert queue_store.load()[0]["status"] == "success"
 
 
+# ── Regression: non-429 failure must clear stale next_retry_at ───────────────
+
+class TestProcessQueueJobClearsStaleRetryTime:
+    """Guards: when a task fails with a non-429 error (or raises), the
+    scheduler must clear any stale next_retry_at left from a prior 429
+    failure. Without the fix, get_runnable() would keep filtering the
+    task out until the old retry window expired, even though the new
+    failure has nothing to do with rate-limiting.
+    """
+
+    def test_non_429_failure_clears_stale_next_retry_at(self, _scheduler_module):
+        from datetime import datetime, timedelta
+        from webui_store import queue_store
+
+        past = (datetime.now() - timedelta(seconds=1)).isoformat()
+        queue_store.save([{
+            "id": "t-stale", "status": "failed",
+            "error": "频率限制 (429)", "next_retry_at": past,
+            "config": {"platform": "medium"}, "urls": ["https://example.com"],
+        }])
+
+        fake_result = MagicMock()
+        fake_result.success = False
+        fake_result.error = "Connection timeout"
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_score_after_publish"):
+            fake_api.return_value.publish_seed.return_value = fake_result
+            _scheduler_module._process_queue_job()
+
+        task = queue_store.load()[0]
+        assert task["status"] == "failed"
+        assert task["error"] == "Connection timeout"
+        assert task.get("next_retry_at") is None, (
+            f"stale next_retry_at={task.get('next_retry_at')!r} must be "
+            f"cleared after non-429 error"
+        )
+
+    def test_exception_path_clears_stale_next_retry_at(self, _scheduler_module):
+        from datetime import datetime, timedelta
+        from webui_store import queue_store
+
+        past = (datetime.now() - timedelta(seconds=1)).isoformat()
+        queue_store.save([{
+            "id": "t-exc", "status": "failed",
+            "error": "频率限制 (429)", "next_retry_at": past,
+            "config": {"platform": "medium"}, "urls": ["https://example.com"],
+        }])
+
+        with patch.object(_scheduler_module, "PipelineAPI") as fake_api, \
+             patch.object(_scheduler_module, "_score_after_publish"):
+            fake_api.return_value.publish_seed.side_effect = RuntimeError("boom")
+            _scheduler_module._process_queue_job()
+
+        task = queue_store.load()[0]
+        assert task["status"] == "failed"
+        assert task.get("next_retry_at") is None, (
+            "stale next_retry_at must be cleared after exception-path failure"
+        )
+
+
 # ── Regression: history write failure must not corrupt draft status ───────────
 
 class TestPublishDraftJobHistoryFailure:
