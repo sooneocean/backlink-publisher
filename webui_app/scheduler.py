@@ -221,12 +221,19 @@ def _publish_draft_job(item_id: str) -> None:
             published_at=datetime.now().strftime('%Y-%m-%d %H:%M'),
         )
 
-        _push_history_per_row(
-            publish_results,
-            target_url_fallback=item.get('target_url', 'unknown'),
-            platform_fallback=platform,
-            language_fallback=item.get('language', 'zh-CN'),
-        )
+        try:
+            _push_history_per_row(
+                publish_results,
+                target_url_fallback=item.get('target_url', 'unknown'),
+                platform_fallback=platform,
+                language_fallback=item.get('language', 'zh-CN'),
+            )
+        except Exception as exc:
+            # History write failure must not corrupt draft status — the publish
+            # already succeeded and the draft is marked published above.
+            plan_logger.warn(
+                "draft_history_write_failed", item_id=item_id, error=str(exc)
+            )
     except Exception as exc:
         msg = strip_cli_diagnostic_banner(str(exc)) or str(exc)
         _drafts_store.update_item(item_id, status='failed', error=msg)
