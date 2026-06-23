@@ -131,21 +131,27 @@ def recheck_one(
             continue
         if result.ok:
             new_status = _final_status_for(original_status, ok=True)
+            # ``confirmed`` means an actual upgrade (was unverified/failed →
+            # published/drafted). A row already in its final good state that
+            # re-verifies OK did NOT transition, so report ``unchanged`` to keep
+            # the operator-facing summary counts honest.
             return {
                 "status": new_status,
                 "verified_at": datetime.now().isoformat(timespec="seconds"),
-                "_outcome": "confirmed",
+                "_outcome": "confirmed" if new_status != original_status else "unchanged",
                 # clear stale verify_error if any
                 "verify_error": None,
             }
         last_reason = result.reason or last_reason
 
     new_status = _final_status_for(original_status, ok=False)
+    # ``downgraded`` means a real transition to failed; an already-failed row
+    # that still fails did not transition, so report ``unchanged``.
     return {
         "status": new_status,
         "verify_error": last_reason,
         "verified_at": datetime.now().isoformat(timespec="seconds"),
-        "_outcome": "downgraded",
+        "_outcome": "downgraded" if new_status != original_status else "unchanged",
     }
 
 
